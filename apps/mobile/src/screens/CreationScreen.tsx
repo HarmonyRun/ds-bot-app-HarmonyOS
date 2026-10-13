@@ -35,7 +35,7 @@ export function CreationScreen({kind,client,team,online,refresh,openConversation
   }
   const shapes=characterShapes.slice(0,13), colors=characterColors.slice(0,11);
   return <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='web'?undefined:'padding'} keyboardVerticalOffset={insets.top}>
-    <View style={{flexDirection:'row',alignItems:'center',gap:18,paddingHorizontal:20,paddingTop:28,paddingBottom:12}}>
+    <View style={{flexDirection:'row',alignItems:'center',gap:18,paddingHorizontal:20,paddingTop:16,paddingBottom:12}}>
       <IconButton name={kind==='group' && step==='details'?'back':'close'} floating label={tr(kind==='group' && step==='details'?'Back':'Close')} onPress={back} disabled={busy}/>
       <Text style={{flex:1,fontSize:21,fontWeight:'600',color:t.ink}}>{tr(kind==='bot'?'Create new Bot':step==='members'?'New group chat':'Group details')}</Text>
       {kind==='group' && step==='members' && <Pressable accessibilityRole="button" accessibilityLabel={tr('Next')} accessibilityState={{disabled:locked || members.length<2}} disabled={locked || members.length<2} onPress={()=>setStep('details')} style={{borderRadius:26,minHeight:50,paddingHorizontal:18,backgroundColor:t.ink,opacity:locked || members.length<2 ? .45 : 1,justifyContent:'center'}}><Text style={{color:t.bg,fontSize:18,fontWeight:'600'}}>{tr('Next')}</Text></Pressable>}
@@ -43,7 +43,7 @@ export function CreationScreen({kind,client,team,online,refresh,openConversation
     <Notice error text={error}/><Notice text={team.readOnly || (!online?tr('Your host is offline. Settings can be changed when it reconnects.'):'')}/>
     <PageTransition key={step}>
     {kind==='bot' ? <>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingHorizontal:18,paddingTop:36,paddingBottom:20,alignItems:'center'}}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingHorizontal:18,paddingTop:24,paddingBottom:20,alignItems:'center'}}>
         <Pressable accessibilityRole="button" accessibilityLabel={tr("More characters")} onPress={()=>setMoreCharacters(true)}><BotAvatar bot={bot} size={188}/></Pressable>
         <TextInput accessibilityLabel={tr('Bot name')} placeholder={tr('Give your Bot a name')} placeholderTextColor={t.faint} value={name} onChangeText={setName} maxLength={40} editable={!locked} style={{width:'100%',minHeight:66,marginTop:38,backgroundColor:t.hover,borderRadius:20,color:t.ink,textAlign:'center',fontSize:26,fontWeight:'600',paddingHorizontal:16}}/>
         <View style={{flexDirection:'row',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:350,columnGap:19,rowGap:20,marginTop:34}}>

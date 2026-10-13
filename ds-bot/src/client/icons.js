@@ -1,5 +1,11 @@
 import { createElement as h } from 'react'
 
+export function PhoneIcon() {
+  return h('svg', { width: 18, height: 18, viewBox: '0 0 20 20', 'aria-hidden': true },
+    h('rect', { x: 5, y: 2, width: 10, height: 16, rx: 2, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 }),
+    h('path', { d: 'M8.5 4.5h3M9 15.5h2', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }))
+}
+
 export function PlusIcon() {
   return h('svg', { width: 18, height: 18, viewBox: '0 0 20 20', 'aria-hidden': true }, h('path', { d: 'M10 3.5v13M3.5 10h13', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }))
 }

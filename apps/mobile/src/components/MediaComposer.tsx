@@ -304,13 +304,13 @@ export function MediaComposer({
         <View pointerEvents="box-none" style={{height:56,justifyContent:"center"}}><IconButton name="plus" label={tr("Attach")} floating size={48} disabled={disabled || !!busy || state.isRecording}
           onPress={() => {Keyboard.dismiss();setError("");setOpen(true);}}/>
         </View>
-        <View pointerEvents="box-none" style={{flex:1,flexDirection:"row",alignItems:"flex-end",minHeight:56,borderRadius:24,borderWidth:1,borderColor:t.line,backgroundColor:t.surface,padding:5,gap:2,shadowColor:"#000",shadowOpacity:t.dark ? .2 : .06,shadowRadius:12,shadowOffset:{width:0,height:3},elevation:2}}>
+        <View pointerEvents="box-none" style={{flex:1,flexDirection:"row",alignItems:"flex-end",minHeight:56,borderRadius:24,borderWidth:1,borderColor:t.line,backgroundColor:t.surface,padding:5,gap:2}}>
           {children}
         </View>
       </View>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)} onDismiss={afterMenuDismiss}>
         <Pressable accessibilityRole="button" accessibilityLabel={tr("Close attachment menu")} onPress={() => setOpen(false)} style={{flex:1,backgroundColor:t.dark ? "#00000040" : "#00000008"}}/>
-        <View style={{position:"absolute",bottom:insets.bottom + 72,left:20,width:316,maxWidth:"90%",backgroundColor:t.surface,borderWidth:1,borderColor:t.line,borderRadius:26,padding:10,shadowColor:"#000",shadowOpacity:.08,shadowRadius:20,shadowOffset:{width:0,height:6},elevation:3}}>
+        <View style={{position:"absolute",bottom:insets.bottom + 80,left:20,width:316,maxWidth:"90%",backgroundColor:t.surface,borderWidth:1,borderColor:t.line,borderRadius:26,padding:10}}>
           {([['folder','Choose a file',document],['camera','Take a photo',()=>image(true)],['image','Attach image',()=>image(false)]] as const).map(([icon,label,action]) =>
             <Pressable key={label} accessibilityRole="button" accessibilityLabel={tr(label)} accessibilityState={{disabled:!!busy || disabled}}
               disabled={!!busy || disabled} onPress={action} style={({pressed})=>({minHeight:50,flexDirection:"row",alignItems:"center",gap:16,paddingHorizontal:16,borderRadius:999,backgroundColor:pressed?t.hover:undefined,opacity:!!busy || disabled ? .5 : 1})}>

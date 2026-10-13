@@ -624,7 +624,7 @@ export function apply(ctx) {
     ui.set(state => (state.details && state.view !== view ? { ...state, view } : state))
   }
   actions.closePanel = () => { ui.set(state => (state.details ? { ...state, details: null, view: 'details', renaming: false, tab: null } : state)) }
-  // Whether AccountLauncher holds the shell's settings seat; FooterAccount steps aside if so.
+  // Whether AccountLauncher holds the shell's settings seat; FooterAccount keeps the phone entry visible either way.
   actions.signInEntry = () => ctx.slots.entries?.('settings.models.sign-in')?.[0] ?? null
   actions.canSignIn = () => Boolean(actions.signInEntry())
   actions.signIn = () => ui.set(state => ({ ...state, signIn: (state.signIn ?? 0) + 1 }))

@@ -28,6 +28,18 @@ test('every literal the client translates has a Chinese entry', () => {
   assert.deepEqual(missing, [])
 })
 
+test('mobile settings navigation, actions and pairing errors follow the DSH language', () => {
+  const actions = [...readFileSync(new URL('../src/client/mobile-settings.js', import.meta.url), 'utf8').matchAll(/\bbutton\(\s*'([^']+)'/g)].map(match => match[1])
+  const keys = ['Mobile devices', 'Phone', 'This pairing request is no longer pending.', 'The device does not exist.', ...actions]
+  const off = installLocale(fakeLocale('zh'))
+  try {
+    for (const key of keys) assert.notEqual(t(key), key, `Missing Chinese mobile copy: ${key}`)
+    assert.equal(t('Pending requests · {count}', { count: 2 }), '待批准请求 · 2')
+    assert.equal(hostText('Mobile connection setup is already running.'), '正在设置手机连接，请稍候。')
+  } finally { off() }
+  for (const key of keys) assert.equal(t(key), key)
+})
+
 test('copy follows the DSH language and stays English without a locale service', () => {
   assert.equal(t('Message {name}', { name: 'Chief' }), 'Message Chief')
   assert.equal(language(), 'en')

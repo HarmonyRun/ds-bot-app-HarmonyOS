@@ -42,6 +42,42 @@ module.exports = __toCommonJS(index_exports);
 // src/client/i18n.js
 var NAMESPACE = "ds-bot";
 var ZH = {
+  "Mobile access could not start. Check its port, HTTPS settings, and the Bot team lock.": "无法启动手机连接，请检查端口、HTTPS 设置及 Bot 团队锁定状态。",
+  "Mobile connection setup is unavailable.": "当前主机无法设置手机连接。",
+  "Enable phone connection on this computer first.": "请先在此电脑上启用手机连接。",
+  "Mobile devices": "移动设备",
+  "Phone": "手机",
+  "Approve": "批准",
+  "Deny": "拒绝",
+  "Retry": "重试",
+  "Request failed.": "请求失败。",
+  "Phone connection": "手机连接",
+  "Connection address": "连接地址",
+  "Phone connection enabled": "连接已启用",
+  "Phone connection off": "连接未启用",
+  "Pair your phone": "配对手机",
+  "Use DS Bot Mobile on the same Wi-Fi. No domain or extra app is needed.": "在同一 Wi-Fi 下使用 DS Bot 手机端，无需域名或额外 App。",
+  "Enable the connection, scan the QR code, then approve your phone.": "启用连接后，用手机扫码，再在这里批准设备。",
+  "Open DS Bot Mobile and scan this QR code.": "打开 DS Bot 手机端，扫描此二维码。",
+  "Confirm the connection on your phone.": "在手机上确认连接。",
+  "Approve your phone in Pending requests below.": "在下方「待批准请求」中批准你的手机。",
+  "This code expires in two minutes. Share it only with your own device.": "配对码两分钟后失效，请只用于你自己的设备。",
+  "Pending requests · {count}": "待批准请求 · {count}",
+  "Paired devices · {count}": "已配对设备 · {count}",
+  "No pending requests. Scan a pairing code on your phone to get started.": "暂无待批准请求，用手机扫描配对码即可申请连接。",
+  "No paired devices yet.": "尚未配对任何设备。",
+  "Mobile access is closing.": "手机连接服务正在关闭。",
+  "Mobile connection setup is already running.": "正在设置手机连接，请稍候。",
+  "This host already has a manually configured HTTPS entrance.": "此主机已手动配置 HTTPS 连接入口。",
+  "Mobile access is disabled in this plugin configuration.": "插件配置已禁用手机连接。",
+  "Local mobile configuration could not be read. Restore its settings before retrying.": "无法读取本地手机连接配置，请恢复配置后重试。",
+  "Use a port from 1024 to 65535.": "请选择 1024 至 65535 之间的端口。",
+  "Manage this manually configured entrance in the DSH plugin settings.": "请在 DSH 插件设置中管理此手动配置的连接入口。",
+  "This pairing request is no longer pending.": "此配对请求已处理或失效。",
+  "The pairing request has expired.": "配对请求已过期，请重新扫码。",
+  "The device does not exist.": "此设备已不存在。",
+  "Revoke an unused device before pairing another.": "请先撤销不再使用的设备，再配对新设备。",
+  "Too many pending pairing requests.": "待批准的配对请求过多，请先处理现有请求。",
   "Loading devices…": "正在加载设备…",
   "Could not refresh mobile devices.": "无法刷新手机设备。",
   "Connect your phone": "连接手机",
@@ -2260,6 +2296,36 @@ button.bt-set-row:hover{background:var(--bt-hover)}
 .bt-set-paste{flex-direction:column;align-items:stretch;gap:8px}
 .bt-chevron{color:var(--bt-ink-3);display:inline-flex;flex:none}
 
+/* Settings → Mobile devices. */
+.bt-mobile-page{display:flex;flex-direction:column;gap:20px;min-width:0}
+.bt-mobile-page .bt-set-row{flex-wrap:wrap;padding:14px 16px;gap:12px}
+.bt-mobile-page .bt-set-copy{min-width:min(100%,200px);gap:5px;overflow-wrap:anywhere}
+.bt-mobile-page .bt-set-hint{color:var(--bt-ink-2);line-height:1.6}
+.bt-mobile-page .bt-soft{min-height:32px;height:auto;padding:7px 14px;flex-shrink:0;box-shadow:none;white-space:normal}
+.bt-mobile-primary{background:var(--bt-accent);color:var(--bt-accent-ink,#fff)}
+.bt-mobile-primary:hover{background:color-mix(in srgb,var(--bt-accent) 90%,var(--bt-ink))}
+.bt-mobile-intro{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:18px 16px}
+.bt-mobile-intro h3{font-size:15px;margin:0}
+.bt-mobile-intro p{margin:0}
+.bt-mobile-mark{width:40px;height:40px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--bt-hover);color:var(--bt-accent)}
+.bt-mobile-mark svg{width:22px;height:22px}
+.bt-mobile-status{border-radius:999px;padding:4px 10px;background:var(--bt-hover);font-size:11px;color:var(--bt-ink-2);white-space:nowrap}
+.bt-mobile-status[data-enabled]{color:var(--bt-accent);background:color-mix(in srgb,var(--bt-accent) 10%,var(--bt-card))}
+.bt-mobile-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%}
+.bt-mobile-actions select{max-width:100%}
+.bt-mobile-pairing{display:flex;flex-wrap:wrap;gap:20px;padding:16px}
+.bt-mobile-qr{background:#fff;border-radius:12px;padding:8px;line-height:0;align-self:flex-start}
+.bt-mobile-qr img{display:block;max-width:100%;height:auto}
+.bt-mobile-steps{flex:1;min-width:min(100%,180px);font-size:13px;line-height:1.7}
+.bt-mobile-steps ol{padding-left:20px;margin:0;display:flex;flex-direction:column;gap:10px}
+.bt-mobile-manual{width:100%;border-top:1px solid var(--bt-line);padding-top:12px;font-size:12px}
+.bt-mobile-manual summary{cursor:pointer;color:var(--bt-ink-2);padding:4px 0}
+.bt-mobile-manual textarea{display:block;box-sizing:border-box;width:100%;margin-top:10px;padding:10px;border-radius:8px;border:1px solid var(--bt-line-2);background:var(--bt-main);color:var(--bt-ink);resize:vertical;overflow-wrap:anywhere;font:12px/1.5 monospace}
+.bt-mobile-empty{padding:18px 16px;margin:0;font-size:12px;line-height:1.6;color:var(--bt-ink-2)}
+.bt-mobile-note{margin:0;padding:0 4px}
+.bt-mobile-error{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bt-mobile-error .bt-error{margin:0;overflow-wrap:anywhere}
+
 /* Settings → Connectors. */
 .bt-connector{display:flex;flex-direction:column;gap:10px;padding:12px}
 .bt-connector-head{display:flex;align-items:center;gap:12px;min-width:0}
@@ -2973,6 +3039,14 @@ function RoomAvatar({ room: room2, roster, size = 36 }) {
 
 // src/client/icons.js
 var import_react3 = require("react");
+function PhoneIcon() {
+  return (0, import_react3.createElement)(
+    "svg",
+    { width: 18, height: 18, viewBox: "0 0 20 20", "aria-hidden": true },
+    (0, import_react3.createElement)("rect", { x: 5, y: 2, width: 10, height: 16, rx: 2, fill: "none", stroke: "currentColor", strokeWidth: 1.5 }),
+    (0, import_react3.createElement)("path", { d: "M8.5 4.5h3M9 15.5h2", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" })
+  );
+}
 function PlusIcon() {
   return (0, import_react3.createElement)("svg", { width: 18, height: 18, viewBox: "0 0 20 20", "aria-hidden": true }, (0, import_react3.createElement)("path", { d: "M10 3.5v13M3.5 10h13", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" }));
 }
@@ -5280,8 +5354,12 @@ function useLandOnMainBot(roster, useSessions, actions) {
 }
 function FooterAccount(props) {
   const seated = props.useUi((value) => value.accountSeated === true);
-  if (seated) return null;
-  return (0, import_react8.createElement)("span", { className: "bt-foot-account" }, (0, import_react8.createElement)(AccountLauncher, { ...props, seat: false }));
+  return (0, import_react8.createElement)(
+    "span",
+    { className: "bt-foot-account" },
+    (0, import_react8.createElement)("button", { type: "button", className: "bt-round bt-mobile-launcher", "aria-label": t("Mobile devices"), title: t("Mobile devices"), onClick: () => props.actions.openSettings("mobile") }, (0, import_react8.createElement)(PhoneIcon)),
+    seated ? null : (0, import_react8.createElement)(AccountLauncher, { ...props, seat: false })
+  );
 }
 function BotReturn({ wide, useSurface, actions }) {
   const mode = useSurface((value) => value.mode);
@@ -5319,7 +5397,8 @@ var SIDEBAR_CSS = `
 .bt-side .bt-read-only{margin:4px 8px 6px;padding:8px 10px;border-radius:10px;background:var(--bt-hover);font-size:12px;line-height:1.45;text-align:left}
 [class*="_footArea"]:has(.bt-foot-account){display:flex!important;flex-direction:row!important;align-items:center;gap:6px}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_footerActions"],[class*="_footArea"]:has(.bt-foot-account)>[class*="_footerActions"]>div{display:contents!important}
-.bt-foot-account{order:-1;flex:none;display:inline-flex}
+.bt-foot-account{order:-1;flex:none;display:inline-flex;align-items:center;gap:6px}
+.bt-mobile-launcher{width:36px;height:36px;flex:none}
 [class*="_footArea"]:has(.bt-foot-account) .bt-connect-foot{order:0;flex:1 1 auto;min-width:0;width:auto}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"]{order:1;flex:none}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"] button[class*="_trigger"] [class*="_label"]{display:none!important}
@@ -10054,21 +10133,26 @@ function MobileDevicesPage() {
   const [state, setState] = (0, import_react26.useState)(null);
   const [pairing, setPairing] = (0, import_react26.useState)(null);
   const [error, setError] = (0, import_react26.useState)("");
+  const [refreshError, setRefreshError] = (0, import_react26.useState)("");
   const [busy, setBusy] = (0, import_react26.useState)(false);
   const alive = (0, import_react26.useRef)(true);
+  const working = (0, import_react26.useRef)(false);
   const [address, setAddress] = (0, import_react26.useState)("");
   (0, import_react26.useEffect)(() => {
     let disposed = false;
     alive.current = true;
-    const refresh = () => mobile("status").then((value) => {
-      if (!disposed) {
+    const refresh = async () => {
+      if (working.current) return;
+      try {
+        const value = await mobile("status");
+        if (disposed || working.current) return;
         setState(value);
-        setError(value.error ?? value.https?.error ?? "");
+        setRefreshError("");
         setPairing((previous) => previous && (previous.url !== value.url || Date.now() >= new Date(previous.expiresAt).getTime()) ? null : previous);
+      } catch {
+        if (!disposed && !working.current) setRefreshError("Could not refresh mobile devices.");
       }
-    }, () => {
-      if (!disposed) setError("Could not refresh mobile devices.");
-    });
+    };
     void refresh();
     const timer = setInterval(refresh, 3e3);
     return () => {
@@ -10078,7 +10162,8 @@ function MobileDevicesPage() {
     };
   }, []);
   const run = async (endpoint, payload) => {
-    if (busy) return;
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     setError("");
     try {
@@ -10090,82 +10175,98 @@ function MobileDevicesPage() {
       if (endpoint === "pairing.create" && alive.current) setPairing(result);
       if (endpoint === "https.disable" && alive.current) setPairing(null);
       const current = await mobile("status");
-      if (alive.current) setState(current);
+      if (alive.current) {
+        setState(current);
+        setRefreshError("");
+      }
     } catch (cause) {
       if (alive.current) setError(cause.message ?? "Request failed.");
     } finally {
+      working.current = false;
       if (alive.current) setBusy(false);
     }
   };
   const row = (key, label, hint, children) => (0, import_react26.createElement)(
     "div",
     { key, className: "bt-set-row" },
-    (0, import_react26.createElement)("div", { className: "bt-set-copy" }, (0, import_react26.createElement)("span", null, t(label)), hint ? (0, import_react26.createElement)("span", { className: "bt-set-hint" }, t(hint)) : null),
+    (0, import_react26.createElement)("div", { className: "bt-set-copy" }, (0, import_react26.createElement)("span", null, label), hint ? (0, import_react26.createElement)("span", { className: "bt-set-hint" }, hint) : null),
     children
   );
-  const button = (label, action) => (0, import_react26.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: busy, onClick: action }, t(label));
-  const activePairing = pairing && Date.now() < new Date(pairing.expiresAt).getTime();
+  const button = (label, action, primary = false) => (0, import_react26.createElement)("button", { type: "button", className: `bt-soft bt-soft-sm${primary ? " bt-mobile-primary" : ""}`, disabled: busy, onClick: action }, t(label));
+  const section = (key, title, children) => (0, import_react26.createElement)("section", { key, className: "bt-set-section" }, (0, import_react26.createElement)("h3", null, title), (0, import_react26.createElement)("div", { className: "bt-set-card" }, children));
+  const enabled = state?.enabled;
+  const pending = state?.pending ?? [];
+  const devices = (state?.devices ?? []).filter((device) => !device.revokedAt);
+  const activePairing = pairing && enabled && pairing.url === state.url && Date.now() < new Date(pairing.expiresAt).getTime();
+  const problem = error || refreshError || state?.error || state?.https?.error;
   return (0, import_react26.createElement)(
-    "section",
-    { className: "bt-set-section" },
-    error ? (0, import_react26.createElement)("div", { className: "bt-error", role: "alert" }, t(error)) : null,
-    !state ? (0, import_react26.createElement)("p", null, t("Loading devices…")) : !state.enabled ? (0, import_react26.createElement)("div", { className: "bt-set-card" }, row(
-      "off",
-      "Connect your phone",
-      state.locked ? "Mobile access is disabled by this host configuration." : "One click starts local HTTPS. Then scan the QR code in DS Bot Mobile on the same Wi-Fi. No domain or extra app is needed.",
-      !state.locked && state.https?.provider === "local" ? (0, import_react26.createElement)(
-        "div",
-        { className: "bt-actions" },
-        (state.https.addresses?.length ?? 0) > 1 ? (0, import_react26.createElement)(
-          "select",
-          { "aria-label": t("Computer network address"), value: address, onChange: (event) => setAddress(event.target.value), disabled: busy },
-          (0, import_react26.createElement)("option", { value: "" }, t("Automatic network address")),
-          ...state.https.addresses.map((item) => (0, import_react26.createElement)("option", { key: item.address, value: item.address }, item.name + " · " + item.address))
-        ) : null,
-        button("Enable phone connection", () => void run("https.enable", address ? { address } : {}))
-      ) : null
-    )) : (0, import_react26.createElement)(
+    "div",
+    { className: "bt-mobile-page", "aria-busy": busy },
+    problem ? (0, import_react26.createElement)("div", { className: "bt-mobile-error", role: "alert" }, (0, import_react26.createElement)("span", { className: "bt-error" }, hostText(problem)), button("Retry", () => void run("status"))) : null,
+    !state ? (0, import_react26.createElement)("p", { role: "status" }, t("Loading devices…")) : (0, import_react26.createElement)(
       "div",
       { className: "bt-set-card" },
-      row("host", "Connect your phone", state.url ?? "Mobile bridge", button("Create pairing code", () => void run("pairing.create"))),
-      state.https?.provider === "local" ? row("https", "Local HTTPS is running", "Keep both devices on the same Wi-Fi. If the firewall asks, allow access on your private network.", button("Turn off phone connection", () => {
-        if (window.confirm(t("Disconnect all phones from this host?"))) void run("https.disable");
-      })) : null,
-      activePairing ? (0, import_react26.createElement)(
+      (0, import_react26.createElement)(
         "div",
-        { className: "bt-set-row", style: { flexDirection: "column", alignItems: "flex-start", gap: 12 } },
-        (0, import_react26.createElement)("img", { src: pairing.qrDataUrl, width: 220, height: 220, alt: t("Scan this code in DS Bot Mobile to request access.") }),
-        button("Hide pairing code", () => setPairing(null)),
-        (0, import_react26.createElement)("p", { className: "bt-set-hint" }, t("Scan in the mobile app, then approve the device below. This code expires in two minutes.")),
-        (0, import_react26.createElement)("label", { style: { width: "100%" } }, t("Manual pairing data"), (0, import_react26.createElement)("textarea", {
-          readOnly: true,
-          rows: 3,
-          style: { width: "100%", wordBreak: "break-all" },
-          "aria-label": t("Manual pairing data"),
-          value: JSON.stringify({ url: pairing.url, code: pairing.code, serverId: pairing.serverId, ...pairing.tlsPin ? { tlsPin: pairing.tlsPin } : {} })
-        }))
-      ) : null,
-      ...(state.pending ?? []).map((request) => row(
-        request.requestId,
-        request.deviceName ?? "Phone",
-        "Requests access to your Bot team. Approve only a device you recognize.",
-        (0, import_react26.createElement)(
+        { className: "bt-mobile-intro" },
+        (0, import_react26.createElement)("span", { className: "bt-mobile-mark", "aria-hidden": true }, (0, import_react26.createElement)(PhoneIcon)),
+        (0, import_react26.createElement)("div", { className: "bt-set-copy" }, (0, import_react26.createElement)("h3", null, t("Connect your phone")), (0, import_react26.createElement)("p", { className: "bt-set-hint" }, t("Use DS Bot Mobile on the same Wi-Fi. No domain or extra app is needed."))),
+        (0, import_react26.createElement)("span", { className: "bt-mobile-status", "data-enabled": enabled || void 0 }, t(enabled ? "Phone connection enabled" : "Phone connection off"))
+      ),
+      !enabled ? row(
+        "off",
+        t("Phone connection"),
+        t(state.locked ? "Mobile access is disabled by this host configuration." : "Enable the connection, scan the QR code, then approve your phone."),
+        !state.locked && state.https?.provider === "local" ? (0, import_react26.createElement)(
           "div",
-          { className: "bt-actions" },
-          button("Approve", () => void run("pairing.approve", { requestId: request.requestId })),
-          button("Deny", () => void run("pairing.deny", { requestId: request.requestId }))
-        )
-      )),
-      ...(state.devices ?? []).filter((device) => !device.revokedAt).map((device) => row(
-        device.id,
-        device.name ?? device.deviceName ?? "Phone",
-        "Paired device",
-        button("Revoke access", () => {
-          if (window.confirm(t("Revoke this device? It must pair again to reconnect."))) void run("device.revoke", { id: device.id });
-        })
-      )),
-      row("scope", "Your phone uses this DSH host", "Keep this computer or server running. Tool approvals remain in DSH. Revoking a device stops new access; it does not erase its local cache.")
-    )
+          { className: "bt-mobile-actions" },
+          (state.https.addresses?.length ?? 0) > 1 ? (0, import_react26.createElement)(
+            "select",
+            { className: "bt-select", "aria-label": t("Computer network address"), value: address, onChange: (event) => setAddress(event.target.value), disabled: busy },
+            (0, import_react26.createElement)("option", { value: "" }, t("Automatic network address")),
+            ...state.https.addresses.map((item) => (0, import_react26.createElement)("option", { key: item.address, value: item.address }, item.name + " · " + item.address))
+          ) : null,
+          button("Enable phone connection", () => void run("https.enable", address ? { address } : {}), true)
+        ) : null
+      ) : row("host", t("Connection address"), state.url ?? t("Mobile bridge"), button("Create pairing code", () => void run("pairing.create"), true)),
+      enabled && state.https?.provider === "local" ? row("https", t("Local HTTPS is running"), t("Keep both devices on the same Wi-Fi. If the firewall asks, allow access on your private network."), button("Turn off phone connection", () => {
+        if (window.confirm(t("Disconnect all phones from this host?"))) void run("https.disable");
+      })) : null
+    ),
+    activePairing ? section("pairing", t("Pair your phone"), (0, import_react26.createElement)(
+      "div",
+      { className: "bt-mobile-pairing" },
+      (0, import_react26.createElement)("div", { className: "bt-mobile-qr" }, (0, import_react26.createElement)("img", { src: pairing.qrDataUrl, width: 200, height: 200, alt: t("Scan this code in DS Bot Mobile to request access.") })),
+      (0, import_react26.createElement)(
+        "div",
+        { className: "bt-mobile-steps" },
+        (0, import_react26.createElement)("ol", null, ...["Open DS Bot Mobile and scan this QR code.", "Confirm the connection on your phone.", "Approve your phone in Pending requests below."].map((step) => (0, import_react26.createElement)("li", { key: step }, t(step)))),
+        (0, import_react26.createElement)("p", { className: "bt-set-hint" }, t("This code expires in two minutes. Share it only with your own device.")),
+        button("Hide pairing code", () => setPairing(null))
+      ),
+      (0, import_react26.createElement)("details", { className: "bt-mobile-manual" }, (0, import_react26.createElement)("summary", null, t("Manual pairing data")), (0, import_react26.createElement)("textarea", {
+        readOnly: true,
+        rows: 4,
+        "aria-label": t("Manual pairing data"),
+        spellCheck: false,
+        value: JSON.stringify({ url: pairing.url, code: pairing.code, serverId: pairing.serverId, ...pairing.tlsPin ? { tlsPin: pairing.tlsPin } : {} })
+      }))
+    )) : null,
+    enabled ? section("pending", t("Pending requests · {count}", { count: pending.length }), pending.length ? pending.map((request) => row(
+      request.requestId,
+      request.deviceName ?? t("Phone"),
+      t("Requests access to your Bot team. Approve only a device you recognize."),
+      (0, import_react26.createElement)("div", { className: "bt-mobile-actions" }, button("Approve", () => void run("pairing.approve", { requestId: request.requestId }), true), button("Deny", () => void run("pairing.deny", { requestId: request.requestId })))
+    )) : (0, import_react26.createElement)("p", { className: "bt-mobile-empty" }, t("No pending requests. Scan a pairing code on your phone to get started."))) : null,
+    enabled ? section("devices", t("Paired devices · {count}", { count: devices.length }), devices.length ? devices.map((device) => row(
+      device.id,
+      device.name ?? device.deviceName ?? t("Phone"),
+      t("Paired device"),
+      button("Revoke access", () => {
+        if (window.confirm(t("Revoke this device? It must pair again to reconnect."))) void run("device.revoke", { id: device.id });
+      })
+    )) : (0, import_react26.createElement)("p", { className: "bt-mobile-empty" }, t("No paired devices yet."))) : null,
+    state ? (0, import_react26.createElement)("p", { className: "bt-set-hint bt-mobile-note" }, t("Keep this computer or server running. Tool approvals remain in DSH. Revoking a device stops new access; it does not erase its local cache.")) : null
   );
 }
 
@@ -10173,7 +10274,7 @@ function MobileDevicesPage() {
 var import_react27 = require("react");
 var capitalize2 = (word) => word[0].toUpperCase() + word.slice(1);
 var SETTINGS_PAGES = [["general", "General"], ["bots", "Bots"], ["groups", "Group chats"], ["mobile", "Mobile devices"], ["connectors", "Connectors"], ["schedules", "Scheduled tasks"], ["usage", "Usage"], ["secrets", "Secrets"], ["feedback", "Feedback"], ["about", "About DS Bot"]];
-var PAGE_ICONS = { ...SETTINGS_ICONS, mobile: SlidersIcon, connectors: ConnectorIcon, schedules: ClockIcon, secrets: KeyIcon, feedback: FeedbackIcon, about: InfoIcon };
+var PAGE_ICONS = { ...SETTINGS_ICONS, mobile: PhoneIcon, connectors: ConnectorIcon, schedules: ClockIcon, secrets: KeyIcon, feedback: FeedbackIcon, about: InfoIcon };
 function SetSection({ title, children }) {
   return (0, import_react27.createElement)("section", { className: "bt-set-section" }, (0, import_react27.createElement)("h3", null, title), (0, import_react27.createElement)("div", { className: "bt-set-card" }, children));
 }

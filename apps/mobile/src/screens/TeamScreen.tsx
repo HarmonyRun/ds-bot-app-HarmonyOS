@@ -269,7 +269,7 @@ export function TeamScreen({
       <PageTransition key={page}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.page, {paddingTop:112}]}
+        contentContainerStyle={[styles.page, {paddingTop:92}]}
       >
         <Notice error text={error} />
         <Notice

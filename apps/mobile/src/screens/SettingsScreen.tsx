@@ -164,7 +164,7 @@ export function SettingsScreen({
       <ScrollView
         key={page}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.page, {paddingTop:112}, page === "index" ? {paddingHorizontal:18,paddingTop:128,gap:32} : undefined]}
+        contentContainerStyle={[styles.page, {paddingTop:92}, page === "index" ? {paddingHorizontal:18,paddingTop:108,gap:32} : undefined]}
       >
         <Notice error text={error} />
         <Notice text={notice} />

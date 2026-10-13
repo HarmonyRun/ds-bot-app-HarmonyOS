@@ -267,11 +267,11 @@ export function ChatScreen({
       keyboardVerticalOffset={insets.top}
     >
       <View style={{ flex: 1 }}>
-      <View pointerEvents="box-none" style={{ position: "absolute", top: 20, left: 20, right: 20, zIndex: 10 }}>
+      <View pointerEvents="box-none" style={{ position: "absolute", top: 16, left: 20, right: 20, zIndex: 10 }}>
         <View pointerEvents="box-none" style={{ flexDirection: "row", alignItems: "center", minHeight: 50, gap: 10 }}>
           <IconButton name="back" floating label={tr("Back to conversations")} onPress={onOpenNavigation || (() => setPicker(true))} />
           <View pointerEvents="box-none" style={{ flex: 1, alignItems: "flex-start" }}>
-            <Pressable accessibilityRole="button" accessibilityLabel={tr("Open ") + conversation.name + tr(" details")} onPress={onOpenDetails || (() => setPicker(true))} style={{ minHeight: 48, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 28, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, shadowColor: "#000", shadowOpacity: t.dark ? .16 : .04, shadowRadius: 10, elevation: 1 }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={tr("Open ") + conversation.name + tr(" details")} onPress={onOpenDetails || (() => setPicker(true))} style={{ minHeight: 48, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 28, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface }}>
               {room ? <RoomAvatar room={room} team={team} size={30} /> : <BotAvatar bot={bot || { id: conversation.id, name: conversation.name }} size={30} />}
               <Text numberOfLines={1} style={{ color: t.ink, fontSize: 18, fontWeight: "600", flexShrink: 1 }}>{conversation.name}</Text>
             </Pressable>
@@ -286,12 +286,12 @@ export function ChatScreen({
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: 86,
+          paddingTop: 82,
           flexGrow: 1,
         }}
         keyboardShouldPersistTaps="handled"
         onLayout={() => { if (bottom.current) requestAnimationFrame(() => list.current?.scrollToEnd({animated:false})); }}
-        scrollIndicatorInsets={{ top: 80, bottom: dockHeight }}
+        scrollIndicatorInsets={{ top: 76, bottom: dockHeight }}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onScrollBeginDrag={() => {
           positioned.current = true;
@@ -432,7 +432,7 @@ export function ChatScreen({
         style={{
           paddingHorizontal: 20,
           paddingTop: 6,
-          paddingBottom: keyboardVisible ? 8 : Math.max(8, insets.bottom),
+          paddingBottom: keyboardVisible ? 8 : insets.bottom + 8,
           gap: 9,
         }}
       >

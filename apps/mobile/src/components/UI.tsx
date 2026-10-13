@@ -19,6 +19,7 @@ import { contrastText, useTheme } from "../theme";
 import { BRAND_BLUE } from "../logic/colors";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 export function Label({
   children,
   muted = false,
@@ -81,7 +82,6 @@ export function Button({
         backgroundColor: secondary ? (floating ? t.surface : t.hover) : danger ? t.error : t.accent,
         borderColor: t.line,
         borderWidth: floating ? 1 : 0,
-        ...(floating ? { shadowColor: "#000", shadowOpacity: t.dark ? .16 : .05, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 } : {}),
       })}
     >
       <Text
@@ -211,6 +211,7 @@ export function Sheet({
   children: React.ReactNode;
 }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       transparent
@@ -238,7 +239,7 @@ export function Sheet({
             overflow: "hidden",
             paddingTop: 20,
             paddingHorizontal: 20,
-            paddingBottom: 32,
+            paddingBottom: Math.max(16, insets.bottom + 8),
           }}
         >
           <View style={styles.between}>
@@ -271,7 +272,7 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  page: { padding: 16, gap: 20, paddingBottom: 32 },
+  page: { padding: 16, gap: 20, paddingBottom: 24 },
   caption: { fontSize: 12 },
   grow: { flex: 1 },
 });
@@ -300,7 +301,6 @@ export function IconButton({ name, label, onPress, disabled = false, floating = 
       flexShrink:0, backgroundColor:brand ? BRAND_BLUE : primary ? t.ink : floating ? t.surface : pressed ? t.hover : undefined,
       borderWidth:floating && !primary ? 1 : 0, borderColor:t.line,
       opacity:disabled ? .35 : pressed ? .65 : 1,
-      ...(floating && !primary ? {shadowColor:"#000", shadowOffset:{width:0,height:3},shadowOpacity:t.dark ? .12 : .035,shadowRadius:12,elevation:1} : {}),
     })}><Icon name={name} size={name === "plus" ? 28 : 23} color={brand ? "#FFFFFF" : primary ? t.bg : t.ink}/></Pressable>;
 }
 export function PageHeader({
@@ -339,9 +339,9 @@ export function PageHeader({
         alignItems: "center",
         gap: 18,
         paddingHorizontal: 20,
-        paddingTop: 28,
+        paddingTop: 16,
         paddingBottom: 12,
-        minHeight: 88,
+        minHeight: 76,
       }}
     >
       {onBack ? (

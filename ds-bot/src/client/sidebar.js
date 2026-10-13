@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { FishLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import { isMainOf } from './sources.js'
 import { currentPart, previewOf, relativeShort } from './text.js'
-import { PlusIcon, SearchIcon, GaugeIcon, PlugIcon, ClockIcon, GearIcon, PinMarkIcon, ConnectorIcon, SwitchIcon, CloudDownloadIcon } from './icons.js'
+import { PlusIcon, SearchIcon, GaugeIcon, PlugIcon, ClockIcon, GearIcon, PhoneIcon, PinMarkIcon, ConnectorIcon, SwitchIcon, CloudDownloadIcon } from './icons.js'
 import { MAIN_LOOK } from './characters.js'
 import { botState, BotMark, BotAvatar, RoomAvatar } from './mark.js'
 import { reducedMotion } from './activity-row.js'
@@ -538,8 +538,9 @@ function useLandOnMainBot(roster, useSessions, actions) {
 
 export function FooterAccount(props) {
   const seated = props.useUi(value => value.accountSeated === true)
-  if (seated) return null
-  return h('span', { className: 'bt-foot-account' }, h(AccountLauncher, { ...props, seat: false }))
+  return h('span', { className: 'bt-foot-account' },
+    h('button', { type: 'button', className: 'bt-round bt-mobile-launcher', 'aria-label': t('Mobile devices'), title: t('Mobile devices'), onClick: () => props.actions.openSettings('mobile') }, h(PhoneIcon)),
+    seated ? null : h(AccountLauncher, { ...props, seat: false }))
 }
 
 // The only entry registered in every mode: in Agent mode the whole Bot surface is
@@ -571,9 +572,8 @@ export function BrandName() {
   return h('span', { style: { fontWeight: 600, fontSize: 14 } }, 'DS Bot')
 }
 
-// With the whale holding the settings seat, the footer row is just the account menu
-// and Connect plugins; FooterAccount only shows when the seat went to no one. The
-// shell's footer classes are CSS-module names, so they match on their stems.
+// The phone entry remains in the footer even when the account holds the settings
+// seat. The shell's footer classes are CSS-module names, matched on their stems.
 export const SIDEBAR_CSS = `
 .bt-side-top .bt-brand{cursor:default;padding-left:6px}
 .bt-side-top .bt-brand:hover{background:none}
@@ -584,7 +584,8 @@ export const SIDEBAR_CSS = `
 .bt-side .bt-read-only{margin:4px 8px 6px;padding:8px 10px;border-radius:10px;background:var(--bt-hover);font-size:12px;line-height:1.45;text-align:left}
 [class*="_footArea"]:has(.bt-foot-account){display:flex!important;flex-direction:row!important;align-items:center;gap:6px}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_footerActions"],[class*="_footArea"]:has(.bt-foot-account)>[class*="_footerActions"]>div{display:contents!important}
-.bt-foot-account{order:-1;flex:none;display:inline-flex}
+.bt-foot-account{order:-1;flex:none;display:inline-flex;align-items:center;gap:6px}
+.bt-mobile-launcher{width:36px;height:36px;flex:none}
 [class*="_footArea"]:has(.bt-foot-account) .bt-connect-foot{order:0;flex:1 1 auto;min-width:0;width:auto}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"]{order:1;flex:none}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"] button[class*="_trigger"] [class*="_label"]{display:none!important}
