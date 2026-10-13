@@ -1,6 +1,6 @@
 {
   "source": "signed local Android review APK and isolated DSH Web, October 13 2026; no new Release",
-  "apkSha256": "d7d63a9cd1b2c6efd8ce8298bdc71684ce840187d09d6fabb9ac6abaaafaeeff",
+  "apkSha256": "38d05f56293cabfeb305d5c642889b5b6cb1d6e23f1308d6180c3691930999cc",
   "androidVersionCode": 6,
   "model": "scripted mock model on isolated official DSH",
   "screenshots": [
@@ -25,5 +25,11 @@
       "systemBars": "excluded from native capture viewport"
     }
   ],
-  "retouched": false
+  "retouched": false,
+  "emptyComposerDp": 48,
+  "desktopFooterOrder": [
+    "whale",
+    "phone",
+    "connect plugins"
+  ]
 }

@@ -497,6 +497,8 @@ export function ChatScreen({
               includeFontPadding: false,
               minHeight: 44,
               maxHeight: 150,
+              // Wrapped placeholders must not make an empty composer grow.
+              height: composer.text.length === 0 ? 44 : undefined,
             }}
           />
           <IconButton primary brand size={44}

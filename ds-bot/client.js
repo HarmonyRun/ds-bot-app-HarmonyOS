@@ -5356,9 +5356,9 @@ function FooterAccount(props) {
   const seated = props.useUi((value) => value.accountSeated === true);
   return (0, import_react8.createElement)(
     "span",
-    { className: "bt-foot-account" },
-    (0, import_react8.createElement)("button", { type: "button", className: "bt-round bt-mobile-launcher", "aria-label": t("Mobile devices"), title: t("Mobile devices"), onClick: () => props.actions.openSettings("mobile") }, (0, import_react8.createElement)(PhoneIcon)),
-    seated ? null : (0, import_react8.createElement)(AccountLauncher, { ...props, seat: false })
+    { className: "bt-foot-account", "data-rail": props.wide ? void 0 : "" },
+    seated ? null : (0, import_react8.createElement)(AccountLauncher, { ...props, seat: false }),
+    (0, import_react8.createElement)("button", { type: "button", className: "bt-round bt-mobile-launcher", "aria-label": t("Mobile devices"), title: t("Mobile devices"), onClick: () => props.actions.openSettings("mobile") }, (0, import_react8.createElement)(PhoneIcon))
   );
 }
 function BotReturn({ wide, useSurface, actions }) {
@@ -5400,7 +5400,9 @@ var SIDEBAR_CSS = `
 .bt-foot-account{order:-1;flex:none;display:inline-flex;align-items:center;gap:6px}
 .bt-mobile-launcher{width:36px;height:36px;flex:none}
 [class*="_footArea"]:has(.bt-foot-account) .bt-connect-foot{order:0;flex:1 1 auto;min-width:0;width:auto}
-[class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"]{order:1;flex:none}
+[class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"]{order:-2;flex:none;margin-left:0}
+[class*="_footArea"]:has(.bt-foot-account[data-rail]){flex-direction:column!important}
+.bt-foot-account[data-rail]{flex-direction:column}
 [class*="_footArea"]:has(.bt-foot-account)>[class*="_settingsArea"] button[class*="_trigger"] [class*="_label"]{display:none!important}
 
 /* The update cloud springs in when a newer DS Bot shows up; its arrow drops in a
