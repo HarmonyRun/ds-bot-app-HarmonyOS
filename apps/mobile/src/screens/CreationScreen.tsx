@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View} from 'react-native';
+import {BackHandler, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View} from 'react-native';
+import { PageTransition, AnimatedPressable as Pressable } from "../components/Motion";
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {MobileClient} from '@ds-bot/mobile-sdk';
 import {Bot, Room, TeamState, errorText} from '../types';
@@ -33,13 +34,14 @@ export function CreationScreen({kind,client,team,online,refresh,openConversation
     } catch(e){setError(errorText(e));}finally{setBusy(false);}
   }
   const shapes=characterShapes.slice(0,13), colors=characterColors.slice(0,11);
-  return <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'} keyboardVerticalOffset={insets.top}>
+  return <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='web'?undefined:'padding'} keyboardVerticalOffset={insets.top}>
     <View style={{flexDirection:'row',alignItems:'center',gap:18,paddingHorizontal:20,paddingTop:28,paddingBottom:12}}>
       <IconButton name={kind==='group' && step==='details'?'back':'close'} floating label={tr(kind==='group' && step==='details'?'Back':'Close')} onPress={back} disabled={busy}/>
       <Text style={{flex:1,fontSize:21,fontWeight:'600',color:t.ink}}>{tr(kind==='bot'?'Create new Bot':step==='members'?'New group chat':'Group details')}</Text>
       {kind==='group' && step==='members' && <Pressable accessibilityRole="button" accessibilityLabel={tr('Next')} accessibilityState={{disabled:locked || members.length<2}} disabled={locked || members.length<2} onPress={()=>setStep('details')} style={{borderRadius:26,minHeight:50,paddingHorizontal:18,backgroundColor:t.ink,opacity:locked || members.length<2 ? .45 : 1,justifyContent:'center'}}><Text style={{color:t.bg,fontSize:18,fontWeight:'600'}}>{tr('Next')}</Text></Pressable>}
     </View>
     <Notice error text={error}/><Notice text={team.readOnly || (!online?tr('Your host is offline. Settings can be changed when it reconnects.'):'')}/>
+    <PageTransition key={step}>
     {kind==='bot' ? <>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{paddingHorizontal:18,paddingTop:36,paddingBottom:20,alignItems:'center'}}>
         <Pressable accessibilityRole="button" accessibilityLabel={tr("More characters")} onPress={()=>setMoreCharacters(true)}><BotAvatar bot={bot} size={188}/></Pressable>
@@ -66,5 +68,6 @@ export function CreationScreen({kind,client,team,online,refresh,openConversation
       <Button title={tr(busy?'Creating…':'Create group')} disabled={locked || members.length<2 || !members.includes(admin)} onPress={()=>void create()}/>
     </ScrollView>}
     <Sheet title={tr('More characters')} visible={moreCharacters} onClose={()=>setMoreCharacters(false)}><View style={{flexDirection:'row',flexWrap:'wrap',gap:14}}>{characterShapes.map(value=><Pressable key={value} accessibilityRole="button" accessibilityLabel={tr('Character {p0}',{p0:String(characters[value].label || value)})} disabled={locked} onPress={()=>{setShape(value);setMoreCharacters(false);}} style={{width:56,height:56,alignItems:'center',justifyContent:'center'}}><BotAvatar bot={{...bot,avatar:{shape:value}}} size={48}/></Pressable>)}</View></Sheet>
+    </PageTransition>
   </KeyboardAvoidingView>;
 }

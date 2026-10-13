@@ -1,6 +1,7 @@
 import { tr } from "../i18n";
 import React, { useMemo, useState } from "react";
-import { Linking, Platform, Pressable, ScrollView, Text, TextStyle, View } from "react-native";
+import { Linking, Platform, ScrollView, Text, TextStyle, View } from "react-native";
+import { AnimatedPressable as Pressable } from "./Motion";
 import * as Clipboard from "expo-clipboard";
 import { markdownNodes, MarkdownNode, safeLink, MentionBot } from "../logic/markdown";
 import { useTheme } from "../theme";

@@ -1,7 +1,8 @@
 import { dateLocale } from "../i18n";
 import { tr } from "../i18n";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "../components/Motion";
 import { Button, Busy, Card, Field, Notice } from "../components/UI";
 import { useTheme } from "../theme";
 import { errorText } from "../types";

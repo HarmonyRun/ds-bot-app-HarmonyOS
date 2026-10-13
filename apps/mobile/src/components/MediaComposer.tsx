@@ -1,6 +1,7 @@
 import { tr } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
-import { Keyboard, Modal, Platform, Pressable, Text, View } from "react-native";
+import { Keyboard, Modal, Platform, Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "./Motion";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -37,7 +38,6 @@ export function MediaComposer({
   onReferenceChat,
   voiceChatDisabled = false,
   children,
-  hasContent = false,
 }: {
   client: MobileClient;
   conversationId: string;
@@ -50,7 +50,6 @@ export function MediaComposer({
   onReferenceChat?: () => void;
   voiceChatDisabled?: boolean;
   children?: React.ReactNode;
-  hasContent?: boolean;
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
@@ -302,15 +301,11 @@ export function MediaComposer({
       <Notice capsule text={busy} />
       <Notice capsule error text={error} />
       <View pointerEvents="box-none" style={{flexDirection:"row",alignItems:"flex-end",gap:10}}>
-        <View pointerEvents="box-none" style={{height:56,justifyContent:"center"}}><IconButton name="plus" label={tr("Attach")} floating size={56} width={64} disabled={disabled || !!busy || state.isRecording}
+        <View pointerEvents="box-none" style={{height:56,justifyContent:"center"}}><IconButton name="plus" label={tr("Attach")} floating size={48} disabled={disabled || !!busy || state.isRecording}
           onPress={() => {Keyboard.dismiss();setError("");setOpen(true);}}/>
         </View>
         <View pointerEvents="box-none" style={{flex:1,flexDirection:"row",alignItems:"flex-end",minHeight:56,borderRadius:24,borderWidth:1,borderColor:t.line,backgroundColor:t.surface,padding:5,gap:2,shadowColor:"#000",shadowOpacity:t.dark ? .2 : .06,shadowRadius:12,shadowOffset:{width:0,height:3},elevation:2}}>
           {children}
-          {!hasContent && <IconButton name="microphone" label={tr("Voice input")} floating size={44} width={52}
-            disabled={!transcription || disabled || !!busy || state.isRecording} onPress={startRecording}/>}
-          {!hasContent && onVoiceChat && <IconButton name="waveform" label={tr("Voice chat")} primary size={44} width={56}
-            disabled={!transcription || disabled || voiceChatDisabled || !!busy || state.isRecording || voice} onPress={onVoiceChat}/>}
         </View>
       </View>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)} onDismiss={afterMenuDismiss}>
@@ -322,6 +317,8 @@ export function MediaComposer({
               <Icon name={icon} size={24} color={t.muted}/><Text style={{color:t.ink,fontSize:18}}>{tr(label)}</Text>
             </Pressable>)}
           {onReferenceChat && <Pressable accessibilityRole="button" accessibilityLabel={tr("Reference a chat")} disabled={!!busy || disabled} onPress={referenceChat} style={({pressed})=>({minHeight:50,flexDirection:"row",alignItems:"center",gap:16,paddingHorizontal:16,borderRadius:999,backgroundColor:pressed?t.hover:undefined,opacity:!!busy || disabled ? .5 : 1})}><Icon name="chat" size={24} color={t.muted}/><Text style={{color:t.ink,fontSize:18}}>{tr("Reference a chat")}</Text></Pressable>}
+          <Pressable accessibilityRole="button" accessibilityLabel={tr("Voice input")} disabled={!transcription || disabled || !!busy || state.isRecording} onPress={startRecording} style={({pressed})=>({minHeight:50,flexDirection:"row",alignItems:"center",gap:16,paddingHorizontal:16,borderRadius:999,backgroundColor:pressed?t.hover:undefined,opacity:!transcription || disabled || !!busy || state.isRecording ? .4 : 1})}><Icon name="microphone" size={24} color={t.muted}/><Text style={{color:t.ink,fontSize:18}}>{tr("Voice input")}</Text></Pressable>
+          {onVoiceChat && <Pressable accessibilityRole="button" accessibilityLabel={tr("Voice chat")} disabled={!transcription || disabled || voiceChatDisabled || !!busy || state.isRecording || voice} onPress={() => { nextMenuAction.current=onVoiceChat;setOpen(false);if(Platform.OS!=="ios")menuTimer.current=setTimeout(afterMenuDismiss,300); }} style={({pressed})=>({minHeight:50,flexDirection:"row",alignItems:"center",gap:16,paddingHorizontal:16,borderRadius:999,backgroundColor:pressed?t.hover:undefined,opacity:!transcription || disabled || voiceChatDisabled || !!busy || state.isRecording || voice ? .4 : 1})}><Icon name="waveform" size={24} color={t.muted}/><Text style={{color:t.ink,fontSize:18}}>{tr("Voice chat")}</Text></Pressable>}
           {(busy || error) ? <View style={{padding:10,gap:8}}><Notice text={busy}/><Notice error text={error}/></View> : null}
         </View>
       </Modal>

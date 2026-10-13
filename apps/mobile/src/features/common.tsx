@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "../components/Motion";
 import { useTheme } from "../theme";
 
 export function ChoiceChips({

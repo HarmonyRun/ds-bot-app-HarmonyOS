@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
+import { PageTransition, AnimatedPressable as Pressable } from "../components/Motion";
 import { MobileClient } from "@ds-bot/mobile-sdk";
 import {
   Button,
@@ -230,7 +231,7 @@ export function TeamScreen({
   );
   return (
     <View style={{ flex: 1 }}>
-      <PageHeader
+      <PageHeader floating
         title={title}
         onBack={page !== "list" || onBack ? back : undefined}
         onOpenNavigation={onOpenNavigation}
@@ -265,9 +266,10 @@ export function TeamScreen({
           ) : undefined
         }
       />
+      <PageTransition key={page}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.page}
+        contentContainerStyle={[styles.page, {paddingTop:112}]}
       >
         <Notice error text={error} />
         <Notice
@@ -1065,6 +1067,7 @@ export function TeamScreen({
           </>
         )}
       </ScrollView>
+      </PageTransition>
       <Sheet
         title={tr("Confirm")}
         visible={!!confirm}

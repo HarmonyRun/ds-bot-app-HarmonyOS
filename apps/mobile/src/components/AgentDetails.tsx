@@ -64,9 +64,9 @@ export function AgentDetails({
   }
   return (
     <View style={{ flex: 1 }}>
-      <PageHeader title={tr("DSH Agent")} onBack={onBack} />
+      <PageHeader floating title={tr("DSH Agent")} onBack={onBack} />
       <ScrollView
-        contentContainerStyle={styles.page}
+        contentContainerStyle={[styles.page, {paddingTop:112}]}
         keyboardShouldPersistTaps="handled"
       >
         <Notice error text={error} />

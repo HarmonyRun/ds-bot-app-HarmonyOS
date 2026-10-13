@@ -2,6 +2,8 @@
 
 English | [中文](releasing.zh.md)
 
+> The `v0.1.0` binaries have been withdrawn; the source tag remains for traceability. After validating the fixes, use a new version tag such as `v0.1.1`. Do not republish the withdrawn tag.
+
 ## Signing identity
 
 `apps/mobile/signing/` contains the password-encrypted `DeepSeekBot.p12`, its public DER certificate and SHA-256 fingerprint. Identity: `CN=DeepSeekBot, O=DeepSeekBot, C=CN`; alias `deepseekbot`; RSA 4096; validity 10,000 days.
@@ -25,8 +27,8 @@ From the successful run's Artifacts, download and extract `dsbot-plugin` plus `d
 To publish, first verify the password Secret, checks and both signed APKs. Update `ds-bot/package.json`, `apps/mobile/package.json`, both lockfiles and `apps/mobile/app.json` to match the tag, and write bilingual notes in `docs/releases/vMAJOR.MINOR.PATCH.md`. Tag validation rejects missing credentials, mismatched versions and missing notes before building. Then push a unique stable tag:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The tag pipeline creates a public stable release with the plugin tarball, signed APKs (for example, `dsbot-android-arm64-v0.1.0.apk`), public certificate and combined checksums. Missing signing credentials fail tag validation; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.

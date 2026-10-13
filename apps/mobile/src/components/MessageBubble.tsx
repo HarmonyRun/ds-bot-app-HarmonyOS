@@ -1,7 +1,8 @@
 import { ToolResultView } from "./ToolResultView";
 import { tr } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Keyboard, Platform, Pressable, Share, Text, View } from "react-native";
+import { ActivityIndicator, Image, Keyboard, Platform, Share, Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "./Motion";
 import * as Clipboard from "expo-clipboard";
 import * as Speech from "expo-speech";
 import { File, Paths } from "expo-file-system";

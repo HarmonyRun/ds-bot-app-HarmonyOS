@@ -4,6 +4,8 @@
 
 中文 · [English](README.md) · [安装配置](docs/getting-started.zh.md) · [下载构建](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)
 
+> `v0.1.0` 安装包已撤回，正在修复聊天栏与页面交互。请暂缓安装该版本；后续经过验证的版本会重新发布。
+
 DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）。你可以和专业 Bot 对话，让多个 Bot 在群聊中协作，并在手机上查看工具执行、管理任务。手机与电脑共用同一套会话、模型和工作区。
 
 <p align="center">

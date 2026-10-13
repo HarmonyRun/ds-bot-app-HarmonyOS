@@ -6,13 +6,13 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   BackHandler,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { AnimatedPressable as Pressable } from "./components/Motion";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Conversation, Message, MobileClient } from "@ds-bot/mobile-sdk";
 import {
@@ -29,6 +29,7 @@ import {
 } from "./components/UI";
 import { BotAvatar, mainLook, RoomAvatar } from "./components/BotAvatar";
 import { LaunchIntro } from "./components/LaunchIntro";
+import { MotionProvider, PageTransition } from "./components/Motion";
 import { AgentDetails } from "./components/AgentDetails";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { ChatScreen } from "./screens/ChatScreen";
@@ -411,6 +412,7 @@ function Shell() {
           borderColor: t.line,
         }}
       >
+        <PageTransition key={`${route.page}:${route.page === "chat" ? selected : route.page === "team" ? `${route.section}:${route.id || ""}:${route.create || ""}` : ""}`}>
         {loading ? (
           <Busy text={tr("Opening your workspace…")} />
         ) : !client || !host ? (
@@ -421,7 +423,7 @@ function Shell() {
         ) : route.page === "home" ? (
           <View style={{flex:1}}>
             <View pointerEvents="box-none" style={{position:"absolute",top:0,left:0,right:0,zIndex:2,flexDirection:"row",alignItems:"center",paddingHorizontal:20,paddingTop:28,paddingBottom:12,gap:10}}>
-              <Pressable accessibilityRole="button" accessibilityLabel={tr("Open settings")} accessibilityHint={tr("Long press to replay the fish animation.")} onLongPress={() => setIntro(true)} onPress={() => navigate({page:"settings"})} style={{width:48,height:48,borderRadius:24,backgroundColor:t.surface,borderWidth:1,borderColor:t.line,alignItems:"center",justifyContent:"center",shadowColor:"#000",shadowOpacity:.04,shadowRadius:10,elevation:1}}><BotAvatar bot={mainLook} size={42} eyeFill="#ffffff"/></Pressable>
+              <IconButton name="settings" floating label={tr("Open settings")} onPress={() => navigate({page:"settings"})}/>
               <View style={{flex:1}}/>
               <IconButton name="search" floating label={tr("Search conversations")} onPress={() => {setSearching(!searching);setQuery("");}}/>
               <IconButton name="plus" floating label={tr("New chat")} onPress={() => setNewChat(true)}/>
@@ -431,7 +433,7 @@ function Shell() {
             {!searching && homeScroll > 120 && unreadAbove.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={tr("{count} unread",{count:unreadAbove.length})} onPress={() => {const first=unreadAbove[0];homeList.current?.scrollTo({y:Math.max(0,rowPositions.current[first.id].y-110),animated:true});}} style={{position:"absolute",top:104,alignSelf:"center",zIndex:3,backgroundColor:t.accent,borderRadius:24,paddingHorizontal:14,minHeight:44,flexDirection:"row",alignItems:"center",gap:6,shadowColor:"#000",shadowOpacity:.06,shadowRadius:12,elevation:2}}><Icon name="up" size={18} color={t.accentText}/><Text style={{fontSize:18,fontWeight:"600",color:t.accentText}}>{tr("{count} unread",{count:unreadAbove.length})}</Text></Pressable>}
             <ScrollView ref={homeList} onScroll={event => setHomeScroll(event.nativeEvent.contentOffset.y)} scrollEventThrottle={80} contentContainerStyle={{paddingHorizontal:16,paddingTop:searching ? 0 : 88,paddingBottom:32}} keyboardShouldPersistTaps="handled">
               {!query && chief && !classic && <Pressable accessibilityRole="button" accessibilityLabel={tr("Open {p0}",{p0:chief.name})} onPress={() => choose(chief.id)} onLongPress={() => {const item=workspace.conversations.find(c=>c.sessionId===chief.sessionId);if(item)details(item);}} style={{alignItems:"center",paddingTop:28,paddingBottom:32,gap:12}}><BotAvatar bot={chief} size={100}/><Text style={{fontSize:16,color:t.muted}}>{chief.name}</Text></Pressable>}
-              {sorted.filter(item => !(!query && chief && !classic && item.sessionId === chief.sessionId)).map(conversationRow)}
+              {sorted.map(conversationRow)}
               {!sorted.length && <View style={{padding:24,gap:16}}><Label muted>{tr("No conversations found.")}</Label>{classic ? <Button title={tr("New DSH Agent")} disabled={creating || !workspace.online} onPress={addAgent}/> : <Button secondary title={tr("Reconnect")} onPress={workspace.refresh}/>}</View>}
             </ScrollView>
           </View>
@@ -538,6 +540,7 @@ function Shell() {
             }}
           />
         )}
+      </PageTransition>
       </View>
       {intro && <LaunchIntro onComplete={() => setIntro(false)}/>}
       <Sheet title={tr("New chat")} visible={newChat && !!client} onClose={() => setNewChat(false)}>
@@ -551,7 +554,7 @@ function Shell() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <Shell />
+      <MotionProvider><Shell /></MotionProvider>
     </SafeAreaProvider>
   );
 }

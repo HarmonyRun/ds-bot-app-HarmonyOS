@@ -2,6 +2,8 @@
 
 [English](releasing.md) | 中文
 
+> `v0.1.0` 安装包已撤回，标签保留用于源码追溯。修复验证完成后使用新的版本标签，例如 `v0.1.1`；不要重复推送或重建已撤回的 `v0.1.0` 发布。
+
 ## 签名已经准备好
 
 仓库的 `apps/mobile/signing/` 保存加密的 `DeepSeekBot.p12`、公开证书 `DeepSeekBot.cer` 和证书 SHA-256 指纹。签名身份是 `CN=DeepSeekBot, O=DeepSeekBot, C=CN`，别名 `deepseekbot`，RSA 4096，有效期 10,000 天。
@@ -38,8 +40,8 @@
 需要发布时，先检查签名 Secret、两个 APK 和插件均通过。将 `ds-bot/package.json`、`apps/mobile/package.json`、两份锁文件及 `apps/mobile/app.json` 的版本更新为标签对应版本，并在 `docs/releases/v主版本.次版本.修订版本.md` 写双语说明。标签校验会在构建前拒绝缺少签名配置、版本不一致或缺少说明的发布。然后创建唯一的正式版本标签，例如：
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 标签工作流重新构建并创建正式 Release，附配套 `.tgz`、两种已签名 APK（例如 `dsbot-android-arm64-v0.1.0.apk`）、公开证书与总校验和。如果缺少签名 Secret，标签校验失败，不会把未签名包发布成可安装版本。签名密码、私密备份、原生数据与 DSH_HOME 不会作为产物上传。

@@ -4,6 +4,8 @@
 
 English · [中文](README.zh.md) · [Install](docs/getting-started.md) · [Download](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)
 
+> The `v0.1.0` binaries have been withdrawn while chat layout and interaction fixes are validated. Wait for the next verified release before installing.
+
 DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) computer or server. Chat with a specialist, bring several Bots into a group, and follow their tools and tasks from one app. The phone shares the host's conversations, models and workspace.
 
 <p align="center">

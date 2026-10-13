@@ -6,7 +6,6 @@ import {
   Platform,
   BackHandler,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
   View,
   Switch,
 } from "react-native";
+import { AnimatedPressable as Pressable, PageTransition } from "./Motion";
 import { contrastText, useTheme } from "../theme";
 import { BRAND_BLUE } from "../logic/colors";
 import Feather from "@expo/vector-icons/Feather";
@@ -215,17 +215,20 @@ export function Sheet({
     <Modal
       transparent
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "web" ? undefined : "padding"}
         style={{
           flex: 1,
           backgroundColor: "#0008",
           justifyContent: "flex-end",
         }}
       >
+        <Pressable accessibilityRole="button" accessibilityLabel={tr("Close")} onPress={onClose} style={StyleSheet.absoluteFillObject} />
+        <PageTransition distance={28}>
+        <View pointerEvents="box-none" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <View
           style={{
             backgroundColor: t.bg,
@@ -240,7 +243,7 @@ export function Sheet({
         >
           <View style={styles.between}>
             <Label large>{title}</Label>
-            <Button title={tr("Close")} secondary compact onPress={onClose} />
+            <IconButton name="close" floating label={tr("Close")} onPress={onClose} />
           </View>
           <ScrollView
             style={{ flexShrink: 1, minHeight: 0 }}
@@ -254,6 +257,8 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
+        </View>
+        </PageTransition>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -304,12 +309,14 @@ export function PageHeader({
   onOpenNavigation,
   right,
   close = false,
+  floating = false,
 }: {
   title: string;
   onBack?: () => void;
   onOpenNavigation?: () => void;
   right?: React.ReactNode;
   close?: boolean;
+  floating?: boolean;
 }) {
   const t = useTheme();
   useEffect(() => {
@@ -325,7 +332,9 @@ export function PageHeader({
   }, [onBack]);
   return (
     <View
+      pointerEvents="box-none"
       style={{
+        ...(floating ? { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 } as const : {}),
         flexDirection: "row",
         alignItems: "center",
         gap: 18,
@@ -344,9 +353,9 @@ export function PageHeader({
           onPress={onOpenNavigation}
         />
       ) : null}
-      <Text style={{ flex: 1, fontSize: 21, fontWeight: "600", color: t.ink }}>
-        {title}
-      </Text>
+      <View pointerEvents="box-none" style={{ flex: 1, alignItems: 'flex-start' }}>
+        {!!title && <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 21, fontWeight: "600", color: t.ink, ...(floating ? { backgroundColor: t.surface, borderWidth: 1, borderColor: t.line, borderRadius: 24, overflow: 'hidden' as const, paddingHorizontal: 16, paddingVertical: 10 } : {}) }}>{title}</Text>}
+      </View>
       {right}
     </View>
   );

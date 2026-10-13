@@ -13,7 +13,7 @@
 
 ## 下载配套插件和 App
 
-推荐从 [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0) 下载 `ds-bot-0.1.0.tgz` 和 `dsbot-android-arm64-v0.1.0.apk`；模拟器用 `dsbot-android-x86_64-v0.1.0.apk`。以下 Actions 下载方式供开发构建使用。
+`v0.1.0` 公开安装包已撤回。请等待后续验证完成的 Release；以下 Actions 下载方式仅供开发构建使用，不代表已经完成真机验收。
 
 打开本仓库 [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)，选择同一提交的成功运行，在 Artifacts 下载：
 

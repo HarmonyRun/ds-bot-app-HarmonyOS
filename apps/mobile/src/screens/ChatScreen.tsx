@@ -8,12 +8,12 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { AnimatedPressable as Pressable } from "../components/Motion";
 import * as Speech from "expo-speech";
 import {
   Attachment,
@@ -130,6 +130,7 @@ export function ChatScreen({
   const [composerFocused, setComposerFocused] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [dockHeight, setDockHeight] = useState(88);
+  const [inputHeight, setInputHeight] = useState(44);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [dismissedMention, setDismissedMention] = useState("");
   const list = useRef<FlatList<Message>>(null);
@@ -262,7 +263,7 @@ export function ChatScreen({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "web" ? undefined : "padding"}
       keyboardVerticalOffset={insets.top}
     >
       <View style={{ flex: 1 }}>
@@ -289,6 +290,7 @@ export function ChatScreen({
           flexGrow: 1,
         }}
         keyboardShouldPersistTaps="handled"
+        onLayout={() => { if (bottom.current) requestAnimationFrame(() => list.current?.scrollToEnd({animated:false})); }}
         scrollIndicatorInsets={{ top: 80, bottom: dockHeight }}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onScrollBeginDrag={() => {
@@ -461,7 +463,6 @@ export function ChatScreen({
           transcription={transcription}
           onVoiceChat={() => setVoice(true)}
           voiceChatDisabled={!!chat.draft.trim() || !!attachments.length || chat.running || !!bot?.waiting || chat.status !== "connected"}
-          hasContent={!!chat.draft.trim() || !!attachments.length || chat.running || !!chat.pending}
         >
           <TextInput
             ref={input}
@@ -475,6 +476,12 @@ export function ChatScreen({
             onSelectionChange={event => setSelection(event.nativeEvent.selection)}
             onFocus={() => setComposerFocused(true)}
             onBlur={() => setComposerFocused(false)}
+            onContentSizeChange={event => {
+              const height = Math.max(44, Math.min(150, Math.ceil(event.nativeEvent.contentSize.height)));
+              setInputHeight(previous => Math.abs(previous - height) > 1 ? height : previous);
+            }}
+            scrollEnabled={inputHeight >= 150}
+            underlineColorAndroid="transparent"
             placeholderTextColor={t.muted}
             style={{
               flex: 1,
@@ -482,33 +489,34 @@ export function ChatScreen({
               backgroundColor: "transparent",
               borderColor: t.line,
               borderWidth: 0,
-              borderRadius: 24,
+              textAlignVertical: "top",
               paddingHorizontal: 12,
               paddingVertical: 10,
               fontSize: 17,
+              lineHeight: 24,
+              includeFontPadding: false,
               minHeight: 44,
               maxHeight: 150,
             }}
           />
-          {(!!chat.draft.trim() || !!attachments.length || chat.running || !!chat.pending) && <IconButton primary brand={!(chat.running && !chat.draft.trim() && !attachments.length && !chat.pending)} size={44} width={56}
-            name={chat.running && !chat.draft.trim() && !attachments.length && !chat.pending ? "stop" : "send"}
-            label={chat.pending ? tr("Retry") : chat.running && !chat.draft.trim() && !attachments.length ? tr("Stop") : tr("Send")}
+          <IconButton primary brand size={44}
+            name="send"
+            label={chat.pending ? tr("Retry") : tr("Send")}
             disabled={
               chat.previousDevice ||
               !writable ||
               chat.status === "unauthorized" ||
               chat.busy ||
-              (!chat.pending && !chat.running && !chat.draft.trim() && !attachments.length) ||
+              (!chat.pending && !chat.draft.trim() && !attachments.length) ||
               !!bot?.waiting
             }
             onPress={async () => {
-              if (!chat.pending && chat.running && !chat.draft.trim() && !attachments.length) { await chat.cancel(); return; }
               if (await chat.send(attachments, attachments[0]?.sessionId)) {
                 setAttachments([]);
                 bottom.current = true;
               }
             }}
-          />}
+          />
 
         </MediaComposer>
         {(chat.previousDevice || !!chat.archived.length) && (
@@ -539,6 +547,7 @@ export function ChatScreen({
       </View>
       {voice ? <VoiceMode client={client} conversation={conversation} bot={bot} room={room} team={team} messages={chat.messages} running={chat.running} enabled={writable && chat.status === "connected" && !bot?.waiting} onSend={text => !writable || chat.pending || chat.busy || attachments.length ? Promise.resolve(null) : chat.sendVoice(text)} onStop={chat.cancel} onClose={() => setVoice(false)} /> : null}
       <Sheet title={tr("Conversation options")} visible={options} onClose={() => setOptions(false)}>
+        {chat.running && <Button secondary title={tr("Stop")} disabled={!writable || chat.busy} onPress={() => {setOptions(false);void chat.cancel();}}/>}
         {!transcription && <Notice text={tr("Voice input is unavailable. Enable and prepare speech recognition in Harness settings.")}/>}
         <Button secondary title={tr("Search conversation")} onPress={() => {setOptions(false);setSearch(true);}}/>
         <Button secondary title={tr("Conversation history")} onPress={() => {setOptions(false);setParts(true);}}/>

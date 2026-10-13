@@ -2,7 +2,15 @@
 
 All notable changes to DS Bot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow [Semantic Versioning](https://semver.org/). Before 1.0, a minor version can contain breaking changes.
 
-## DS Bot App [v0.1.0] - 2026-10-13
+## Unreleased
+
+### Fixed
+
+- Withdraw v0.1.0 binaries while validating chat layout fixes. Avoid duplicate Android keyboard resizing; keep one send button, move voice actions to the attachment menu, and use a smaller circular attachment button.
+- Keep Chief in the home conversation list and use a settings icon for the settings entry.
+- Float settings subpage controls above scrolling content. Add shared press, page and sheet transitions that respect reduced-motion preferences.
+
+## DS Bot App [v0.1.0] - 2026-10-13 (binaries withdrawn)
 
 First coordinated release of this fork: both the host plugin and mobile App use version `0.1.0`. This version series is independent of the upstream plugin tags. [中文 / English release notes](docs/releases/v0.1.0.md).
 

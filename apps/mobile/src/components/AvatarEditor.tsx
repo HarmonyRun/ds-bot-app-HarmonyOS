@@ -1,7 +1,8 @@
 import { tr } from "../i18n";
 import { useI18n } from "../i18n";
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "./Motion";
 import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { Bot } from "../types";

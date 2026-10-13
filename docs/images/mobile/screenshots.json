@@ -1,9 +1,13 @@
 {
-  "source": "signed GitHub Actions Android APK, versionCode 2",
-  "sourceCommit": "ac35f1c",
-  "platform": "Android API 30 emulator",
-  "model": "isolated DSH mock",
+  "source": "signed local Android review APK, versionCode 6; v0.1.0 release binaries withdrawn",
+  "apkSha256": "3f209de5f82502557a69b485a8fc0a3839977ceab6d2094f6dd271b7753d9100",
+  "platform": "Android API 30 x86_64 emulator",
+  "model": "isolated official DSH with mock model",
   "systemBars": "excluded from native screenshot viewport; App pixels unmodified",
+  "viewport": [
+    411,
+    890
+  ],
   "locales": [
     "en",
     "zh"

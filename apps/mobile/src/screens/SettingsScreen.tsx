@@ -4,7 +4,8 @@ import { PluginsPanel } from "../host-settings/PluginsPanel";
 import { NotificationsPanel } from "../components/NotificationsPanel";
 import { tr } from "../i18n";
 import React, { useEffect, useState } from "react";
-import { Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Platform, ScrollView, Switch, Text, View } from "react-native";
+import { AnimatedPressable as Pressable } from "../components/Motion";
 import { Device, MobileClient } from "@ds-bot/mobile-sdk";
 import {
   Button,
@@ -26,6 +27,7 @@ import { HostSettingsPanel } from "../host-settings/HostSettingsPanel";
 import { Host, tokenStore } from "../storage";
 import { errorText, TeamState } from "../types";
 import { THEMES, useTheme } from "../theme";
+import { PageTransition } from "../components/Motion";
 import { LocalePreference, useI18n } from "../i18n";
 export type SettingsPage =
   | "tools"
@@ -155,12 +157,14 @@ export function SettingsScreen({
             : ({tools:"Tools & skills",skills:"Skills",plugins:"Plugins"}[page as "tools"|"skills"|"plugins"] || pages.find((p) => p.id === page)?.title || "Settings"),
         )}
         onBack={page !== "index" || onBack ? back : undefined}
-        close={page === "index"}
+        close
+        floating
       />
+      <PageTransition key={page}>
       <ScrollView
         key={page}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.page, page === "index" ? {paddingHorizontal:18,paddingTop:32,gap:32} : undefined]}
+        contentContainerStyle={[styles.page, {paddingTop:112}, page === "index" ? {paddingHorizontal:18,paddingTop:128,gap:32} : undefined]}
       >
         <Notice error text={error} />
         <Notice text={notice} />
@@ -491,6 +495,7 @@ export function SettingsScreen({
           />
         )}
       </ScrollView>
+      </PageTransition>
       <Sheet
         title={tr("Confirm")}
         visible={!!confirm}
