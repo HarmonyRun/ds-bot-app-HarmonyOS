@@ -1,0 +1,19 @@
+{
+  "source": "signed GitHub Actions Android APK, versionCode 2",
+  "sourceCommit": "ac35f1c",
+  "platform": "Android API 30 emulator",
+  "model": "isolated DSH mock",
+  "systemBars": "excluded from native screenshot viewport; App pixels unmodified",
+  "locales": [
+    "en",
+    "zh"
+  ],
+  "pages": [
+    "home",
+    "chat",
+    "night",
+    "group",
+    "create",
+    "tools"
+  ]
+}

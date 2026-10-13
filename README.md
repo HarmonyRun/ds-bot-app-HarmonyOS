@@ -1,99 +1,83 @@
-<p align="center">
+# DS Bot App
 
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-    <img src="docs/images/logo.svg" alt="DeepSeek Bot" width="260">
-  </picture>
+**Your Bot team, on your phone.**
+
+English · [中文](README.zh.md) · [Install](docs/getting-started.md) · [Download](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)
+
+DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) computer or server. Chat with a specialist, bring several Bots into a group, and follow their tools and tasks from one app. The phone shares the host's conversations, models and workspace.
+
+<p align="center">
+  <img src="docs/images/mobile/home.en.png" width="250" alt="DS Bot App conversation home">
+  <img src="docs/images/mobile/chat.en.png" width="250" alt="A Bot conversation with floating controls">
+  <img src="docs/images/mobile/night.en.png" width="250" alt="DS Bot App in dark mode">
 </p>
 
-# DS Bot
+<p align="center">Conversation home · Bot chat · Dark mode</p>
 
-English | [中文](README.zh.md)
+## What you can do
 
-![version](https://img.shields.io/badge/version-v0.1_preview-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.0--rc.2-4D6BFE) ![license](https://img.shields.io/badge/license-Apache_2.0-green)
+| Feature | In the App |
+| --- | --- |
+| Bot team | Create and personalize Bots, choose their models, and assign Main Bots to manage the team. Each Bot keeps a long-lived conversation. |
+| Group work | Bring Bots together, pick an administrator, mention a member or reference another conversation. See who is working or waiting for approval. |
+| Messages and media | Stream replies and reasoning, long-press for message actions, attach images/files, and use voice input or voice chat. |
+| Tools and host management | Open tool-result cards, approve or reject pending actions, manage supported Skills/plugins/connectors, and opt into desktop browser control. |
+| Tasks and memory | Manage scheduled tasks and Bot memory, search earlier conversations, and inspect usage from settings or details. |
+| Notifications | Receive Android runtime notifications with an optional foreground service. FCM/APNs are unnecessary for that mode; cloud push is optional. |
+| Appearance and language | Chinese/English, light/dark/system appearance, original fish graphics, and floating chat controls. Cached conversations and drafts remain available offline. |
 
-DeepSeek Bot (DS Bot) is a bot plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). It turns DSH into bots. You create your own bots, then talk and work with them.
+<p align="center">
+  <img src="docs/images/mobile/group.en.png" width="250" alt="Group conversation with Bot authors">
+  <img src="docs/images/mobile/create.en.png" width="250" alt="Create a Bot and customize its avatar">
+  <img src="docs/images/mobile/tools.en.png" width="250" alt="Tools, Skills and plugins">
+</p>
 
-![Say one sentence to Chief, and it sets up the bots and the group chat](docs/images/team.png)
+<p align="center">Group chat · Create a Bot · Tools & skills</p>
 
-## Install and connect
+These are real Android App screenshots from an isolated demonstration team using a mock model. Only the App content is captured; Android system bars are excluded. The screenshots show the interface; they do not represent results from a production model.
 
-This repository contains the DSH plugin, its mobile bridge, a standalone Android/iOS client, and the shared SDK. Your computer/server runs the Bots, tools and models; the phone connects to it. It must stay running.
+## Get started
 
-1. Download matching `dsbot-plugin` and `dsbot-android-arm64` artifacts from [GitHub Actions](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml), or download the `.tgz` and signed `.apk` from [Releases](https://github.com/QingJ01/DS-Bot-App/releases). Actions artifacts are ZIPs: extract them first. An APK with `-unsigned` in its name cannot be installed.
-2. Install [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases), add the **downloaded plugin tarball** in Plugins → Add plugin, enable it and restart DSH. Do not install the upstream npm `ds-bot` package for this fork.
-3. Configure a model/provider credential on the computer and test Chief there.
-4. Install the ARM64 APK on your Android phone. On the computer, open Settings → Mobile devices → Enable phone connection. Connect both to the same Wi-Fi, scan the QR in the App and approve on the computer.
+1. **Download matching packages.** From [Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml), download `dsbot-plugin` and `dsbot-android-arm64` from the same successful run and extract the ZIPs. If a [Release](https://github.com/QingJ01/DS-Bot-App/releases) is available, use its matching `.tgz` and signed `.apk`. APK names ending in `-unsigned` are not installable. `x86_64` is for emulators.
+2. **Install the host plugin.** In DSH, open Plugins → Add plugin and select the downloaded `ds-bot-0.1.2.tgz` by its absolute path. Enable it and restart DSH. Configure a model/provider credential on the host and test Chief there.
+3. **Install the phone App.** Install the signed ARM64 APK on your Android phone. Earlier debug-signed test builds require uninstalling before switching to the project release signature; host history stays on the computer.
+4. **Pair on Wi-Fi.** On the computer, open DS Bot Settings → Mobile devices → Enable phone connection. Scan the QR in the App, then approve the device on the computer.
 
-The plugin configures local HTTPS automatically: no domain, extra app or certificate installation. The phone verifies the host public key from the QR. Android background notifications need neither FCM nor APNs while the optional foreground receiver is running. See the [complete installation and configuration tutorial](docs/getting-started.md), [one-click HTTPS](docs/mobile-local-https.md), and [remote/VPS options](docs/mobile-install.zh.md).
+The plugin generates local HTTPS automatically. On the same reachable Wi-Fi, no domain, additional app or certificate installation is needed. The native App verifies the host public key from the QR. Keep the host running; changing networks or enabling Wi-Fi isolation can prevent access.
 
-## Mobile features and limits
+**Install this repository's plugin tarball.** The npm package `ds-bot` belongs to the upstream project and does not include this fork's complete mobile implementation.
 
-Bot and group chats, streamed replies/reasoning, long-press message actions, image/file uploads, voice input/chat, task schedules, memory, usage, Skills, plugin management, tool-result cards, explicit tool approval and opt-in desktop browser control are included. The interface supports Chinese/English, light/dark themes and original fish graphics. Bot data stays on the host; phone credentials use secure storage and messages/drafts use a local cache.
+[Full setup tutorial](docs/getting-started.md) · [One-click HTTPS](docs/mobile-local-https.md) · [VPS and remote access](docs/mobile-install.zh.md)
 
-Android native pairing, chat, pinned TLS and runtime background notifications have been checked in an emulator with a real isolated DSH host and a mock model. iOS source is included but has not been compiled or device-tested; iOS background execution is limited. Voice depends on host Voice Input and FFmpeg. Some host plugin interfaces need the desktop UI. Neither app-store distribution nor an always-on hosted service is included. [Detailed scope](apps/mobile/README.md).
+## Where things run
 
-## Build and release
+The DSH host runs the models, Bots, tools and scheduled tasks and stores their authoritative history. The phone sends requests and displays results; it keeps a local message/draft cache and stores pairing credentials in secure storage. Model credentials are configured on the host. A disconnected phone can read its cache and edit drafts; new work requires a connection to the running host.
 
-[GitHub Actions](.github/workflows/build.yml) runs plugin/SDK/App checks, packs the plugin, and builds ARM64 and x86_64 Android APKs. Release signing uses the encrypted `DeepSeekBot` key (`C=CN`) in the repository and the `ANDROID_KEYSTORE_PASSWORD` GitHub Secret. Without that Secret, Actions produces explicitly **unsigned** APKs and will not publish a tag release. Passwords are never stored in Git.
+## Requirements and current scope
 
-See [Actions, signing, artifacts and release instructions](docs/releasing.md). iOS requires macOS/Xcode and an Apple signing identity. Development commands are in [CONTRIBUTING.md](CONTRIBUTING.md), [the plugin guide](ds-bot/README.md), and [the App guide](apps/mobile/README.md).
+- **Android:** standalone ARM64 APK for phones and x86_64 APK for emulators. CI builds, native pairing/chat, pinned HTTPS and runtime background notifications have been validated in an emulator. Physical-device microphone, lifecycle and accessibility checks remain useful before distribution.
+- **iOS:** source is included; it has not been compiled or device-tested in this Linux environment. Building requires macOS/Xcode and Apple signing. iOS does not provide Android's persistent notification service.
+- **Host:** official npm integration baseline DSH `0.2.0-rc.2`; CI also checks `0.2.1-alpha.1`. Voice needs host Voice Input and FFmpeg; scheduled tasks need the Schedule service; browser control needs an opted-in DSH Desktop host. Some plugin-specific interfaces remain on the computer.
+- **Background:** runtime notifications require the phone to remain connected and its receiver to run. Force-stop, battery restrictions and network loss can interrupt delivery. Optional Expo cloud push needs EAS and platform credentials.
 
-## Features
+## Build and contribute
 
-### Bot
+[GitHub Actions](.github/workflows/build.yml) checks the plugin, SDK and App, packs the plugin, and builds both Android architectures. The encrypted `DeepSeekBot` signing key (`C=CN`) and public certificate are versioned; the password is supplied by the `ANDROID_KEYSTORE_PASSWORD` Actions Secret. Missing signing credentials produce clearly named unsigned artifacts. `mobile-v*` tags can publish matching signed packages as prereleases.
 
-You can do all your talking and work with one bot, in one window. You don't need to worry about the context behind it. The bot's details page shows its info, and there you can pick the model you want it to use. You can switch models at any time, but I still recommend that you keep one model for a bot for a long time, and switch only when you really need to.
+| Guide | Link |
+| --- | --- |
+| Installation and configuration | [Getting started](docs/getting-started.md) |
+| Signing, Actions artifacts and releases | [Release guide](docs/releasing.md) |
+| App development and feature boundaries | [Mobile App README](apps/mobile/README.md) |
+| Plugin configuration and internals | [Plugin README](ds-bot/README.md) |
+| Tests and contribution workflow | [Contributing](CONTRIBUTING.md) |
+| Local phone / wireless debugging | [Local debugging](docs/mobile-local-debug.zh.md) |
+| Upstream port and validation history | [Upstream notes](docs/mobile-upstream.zh.md) · [Validation record](docs/mobile-validation.zh.md) |
 
-Bots also have memory. A bot remembers what you like and uses it in later work. You can manage its memory on the bot's details page, or just tell the bot.
+Source layout: `apps/mobile/` is the App, `packages/mobile-sdk/` the shared client, and `ds-bot/` the host plugin and mobile bridge.
 
-![Bot details: model, memory, usage](docs/images/details.png)
+## Credits and license
 
-### Main bot
+This project builds on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and the upstream [DS Bot](https://github.com/Fei2411/DeepSeek-Bot). The mobile client uses React Native and Expo; the plugin interface is bundled with esbuild. See [NOTICE](NOTICE) for third-party notices and [CHANGELOG](CHANGELOG.md) for changes.
 
-The main bot is your chief. It has very high rights: it manages the other bots and the group chats. The first time you open DS Bot, there is already a main bot called Chief. Talk to it, and it walks you through the setup.
-
-In short: have a question? Ask the main bot.
-
-### Group chats
-
-DS Bot has group chats. A group chat is a great way to get several bots to work together, but it clearly costs more. So DS Bot does this: every group chat has an admin. The admin answers your messages by default and calls in the other bots for you. You can also @ a bot directly, and it answers you directly: type @ and pick the bot from the list. To give the bots another chat as context, use + → Reference a chat in the message box.
-
-![Group chat: the admin, Chief, hands the work to Writer and Coder](docs/images/group.png)
-
-### Usage
-
-In **Settings** → **Usage**, you can see token usage by time, by bot and by model.
-
-![Usage page](docs/images/usage.png)
-
-## Data
-
-The authoritative Bot data stays on your DSH host, in `bot/` and `sessions/` in the DSH home folder (`~/.dsh` by default). Uninstalling the plugin does not delete this data. The mobile client also caches conversations and drafts on the phone; model requests still use the providers configured in DSH. See [mobile data and limits](docs/mobile.md#data-and-current-limits).
-
-## Development
-
-The plugin source is in [`ds-bot/`](ds-bot/). For options and internals, see [`ds-bot/README.md`](ds-bot/README.md). For development and tests, see [CONTRIBUTING.md](CONTRIBUTING.md). For changes between versions, see [CHANGELOG.md](CHANGELOG.md).
-
-## Acknowledgments
-
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): DS Bot is built on the DSH plugin system. Every bot is a DSH session and uses the DSH tools and models.
-- [esbuild](https://esbuild.github.io/): bundles the plugin's interface code.
-- Thanks to these projects for the ideas they published. DS Bot learned from their designs and does not contain their code:
-  - [AgentMemoryRepo](https://github.com/AgentMemoryRepo/agentmemoryrepo): the Markdown format of Bot memory.
-  - [OpenAI Codex](https://github.com/openai/codex): checkpoints that keep the user's messages next to the summary, and message anchors for chat search.
-  - [OpenMausBot](https://github.com/milind-soni/OpenMausBot): group chat rounds and @mention relays.
-  - [Hermes Agent](https://github.com/NousResearch/hermes-agent) and [Hermes Bot Mode](https://github.com/NousResearch/Hermes-Bot-Mode): one session per member per group chat, and handoffs that carry the earlier user messages.
-  - [OpenCode](https://github.com/sst/opencode), [goose](https://github.com/block/goose), [pi](https://github.com/badlogic/pi-mono) and [Gemini CLI](https://github.com/google-gemini/gemini-cli): when to condense a long chat, and what a handoff note holds.
-  - [obelisk](https://github.com/tommy0103/obelisk): chat search with a SQLite full-text index.
-- Everyone who tries DS Bot, asks questions and reports bugs.
-
-## License
-
-[Apache License 2.0](LICENSE). Provided "as is", without any warranty. Third-party code and its license are listed in [NOTICE](NOTICE).
-
-## Disclaimer
-
-DS Bot is an independent community project. **It is not an official DeepSeek product**, and it is not affiliated with, endorsed by or sponsored by DeepSeek. "DeepSeek", "DeepSeek Harness" and the other names are trademarks of their owners. They are used here only to say what this plugin works with.
-
-Bots use your own model quota, and they read and write files and run commands when you ask them to. Check important actions yourself.
+[Apache License 2.0](LICENSE). DS Bot App is an independent community project, not an official DeepSeek product. Bots use your configured model quota and execute the tools available on your host; review important actions before approval.
