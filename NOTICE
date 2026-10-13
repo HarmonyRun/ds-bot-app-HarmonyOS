@@ -1,5 +1,5 @@
 DS Bot
-Copyright 2026 FeiZhuLulu and the DS Bot contributors
+Copyright 2026 Fei2411 and the DS Bot contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
@@ -65,3 +65,7 @@ their ideas; it does not contain their code.
     when to condense a long conversation, and what a handoff note holds.
   - obelisk (https://github.com/tommy0103/obelisk), AGPL-3.0:
     searching a Bot's own chat with a SQLite FTS5 index ranked by BM25.
+  - DeepSeek Harness Voice Input plugin
+    (packages/experimental/client-ui-voice-input), MIT: the voice chat
+    records with the same steps (record, resample to 16 kHz mono, PCM16 WAV)
+    before it calls the plugin's speech service.

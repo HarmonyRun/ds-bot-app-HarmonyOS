@@ -8,3 +8,12 @@ node_modules/
 .dsh-test*/
 .dsh-home/
 /shots/
+.playwright-mcp/
+
+# Local signing backups and build output. Only the encrypted release key is versioned.
+.signing-private/
+*.apk
+*.aab
+*.log
+__pycache__/
+*.pyc

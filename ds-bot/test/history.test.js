@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { termQuery } from '../src/host/chat-index.js'
-import { cardText, historyEntry, questionReply, readReply, replyText } from '../src/host/parts.js'
+import { canonicalHeadings, cardText, historyEntry, questionReply, readReply, replyText } from '../src/host/parts.js'
 
 test('cardText shows a question card as the user saw it', () => {
   const card = { question: ' Start where? ', detail: 'pick one', options: [{ label: 'Plan' }, { label: ' ' }, { label: 'Draft' }] }
@@ -63,4 +63,20 @@ test('a card answer keeps several picks and the user\'s own words', () => {
   assert.equal(replyText(reply.text), '[Answer to question card] Which?\nAnswer: A, B, also C')
   assert.equal(questionReply(question, { selected: ['Z'], custom: '' }), undefined)
   assert.equal(replyText('plain words'), 'plain words')
+})
+
+test('canonicalHeadings restores translated note headings only when every heading is there', () => {
+  const names = ['Goals', 'Next step']
+  assert.equal(canonicalHeadings('## 目标\n- a\n## 下一步\n- b', names), '## Goals\n- a\n## Next step\n- b')
+  assert.equal(canonicalHeadings('## 目标\n- a', names), '## 目标\n- a')
+  assert.equal(canonicalHeadings('## Goals\n- a\n## Next step\n- b\n## extra', names), '## Goals\n- a\n## Next step\n- b\n## extra')
+})
+
+test('canonicalHeadings keeps a note whose known headings are repeated or out of order', () => {
+  const names = ['Goals', 'Progress', 'Decisions']
+  const repeated = '## 目标\n- a\n## Progress\n- b\n## Progress\n- c'
+  assert.equal(canonicalHeadings(repeated, names), repeated)
+  const swapped = '## Progress\n- b\n## 目标\n- a\n## 决定\n- c'
+  assert.equal(canonicalHeadings(swapped, names), swapped)
+  assert.equal(canonicalHeadings('## 目标\n- a\n## Progress\n- b\n## 决定\n- c', names), '## Goals\n- a\n## Progress\n- b\n## Decisions\n- c')
 })

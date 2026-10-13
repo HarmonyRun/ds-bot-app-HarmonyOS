@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Installation & configuration / 安装配置
+    url: https://github.com/QingJ01/DS-Bot-App/blob/main/docs/getting-started.zh.md
+    about: Plugin installation, native App, one-click HTTPS and troubleshooting.

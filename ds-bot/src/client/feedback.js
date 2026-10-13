@@ -25,7 +25,7 @@ const copy = text => (navigator.clipboard === undefined
   ? Promise.resolve(false)
   : navigator.clipboard.writeText(text).then(() => true, () => false))
 
-function whenText(time) {
+export function whenText(time) {
   const date = new Date(time)
   const today = new Date().toDateString() === date.toDateString()
   const clock = date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' })

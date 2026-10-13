@@ -27,7 +27,7 @@ export function install(rt) {
   const fail = (message, code = 'bot/error') => ({ ok: false, error: { code, message, details: {} } })
   // Models come from DSH, not state.json, so a provider added in Harness settings
   // changes the view without a new revision.
-  const modelsKey = () => `${rt.cachedCatalog().map(entry => entry.ref).join(',')}|${rt.cachedDefault() ?? ''}`
+  const modelsKey = () => `${rt.cachedCatalog().map(entry => entry.reasoning ? `${entry.ref}:${JSON.stringify(entry.reasoning)}` : entry.ref).join(',')}|${rt.cachedDefault() ?? ''}`
   const view = () => ({
     revision: state.revision,
     workspaceId: state.workspaceId ?? null,
@@ -55,6 +55,7 @@ export function install(rt) {
     colors: [...COLORS, ...EXTRA_COLORS],
     models: rt.cachedCatalog(),
     defaultModel: rt.cachedDefault() ?? null,
+    permissions: rt.permissionCatalog?.() ?? null,
     modelsKey: modelsKey(),
     prefs: state.prefs,
     // Whether a Desktop window should serve Bot browser reads (see browser.js).
@@ -66,11 +67,17 @@ export function install(rt) {
   })
   // What changes without a new revision, sent with every state answer. `memoryNews`:
   // per Bot, its latest memory change; `memoryReviews`: memory reviews waiting or
-  // running.
-  const live = () => ({ activity: rt.activityView(), memoryNews: rt.memoryNews(), memoryReviews: rt.memoryReviews(), connectors: rt.connectorsView() })
+  // running; `work`: per Bot, the turn it runs and its tool, and the approvals waiting.
+  const live = () => ({
+    activity: rt.activityView(),
+    work: { bots: rt.workView(), approvals: [...rt.approvalsView(), ...(rt.mobileApprovalsView?.() ?? [])] },
+    memoryNews: rt.memoryNews(),
+    memoryReviews: rt.memoryReviews(),
+    connectors: rt.connectorsView(),
+  })
   // What a host that only reads the team may still answer.
   // Updates change the dsh profile, not the team, so a reading host may run them too.
-  const READS = new Set(['state', 'models', 'earlier', 'room-progress', 'exchange', 'usage', 'schedules', 'memory-view', 'browser-wait', 'browser-result', 'diagnostics', 'diagnostics-log', 'diagnostics-clear', 'update-check', 'update-install'])
+  const READS = new Set(['state', 'models', 'efforts', 'earlier', 'room-progress', 'exchange', 'usage', 'schedules', 'memory-view', 'browser-wait', 'browser-result', 'diagnostics', 'diagnostics-log', 'diagnostics-clear', 'update-check', 'update-install', 'dsh-update-install', 'repo-stars', 'approval-answer'])
 
   function setPrefs(body) {
     if (body.theme !== undefined) {
@@ -97,6 +104,8 @@ export function install(rt) {
       const readOnly = rt.readOnly()
       if (readOnly !== undefined && !READS.has(endpoint)) return fail(readOnly, 'bot/read-only')
       switch (endpoint) {
+        case 'mobile':
+          return ok(await rt.mobileOperator(String(body.endpoint ?? 'status'), body.payload ?? {}))
         case 'state':
           if (typeof body.locale === 'string' && /^[a-z]{2,3}(-[\w-]+)?$/i.test(body.locale)) uiLocale = body.locale
           if (readOnly === undefined) await rt.bootstrap()
@@ -107,6 +116,8 @@ export function install(rt) {
         case 'models':
           await rt.catalog({ fresh: true })
           return ok({ modelsKey: modelsKey() })
+        case 'efforts':
+          return ok(await rt.reasoningOf(String(body.ref ?? '')) ?? { efforts: [] })
         case 'duplicate-bot':
           await rt.load()
           return ok(await rt.duplicateBot(body.id))
@@ -129,7 +140,7 @@ export function install(rt) {
           return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => ({ callId, replies: entry.replies, speaking: entry.speaking ?? null })))
         case 'create-bot': {
           await rt.bootstrap()
-          const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model })
+          const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort })
           return ok(bot)
         }
         case 'update-bot':
@@ -193,6 +204,9 @@ export function install(rt) {
           await rt.load()
           await rt.deleteRoom(body.id)
           return ok(view())
+        case 'approval-answer':
+          rt.answerApproval(body.id, body.choice)
+          return ok(true)
         case 'dismiss-question':
           await rt.load()
           if (state.questions[body.sessionId] !== undefined) {
@@ -259,10 +273,16 @@ export function install(rt) {
           }, AbortSignal.timeout(30_000))
           return ok(true)
         }
-        case 'update-check':
-          return ok(await rt.updateCheck({ fresh: body.fresh === true }))
+        case 'update-check': {
+          const fresh = body.fresh === true
+          return ok({ ...(await rt.updateCheck({ fresh })), dsh: (await rt.dshUpdateCheck?.({ fresh })) ?? null })
+        }
         case 'update-install':
           return ok(rt.updateStart())
+        case 'dsh-update-install':
+          return ok(rt.dshUpdateStart?.())
+        case 'repo-stars':
+          return ok(await rt.repoStars())
         // The Desktop window's long poll for read_browser, and its answers.
         case 'browser-wait': {
           if (rt.browserChannel === undefined) return fail('Bot browsers are off on this host', 'bot/browser-off')
@@ -292,6 +312,8 @@ export function install(rt) {
       return fail(message, code)
     }
   }
+
+  rt.teamCall = handle
 
   // An exact Fetch route on the shared /api channel; the browser authenticates with its session cookie.
   ctx.effect(() => ctx.connection.fetch.register({

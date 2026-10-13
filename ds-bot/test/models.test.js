@@ -76,7 +76,7 @@ test('a Bot with no model yet changes nothing until the user picks one', async (
 
 // A runtime with two providers, a DSH default, and a session controller that, like
 // DSH, saves every Session selection as the default.
-function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fallback = { provider: 'stepfun', model: 'step-5' } } = {}) {
+function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fallback = { provider: 'stepfun', model: 'step-5' }, reasoning = {} } = {}) {
   let current = { ...fallback }
   const selected = []
   const saved = []
@@ -89,10 +89,11 @@ function bench({ providers = { deepseek: ['v4-flash'], stepfun: ['step-5'] }, fa
     llm: {
       listProviders: () => Object.keys(providers).map(id => ({ id, name: id.toUpperCase() })),
       listModels: async id => providers[id].map(model => ({ id: model, name: model, inputModalities: ['text'] })),
+      resolveModelInfo: async (provider, model) => reasoning[`${provider}/${model}`] ?? {},
     },
     sessionController: {
-      selectModel: async ({ sessionId, provider, model }) => {
-        selected.push(`${sessionId}:${provider}/${model}`)
+      selectModel: async ({ sessionId, provider, model, reasoningEffort }) => {
+        selected.push(`${sessionId}:${provider}/${model}${reasoningEffort === undefined ? '' : `:${reasoningEffort}`}`)
         current = { provider, model }
       },
     },
@@ -127,6 +128,42 @@ test('applying a Bot model leaves the DSH default as the user set it', async () 
   assert.equal(bot.appliedModel, 'deepseek/v4-flash')
 })
 
+test('a Bot model applies its thinking level, and only re-selects on a change', async () => {
+  const { rt, selected } = bench({ reasoning: { 'deepseek/v4-flash': { reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'high' } } } })
+  const bot = { id: 'b1', model: 'deepseek/v4-flash', effort: 'low' }
+  await rt.applyModel(bot)
+  assert.deepEqual(selected, ['b1:deepseek/v4-flash:low'])
+  assert.equal(bot.appliedEffort, 'low')
+  await rt.applyModel(bot)
+  assert.equal(selected.length, 1)
+
+  // A level the model does not serve is never sent: the model's default applies.
+  bot.effort = 'max'
+  await rt.applyModel(bot)
+  assert.deepEqual(selected.at(-1), 'b1:deepseek/v4-flash')
+  assert.equal(bot.appliedEffort, undefined)
+})
+
+test('resolveEffort takes an id or a name, and refuses what the model has not', async () => {
+  const { rt } = bench({ reasoning: {
+    'deepseek/v4-flash': { reasoning: { efforts: [{ id: 'off', name: 'Off' }, { id: 'high', name: 'High' }] } },
+    'stepfun/step-5': {},
+  } })
+  assert.equal(await rt.resolveEffort('deepseek/v4-flash', 'high'), 'high')
+  assert.equal(await rt.resolveEffort('deepseek/v4-flash', ' Off '), 'off')
+  assert.equal(await rt.resolveEffort('deepseek/v4-flash', ''), undefined)
+  await assert.rejects(rt.resolveEffort('stepfun/step-5', 'high'), /no thinking levels/)
+  await assert.rejects(rt.resolveEffort('deepseek/v4-flash', 'max'), /not available for deepseek\/v4-flash\. Available: Off, High/)
+})
+
+test('the catalog attaches thinking levels to models a Bot uses', async () => {
+  const { rt } = bench({ reasoning: { 'deepseek/v4-flash': { reasoning: { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' } } } })
+  rt.state.bots.b1 = { id: 'b1', model: 'deepseek/v4-flash' }
+  const entries = await rt.catalog()
+  assert.deepEqual(entries.find(entry => entry.ref === 'deepseek/v4-flash')?.reasoning, { efforts: [{ id: 'high', name: 'High' }], defaultEffort: 'high' })
+  assert.equal(entries.find(entry => entry.ref === 'stepfun/step-5')?.reasoning, undefined)
+})
+
 test('a greeting waits for the provider of its Bot model to register', async () => {
   const { rt, providers, listeners } = bench({ providers: {} })
   const waiting = rt.waitForModel({ model: 'stepfun/step-5' }, 5000)
@@ -136,4 +173,16 @@ test('a greeting waits for the provider of its Bot model to register', async () 
   }, 20)
   assert.equal(await waiting, 'stepfun/step-5')
   assert.equal(await rt.waitForModel({}, 5000), undefined)
+})
+
+test('a Bot on the default model with its own thinking level leaves the default level as it was', async () => {
+  const fallback = { provider: 'deepseek', model: 'v4-flash', reasoningEffort: 'high' }
+  const { rt, current } = bench({ fallback, reasoning: { 'deepseek/v4-flash': { reasoning: { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'high' } } } })
+  rt.ctx.sessionController.selectModel = async ({ provider, model, reasoningEffort }) => {
+    const selected = { provider, model, ...(reasoningEffort === undefined ? {} : { reasoningEffort }) }
+    await rt.ctx.get('agentDefaultModel').saveSelection(selected)
+    return { selected }
+  }
+  await rt.applyModel({ id: 'b1', model: 'deepseek/v4-flash', effort: 'low' })
+  assert.deepEqual(current(), fallback)
 })

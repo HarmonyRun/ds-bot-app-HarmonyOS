@@ -1,3 +1,4 @@
+import { mobilePageScript } from './mobile-browser-page.js'
 // Bot browsers in the Desktop app: per Bot, a tab strip of pages. Each tab is one
 // Electron webview in the Bot's own storage partition (`dshDesktop.browser.acquire(
 // 'bot:<id>')` — the same key always yields the same partition, so cookies and logins
@@ -282,7 +283,7 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
     owner.set(tabId, botId)
     tabs.set((state) => {
       const own = state[botId] ?? { ids: [], active: null }
-      return { ...state, [botId]: { ids: [...own.ids, tabId], active: tabId } }
+      return { ...state, [botId]: { ...own, ids: [...own.ids, tabId], active: tabId } }
     })
     publish(tabId, { url: '', title: '', live: false })
     if (typeof url === 'string' && url !== '') void navigate(tabId, url)
@@ -306,8 +307,8 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
       // The tab after the closed one takes over; closing the last picks the new last.
       const active = current.active === tabId ? (ids[Math.min(at, ids.length - 1)] ?? null) : current.active
       const next = { ...snapshot }
-      if (ids.length === 0) delete next[botId]
-      else next[botId] = { ids, active }
+      if (ids.length === 0 && current.mobileControl !== true) delete next[botId]
+      else next[botId] = { ...current, ids, active }
       return next
     })
     owner.delete(tabId)
@@ -408,6 +409,32 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
     preview,
     show,
     navigate,
+    setMobileControl(botId, enabled) {
+      ensureTabs(botId)
+      tabs.set(state => ({ ...state, [botId]: { ...state[botId], mobileControl: enabled === true } }))
+      pages.set(state => ({ ...state }))
+    },
+    async mobileControl(botId, request) {
+      if (tabs.getSnapshot()[botId]?.mobileControl !== true) throw new Error('Enable mobile control in this Bot’s Desktop browser first.')
+      if (request.expiresAt < Date.now()) throw new Error('This browser request expired. Refresh its current state.')
+      let tabId = request.tabId || activeTab(botId)
+      if (request.command === 'new-tab') { tabId = openTab(botId); if (request.url && !await navigate(tabId, request.url)) throw new Error('This address cannot be opened.'); return { tabId, changed: true } }
+      if (!tabId || owner.get(tabId) !== botId) throw new Error('This tab does not belong to the Bot.')
+      if (request.command === 'activate') { activate(botId, tabId); return { changed: true } }
+      if (request.command === 'close') { await closeTab(botId, tabId); return { changed: true } }
+      if (request.command === 'navigate') { if (!await navigate(tabId, request.url)) throw new Error('This address cannot be opened.'); return { changed: true } }
+      const entry = views.get(tabId)
+      if (!entry?.ready) throw new Error('The Desktop tab is not ready.')
+      if (tabs.getSnapshot()[botId]?.mobileControl !== true) throw new Error('Desktop browser control was revoked.')
+      if (['back', 'forward', 'reload', 'stop'].includes(request.command)) {
+        if (request.command === 'back' && entry.element.canGoBack()) entry.element.goBack()
+        if (request.command === 'forward' && entry.element.canGoForward()) entry.element.goForward()
+        if (request.command === 'reload') entry.element.reload()
+        if (request.command === 'stop') entry.element.stop()
+        return { changed: true }
+      }
+      return { ...await entry.element.executeJavaScript(mobilePageScript(request)), tabId }
+    },
     command(tabId, name) {
       const entry = views.get(tabId)
       if (!entry?.ready) return
@@ -425,7 +452,7 @@ export function createBotBrowsers({ bridge, createSource, storage = globalThis.l
         const tabId = state.active
         const entry = tabId ? views.get(tabId) : undefined
         const page = tabId ? snapshot[tabId] : undefined
-        if (entry?.ready && page?.url) open[botId] = { url: page.url, title: page.title }
+        if ((entry?.ready && page?.url) || state.mobileControl) open[botId] = { url: page?.url || '', title: page?.title || '', ...(state.mobileControl !== undefined ? { mobileControl: state.mobileControl === true, active: state.active, tabs: state.ids.map(id => ({ id, title: snapshot[id]?.title || '', url: snapshot[id]?.url || '' })) } : {}) }
       }
       return open
     },
@@ -481,20 +508,24 @@ export function serveBrowserReads({ browsers, post, clientId = globalThis.crypto
   // the moment it starts, so a resend during a slow read shares it, and a resend
   // after a failed submit posts the cached answer again.
   const answered = new Map()
-  const answer = async ({ id, botId }) => {
+  const answeredAt = new Map()
+  const answer = async (request) => {
+    const { id, botId } = request
+    for (const [key, at] of answeredAt) if (Date.now() - at > 60000) { answeredAt.delete(key); answered.delete(key) }
     let job = answered.get(id)
     if (job === undefined) {
       job = (async () => {
+        if (answered.size >= 1000) return { id, clientId, ok: false, error: 'The Desktop browser is busy. Refresh before continuing.' }
         try {
-          const result = { id, ok: true, page: await browsers.read(botId) }
+          const result = { id, ...(request.mobileCommand ? { clientId } : {}), ok: true, page: request.mobileCommand ? await browsers.mobileControl(botId, request.mobileCommand) : await browsers.read(botId) }
           browsers.noteRead(botId)
           return result
         } catch (error) {
-          return { id, ok: false, error: error instanceof Error ? error.message : String(error) }
+          return { id, ...(request.mobileCommand ? { clientId } : {}), ok: false, error: error instanceof Error ? error.message : String(error) }
         }
       })()
       answered.set(id, job)
-      if (answered.size > 200) answered.delete(answered.keys().next().value)
+      answeredAt.set(id, Date.now())
     }
     await post('browser-result', await job).catch(error => console.warn('[ds-bot] browser result', error))
   }
@@ -519,10 +550,12 @@ export function serveBrowserReads({ browsers, post, clientId = globalThis.crypto
   const offPages = browsers.pages.subscribe(() => {
     if (JSON.stringify(browsers.openPages()) !== reported) poll?.abort()
   })
+  const offTabs = browsers.tabs?.subscribe?.(() => { if (JSON.stringify(browsers.openPages()) !== reported) poll?.abort() }) || (() => {})
   void loop()
   return () => {
     stopped = true
     offPages()
+    offTabs()
     poll?.abort()
   }
 }

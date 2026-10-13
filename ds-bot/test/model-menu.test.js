@@ -26,7 +26,7 @@ runInNewContext(bundle.outputFiles[0].text, {
     return platform[name]
   },
 })
-const { groupModels, ModelChoiceDock } = module.exports
+const { groupModels, ModelChoiceDock, effortRows } = module.exports
 
 function nodes(tree, match) {
   if (!tree || typeof tree !== 'object') return []
@@ -91,4 +91,11 @@ test('an empty catalog offers setup choices, and a ready model needs no choice d
   ])
   assert.equal(dock(models, { model: models[0].ref }).tree, null)
   assert.equal(dock(models, { ready: false }).tree, null)
+})
+
+test('the Thinking section always offers Default, so a picked level can be cleared', () => {
+  const efforts = [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }]
+  assert.deepEqual([...effortRows({ efforts, defaultEffort: 'high' }).map(row => row.effort)], [undefined, 'low', 'high'])
+  assert.deepEqual([...effortRows({ efforts }).map(row => row.effort)], [undefined, 'low', 'high'])
+  assert.equal(effortRows({ efforts: [] }).length, 0)
 })

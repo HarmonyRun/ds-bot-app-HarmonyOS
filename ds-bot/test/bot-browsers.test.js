@@ -369,3 +369,20 @@ test('browserAddress opens hosts over https, local addresses over http, and sear
 test('the page reader is one valid expression', () => {
   assert.doesNotThrow(() => new Function(`return ${READ_PAGE_SCRIPT}`))
 })
+
+test('mobile browser control requires Desktop opt-in, retains Bot tab ownership and stops on revocation', async () => {
+  const desktop = fakeDesktop()
+  const browsers = createBotBrowsers({ bridge: desktop.bridge, createSource, storage: desktop.storage, document: desktop.doc })
+  const a=browsers.openTab('a'), b=browsers.openTab('b')
+  const request={command:'navigate',tabId:a,url:'https://example.test/',expiresAt:Date.now()+10000}
+  await assert.rejects(browsers.mobileControl('a',request),/Enable mobile control/)
+  browsers.setMobileControl('a',true)
+  assert.equal(browsers.openPages().a.mobileControl,true)
+  await assert.rejects(browsers.mobileControl('a',{...request,tabId:b}),/does not belong/)
+  assert.equal((await browsers.mobileControl('a',request)).changed,true)
+  await assert.rejects(browsers.mobileControl('a',{...request,url:'http://169.254.169.254/latest/meta-data/'}),/cannot be opened/)
+  await assert.rejects(browsers.mobileControl('a',{...request,expiresAt:0}),/expired/)
+  browsers.setMobileControl('a',false)
+  await assert.rejects(browsers.mobileControl('a',request),/Enable mobile control/)
+  browsers.dispose()
+})

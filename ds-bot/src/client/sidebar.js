@@ -9,6 +9,7 @@ import { botState, BotMark, BotAvatar, RoomAvatar } from './mark.js'
 import { reducedMotion } from './activity-row.js'
 import { springEasing, SPRING_SHAPE } from './motion.js'
 import { hostText, t } from './i18n.js'
+import { showsDshRow } from './dsh-offer.js'
 
 // -------------------------------------------------------------------------
 // Sidebar
@@ -260,14 +261,16 @@ export function TeamSidebar(props) {
           : h(AgentRow, { key: entry.item.id, ...rowProps, agent: entry.item, marked: markedUnread[entry.item.id] === true })))))
 }
 
-// The update button at the sidebar's top right: a cloud while a newer DS Bot is
-// available, then the install's progress and result. It opens a small card with
-// the versions, a link to the release notes, and the Update button.
+// The update button at the sidebar's top right: a cloud while a newer DS Bot —
+// or a newer verified DSH — is available, then the install's progress and
+// result. Its card has one row each for the bot and DSH, with their versions,
+// the release notes link, and each row's own button.
 function UpdateButton({ useUpdate, actions }) {
   const update = useUpdate(value => value)
   const [open, setOpen] = useState(false)
   const [box, setBox] = useState(null)
   const [error, setError] = useState('')
+  const [dshError, setDshError] = useState('')
   const button = useRef(null)
   useEffect(() => {
     if (!open) return undefined
@@ -281,7 +284,11 @@ function UpdateButton({ useUpdate, actions }) {
     return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey, true) }
   }, [open])
   const phase = update?.phase ?? 'idle'
-  if (!update?.available && phase === 'idle') return null
+  const dsh = update?.dsh
+  const dshPhase = dsh?.phase ?? 'idle'
+  const dshRow = showsDshRow(dsh, update?.app)
+  if (!update?.available && !dshRow && phase === 'idle' && dshPhase === 'idle') return null
+  const cloudPhase = phase === 'installing' || dshPhase === 'installing' ? 'installing' : phase !== 'idle' ? phase : dshPhase
   const toggle = () => {
     const rect = button.current?.getBoundingClientRect()
     if (rect) setBox({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 288)), top: rect.bottom + 6 })
@@ -291,26 +298,53 @@ function UpdateButton({ useUpdate, actions }) {
     setError('')
     void actions.installUpdate().catch(failure => setError(hostText(failure?.message ?? String(failure))))
   }
+  const startDsh = () => {
+    setDshError('')
+    void actions.installDshUpdate().catch(failure => setDshError(hostText(failure?.message ?? String(failure))))
+  }
   const label = phase === 'installing' ? t('Updating DS Bot…')
-    : phase === 'installed' ? t('DS Bot {version} is installed. Restart DSH to use it.', { version: update.installed ?? update.latest })
-      : t('DS Bot {version} is available', { version: update.latest })
+    : dshPhase === 'installing' ? t('Updating DSH…')
+      : phase === 'installed' ? t('DS Bot {version} is installed. Restart DSH to use it.', { version: update.installed ?? update.latest })
+        : dshPhase === 'installed' ? t('Restart DSH to start using DSH {version}.', { version: dsh.installed ?? dsh.verified })
+          : update?.available ? t('DS Bot {version} is available', { version: update.latest })
+            : t('DSH {version} is available', { version: dsh?.verified })
   const message = error || (phase === 'failed' ? update.error : '')
+  const dshMessage = dshError || (dshPhase === 'failed' ? dsh?.error : '')
+  const dshText = dshPhase === 'installed'
+    ? t('Restart DSH to start using DSH {version}.', { version: dsh.installed ?? dsh.verified })
+    : dsh?.available === false && dsh?.blockedBy
+      ? t('Update DS Bot {version} first.', { version: dsh.blockedBy })
+      : t('You have {version}.', { version: dsh?.current })
   return h(Fragment, null,
     h('button', {
-      ref: button, type: 'button', className: 'bt-round bt-update', 'data-phase': phase, 'aria-label': label, title: label,
+      ref: button, type: 'button', className: 'bt-round bt-update', 'data-phase': cloudPhase, 'aria-label': label, title: label,
       'aria-haspopup': 'dialog', 'aria-expanded': open, onClick: toggle,
-    }, h(CloudDownloadIcon, { done: phase === 'installed' }), phase === 'failed' ? h('span', { className: 'bt-update-dot', 'aria-hidden': true }) : null),
-    open && box ? createPortal(h('div', { className: 'bt-update-pop', role: 'dialog', 'aria-label': t('DS Bot update'), style: box },
-      h('div', { className: 'bt-update-title' }, phase === 'installed' ? t('Update installed') : t('DS Bot {version}', { version: update.latest })),
-      h('div', { className: 'bt-update-text' }, phase === 'installed'
-        ? t('Restart DSH to start using DS Bot {version}.', { version: update.installed ?? update.latest })
-        : t('You have {version}.', { version: update.current })),
-      message ? h('div', { className: 'bt-update-error', role: 'alert' }, t('The update did not finish: {reason}', { reason: message })) : null,
-      h('div', { className: 'bt-update-actions' },
-        update.notesUrl ? h('a', { className: 'bt-update-notes', href: update.notesUrl, target: '_blank', rel: 'noopener noreferrer' }, t("What's new")) : null,
-        phase === 'installed' ? null : h('button', {
-          type: 'button', className: 'bt-update-go', disabled: phase === 'installing', onClick: start,
-        }, phase === 'installing' ? t('Updating…') : phase === 'failed' ? t('Try again') : t('Update')))), document.body) : null)
+    }, h(CloudDownloadIcon, { done: phase === 'installed' }), phase === 'failed' || dshPhase === 'failed' ? h('span', { className: 'bt-update-dot', 'aria-hidden': true }) : null),
+    open && box ? createPortal(h('div', { className: 'bt-update-pop', role: 'dialog', 'aria-label': update?.available || phase !== 'idle' ? t('DS Bot update') : t('DSH update'), style: box },
+      update?.available || phase !== 'idle' ? h(Fragment, null,
+        h('div', { className: 'bt-update-title' }, phase === 'installed' ? t('Update installed') : t('DS Bot {version}', { version: update.latest })),
+        h('div', { className: 'bt-update-text' }, phase === 'installed'
+          ? t('Restart DSH to start using DS Bot {version}.', { version: update.installed ?? update.latest })
+          : t('You have {version}.', { version: update.current })),
+        message ? h('div', { className: 'bt-update-error', role: 'alert' }, t('The update did not finish: {reason}', { reason: message })) : null,
+        h('div', { className: 'bt-update-actions' },
+          update.notesUrl ? h('a', { className: 'bt-update-notes', href: update.notesUrl, target: '_blank', rel: 'noopener noreferrer' }, t("What's new")) : null,
+          phase === 'installed' ? null : h('button', {
+            type: 'button', className: 'bt-update-go', disabled: phase === 'installing', onClick: start,
+          }, phase === 'installing' ? t('Updating…') : phase === 'failed' ? t('Try again') : t('Update')))) : null,
+      dshRow ? h('div', { className: 'bt-update-dsh' },
+        h('div', { className: 'bt-update-title' }, t('DSH {version}', { version: dsh.verified })),
+        h('div', { className: 'bt-update-text' }, dshText),
+        dshMessage ? h('div', { className: 'bt-update-error', role: 'alert' }, t('The update did not finish: {reason}', { reason: dshMessage })) : null,
+        h('div', { className: 'bt-update-actions' },
+          dsh.kind === 'app' ? (dsh.available
+            ? h('button', { type: 'button', className: 'bt-update-go', onClick: () => void actions.openAppUpdates(dsh.verified).catch(() => {}) }, t('Open updates'))
+            : null)
+            : !dsh.available && dshPhase === 'idle' ? null
+              : dshPhase === 'installed' ? null
+                : h('button', {
+                  type: 'button', className: 'bt-update-go', disabled: dshPhase === 'installing', onClick: startDsh,
+                }, dshPhase === 'installing' ? t('Updating…') : dshPhase === 'failed' ? t('Try again') : t('Update')))) : null), document.body) : null)
 }
 
 // The footer entry to the shell's plugin panel, marked as not yet adapted: the red
@@ -576,6 +610,7 @@ export const SIDEBAR_CSS = `
 .bt-update-go:hover:not(:disabled){opacity:.9}
 .bt-update-go:active:not(:disabled){transform:scale(.96)}
 .bt-update-go:disabled{opacity:.6;cursor:default}
+.bt-update-dsh:not(:first-child){margin-top:12px;padding-top:12px;border-top:.5px solid var(--bt-line-2)}
 @media (prefers-reduced-motion:reduce){.bt-round.bt-update,.bt-update-pop,.bt-update .bt-cloud-arrow{animation:none}}
 
 /* The DSH Agent row and its expanding Session list. The black whale is the

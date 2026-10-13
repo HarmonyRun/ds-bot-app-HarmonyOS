@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 // Bot browsers (Desktop only). Every Bot owns a browser panel in the Desktop app: an
 // Electron webview in its own storage partition, which the user steers. The page lives in
 // the app window, not here, so `read_browser` reaches it through the window: the client
@@ -27,6 +28,7 @@ export function createBrowserChannel({ now = Date.now, waitMs = WAIT_MS, staleMs
   /** @type {Map<string, {client:any, resolve:(value:any) => void, timer:any}>} */
   const pending = new Map()
   let nextId = 0
+  const channelId = randomUUID()
 
   const present = client => client.wake !== undefined || now() - client.seen < staleMs
   // The most recently seen window that shows this Bot's browser.
@@ -83,6 +85,7 @@ export function createBrowserChannel({ now = Date.now, waitMs = WAIT_MS, staleMs
     if (entry === undefined) return false
     pending.delete(id)
     clearTimeout(entry.timer)
+    entry.off?.()
     const at = entry.client.queue.findIndex(item => item.id === id)
     if (at !== -1) entry.client.queue.splice(at, 1)
     entry.resolve(value)
@@ -91,6 +94,8 @@ export function createBrowserChannel({ now = Date.now, waitMs = WAIT_MS, staleMs
 
   /** What a window reports for one request: `{ id, ok, page }` or `{ id, ok: false, error }`. */
   function result(payload) {
+    const entry = pending.get(String(payload?.id ?? ''))
+    if (entry?.controlled && payload.clientId !== entry.clientId) return false
     return settle(String(payload?.id ?? ''), payload?.ok === true
       ? { page: payload.page }
       : { error: String(payload?.error ?? 'The page could not be read') })
@@ -103,11 +108,15 @@ export function createBrowserChannel({ now = Date.now, waitMs = WAIT_MS, staleMs
   function read(botId, request = {}) {
     const client = clientFor(botId)
     if (client === undefined) return Promise.resolve({ absent: true })
-    const id = `read-${++nextId}`
+    const { signal, ...wire } = request
+    if (signal?.aborted) return Promise.resolve({ error: 'The browser request was cancelled.' })
+    const id = `read-${channelId}-${++nextId}`
     return new Promise((resolve) => {
       const timer = setTimeout(() => settle(id, { error: 'The Desktop app did not answer in time. Its window may be closed or busy.' }), readTimeoutMs)
-      pending.set(id, { client, resolve, timer })
-      client.queue.push({ ...request, id, botId })
+      const abort = () => settle(id, { error: 'The browser request was cancelled.' })
+      pending.set(id, { client, resolve, timer, controlled: !!wire.mobileCommand, clientId: [...clients].find(([, value]) => value === client)?.[0], off: () => signal?.removeEventListener('abort', abort) })
+      signal?.addEventListener('abort', abort, { once: true })
+      client.queue.push({ ...wire, id, botId })
       client.wake?.()
     })
   }
@@ -250,7 +259,7 @@ export function install(rt) {
     if (value === null || typeof value !== 'object') return open
     for (const [botId, page] of Object.entries(value).slice(0, OPEN_MAX)) {
       if (rt.botOf(botId) === undefined || typeof page?.url !== 'string') continue
-      open[botId] = { url: page.url.slice(0, 2000), title: String(page.title ?? '').slice(0, 300) }
+      open[botId] = { url: page.url.slice(0, 2000), title: String(page.title ?? '').slice(0, 300), mobileControl: page.mobileControl === true, active: typeof page.active === 'string' ? page.active.slice(0, 100) : null, tabs: (Array.isArray(page.tabs) ? page.tabs : []).slice(0, 64).map(tab => ({ id: String(tab.id).slice(0, 100), url: String(tab.url || '').slice(0, 2000), title: String(tab.title || '').slice(0, 300) })) }
     }
     return open
   }

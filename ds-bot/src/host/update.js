@@ -7,10 +7,10 @@ import { join } from 'node:path'
 
 const PKG = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
 export const OFFICIAL_REGISTRY = 'https://registry.npmjs.org/'
-const MIRROR_REGISTRY = 'https://registry.npmmirror.com/'
+export const MIRROR_REGISTRY = 'https://registry.npmmirror.com/'
 // Every window that opens asks; within this long the last answer stands.
-const CHECK_TTL_MS = 10 * 60_000
-const FETCH_TIMEOUT_MS = 8000
+export const CHECK_TTL_MS = 10 * 60_000
+export const FETCH_TIMEOUT_MS = 8000
 // The first check waits until the host has settled its own start.
 const STARTUP_DELAY_MS = 15_000
 const VERSION = /^v?(\d+\.\d+\.\d+(?:-[\w.]+)?)(?:\+[\w.]+)?$/
@@ -60,12 +60,55 @@ export function sourceOf(spec) {
 }
 
 const normalizeRegistry = url => `${String(url).trim().replace(/\/+$/, '')}/`
-const encodeName = name => (name.startsWith('@') ? `@${encodeURIComponent(name.slice(1))}` : encodeURIComponent(name))
-// The project page of the releases, for the "what's new" link.
-const releasesUrl = () => {
-  const repo = /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?$/i.exec(String(PKG.repository?.url ?? PKG.repository ?? ''))?.[1]
-  return repo ? `https://github.com/${repo}/releases` : (PKG.homepage ?? null)
+export const encodeName = name => (name.startsWith('@') ? `@${encodeURIComponent(name.slice(1))}` : encodeURIComponent(name))
+
+export const fetchJson = async (url, headers = {}) => {
+  const response = await fetch(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`${url} answered ${response.status}`)
+  return response.json()
 }
+
+// The registries the plugin manager installs from, in its order: its configured
+// first one (else pnpm's own), then the fallbacks, unless that first one is private.
+export async function registryPlan(config, manager) {
+  if (typeof config.updateRegistry === 'string' && config.updateRegistry !== '') return [normalizeRegistry(config.updateRegistry)]
+  const configured = await Promise.resolve(manager?.registries?.()).catch(() => null)
+  if (!configured) return [OFFICIAL_REGISTRY, MIRROR_REGISTRY]
+  const fallbacks = (configured.fallbackRegistries ?? []).map(normalizeRegistry)
+  const own = configured.resolved ? normalizeRegistry(configured.resolved) : null
+  const first = configured.registry ? normalizeRegistry(configured.registry) : own ?? OFFICIAL_REGISTRY
+  const isPublic = first === OFFICIAL_REGISTRY || fallbacks.includes(first)
+  return isPublic ? [...new Set([first, ...fallbacks])] : [first]
+}
+
+// The plugin manager's `source` for this package; DSH releases before it reported
+// one leave the profile's own dependency entry to say the same.
+export async function installSpecOf(ctx) {
+  const manager = ctx.get?.('pluginManager')
+  const bundles = await Promise.resolve(manager?.listBundles?.()).catch(() => null)
+  const own = Array.isArray(bundles) ? bundles.find(bundle => bundle.name === PKG.name) : undefined
+  if (typeof own?.source === 'string') return own.source
+  const dir = ctx.get?.('profileContext')?.dir
+  if (typeof dir !== 'string') return undefined
+  try {
+    return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dependencies?.[PKG.name]
+  } catch { return undefined }
+}
+
+// The public repository the releases live in, for tags and the "what's new" link.
+export const repoSlug = () =>
+  /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?$/i.exec(String(PKG.repository?.url ?? PKG.repository ?? ''))?.[1] ?? null
+
+const repoUrl = () => {
+  const repo = repoSlug()
+  return repo ? `https://github.com/${repo}` : null
+}
+const releasesUrl = () => {
+  const repo = repoUrl()
+  return repo ? `${repo}/releases` : (PKG.homepage ?? null)
+}
+
+export const STARS_TTL_MS = 60 * 60_000
 
 export function install(rt) {
   const { ctx, config } = rt
@@ -82,31 +125,29 @@ export function install(rt) {
 
   const view = () => ({
     name: status.name, current: status.current, latest: status.latest, source: status.source, notesUrl: status.notesUrl,
+    repoUrl: repoUrl(), enabled,
     checkedAt: status.checkedAt, phase: status.phase, installed: status.installed, error: status.error,
     available: status.phase !== 'installed' && target !== null && status.latest !== null && newer(status.latest, status.current),
   })
 
-  const fetchJson = async (url, headers = {}) => {
-    const response = await fetch(url, { headers: { accept: 'application/json', ...headers }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
-    if (!response.ok) throw new Error(`${url} answered ${response.status}`)
-    return response.json()
-  }
-
-  // The registries the plugin manager installs from, in its order: its configured
-  // first one (else pnpm's own), then the fallbacks, unless that first one is private.
-  async function registryPlan() {
-    if (typeof config.updateRegistry === 'string' && config.updateRegistry !== '') return [normalizeRegistry(config.updateRegistry)]
-    const configured = await Promise.resolve(manager()?.registries?.()).catch(() => null)
-    if (!configured) return [OFFICIAL_REGISTRY, MIRROR_REGISTRY]
-    const fallbacks = (configured.fallbackRegistries ?? []).map(normalizeRegistry)
-    const own = configured.resolved ? normalizeRegistry(configured.resolved) : null
-    const first = configured.registry ? normalizeRegistry(configured.registry) : own ?? OFFICIAL_REGISTRY
-    const isPublic = first === OFFICIAL_REGISTRY || fallbacks.includes(first)
-    return isPublic ? [...new Set([first, ...fallbacks])] : [first]
+  // Asked only while the About page is open, so a closed page never calls GitHub.
+  // A failed answer keeps the last count and is asked again next time.
+  let stars = { count: null, at: 0 }
+  let starring = null
+  async function repoStars() {
+    const repo = repoSlug()
+    if (repo === null) return null
+    if (Date.now() - stars.at < STARS_TTL_MS) return stars.count
+    starring ??= fetchJson(`https://api.github.com/repos/${repo}`, { 'user-agent': `${PKG.name}/${PKG.version}` })
+      .then((info) => { if (Number.isInteger(info?.stargazers_count)) stars = { count: info.stargazers_count, at: Date.now() } })
+      .catch(error => rt.warn('ds-bot: star count failed: %s', error?.message ?? error))
+      .finally(() => { starring = null })
+    await starring
+    return stars.count
   }
 
   async function newestFromRegistry() {
-    for (const registry of await registryPlan()) {
+    for (const registry of await registryPlan(config, manager())) {
       try {
         const version = cleanVersion((await fetchJson(`${registry}${encodeName(PKG.name)}/latest`)).version)
         if (version) return { version, spec: `${PKG.name}@${version}`, registry }
@@ -120,25 +161,16 @@ export function install(rt) {
     const release = await fetchJson(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/latest`, { 'user-agent': `${PKG.name}/${PKG.version}` })
     const version = cleanVersion(release?.tag_name)
     if (!version) return null
+    // The API answers through redirects, so the release's html_url names the
+    // repository's current address; the install moves to it.
+    const current = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/releases\//.exec(release.html_url ?? '')
+    const [owner, repo] = current ? [current[1], current[2]] : [source.owner, source.repo]
     const fragment = [release.tag_name, ...source.rest].join('&')
-    return { version, spec: `github:${source.owner}/${source.repo}#${fragment}` }
-  }
-
-  // The plugin manager's `source` for this package; DSH releases before it reported
-  // one leave the profile's own dependency entry to say the same.
-  async function installSpec() {
-    const bundles = await Promise.resolve(manager()?.listBundles?.()).catch(() => null)
-    const own = Array.isArray(bundles) ? bundles.find(bundle => bundle.name === PKG.name) : undefined
-    if (typeof own?.source === 'string') return own.source
-    const dir = ctx.get?.('profileContext')?.dir
-    if (typeof dir !== 'string') return undefined
-    try {
-      return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dependencies?.[PKG.name]
-    } catch { return undefined }
+    return { version, spec: `github:${owner}/${repo}#${fragment}` }
   }
 
   async function runCheck() {
-    const source = sourceOf(await installSpec())
+    const source = sourceOf(await installSpecOf(ctx))
     status.source = source.kind
     let found = null
     try {
@@ -201,5 +233,5 @@ export function install(rt) {
     }, 'ds-bot: update check')
   }
 
-  Object.assign(rt, { updateCheck: check, updateStart: start, updateView: view })
+  Object.assign(rt, { updateCheck: check, updateStart: start, updateView: view, repoStars })
 }

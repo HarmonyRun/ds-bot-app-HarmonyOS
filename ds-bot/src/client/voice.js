@@ -6,12 +6,18 @@ import { speechApi, useDictation } from './composer.js'
 import { Shimmer } from './cells.js'
 import { useEscape, usePaneLeft } from './overlay-hooks.js'
 import { t } from './i18n.js'
+import { openCapture, speechCatalog, transcribeWave, turnDetector } from './speech.js'
 
 // Voice chat: listen, send what the user said, read the Bot's answer aloud, listen
-// again. Browser speech recognition and synthesis only; nothing leaves the browser
-// except through the browser's own speech service.
+// again. With DSH's Voice Input plugin on, its recognizer hears the user: one
+// recording ends after a pause and is transcribed whole. Otherwise the browser's
+// own speech recognition does. The browser's speech synthesis reads the answer.
 const plainSpeech = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
-const VOICE_LABELS = { listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking', paused: 'Paused', unsupported: 'Voice chat is not available in this browser' }
+const VOICE_LABELS = {
+  listening: 'Listening', thinking: 'Thinking', speaking: 'Speaking', paused: 'Paused',
+  setup: 'Voice input needs its speech model', unsupported: 'Voice chat is not available in this browser',
+}
+const CAPTURE_NOTES = { blocked: 'Microphone access is blocked', unavailable: 'Voice chat is not available in this browser', 'too-long': 'That was too long to recognize' }
 
 function useMicLevel(enabled) {
   const [level, setLevel] = useState(0)
@@ -61,24 +67,53 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
     const entry = Array.isArray(outline) ? outline[outline.length - 1] : undefined
     return entry ? `${outline.length}|${entry.response ?? ''}` : '0|'
   })
-  const [phase, setPhase] = useState(speechApi() ? 'listening' : 'unsupported')
+  // The Voice Input plugin's Remote, read once: the engine does not change mid-chat.
+  const [speech] = useState(() => actions.speech())
+  const [phase, setPhase] = useState(speech ? 'starting' : speechApi() ? 'listening' : 'unsupported')
+  const [catalog, setCatalog] = useState(null)
   const [heard, setHeard] = useState('')
   const [said, setSaid] = useState('')
+  const [note, setNote] = useState('')
+  const [serviceLevel, setServiceLevel] = useState(0)
+  const [cycle, setCycle] = useState(0)
   const waiting = useRef(null)
+  const reply = useRef(lastReply)
+  reply.current = lastReply
+  // Bumped on pause and close, so a transcript that arrives later is dropped.
+  const turn = useRef(0)
   const paneLeft = usePaneLeft()
-  const close = () => { window.speechSynthesis?.cancel(); actions.closeVoice() }
+  const close = () => { turn.current += 1; window.speechSynthesis?.cancel(); actions.closeVoice() }
   useEscape(close)
+  const submit = (text) => {
+    setHeard(text)
+    setPhase('thinking')
+    waiting.current = reply.current.split('|')[0]
+    void actions.send(sessionId, text.trim()).catch(() => setPhase('listening'))
+  }
   const dictation = useDictation((text, final) => {
     setHeard(text)
     if (!final) return
     dictation.stop()
-    setPhase('thinking')
-    waiting.current = lastReply.split('|')[0]
-    void actions.send(sessionId, text.trim()).catch(() => setPhase('listening'))
+    submit(text)
   })
+  useEffect(() => {
+    if (!note) return undefined
+    const timer = setTimeout(() => setNote(''), 2600)
+    return () => clearTimeout(timer)
+  }, [note])
+  useEffect(() => {
+    if (!speech) return undefined
+    let live = true
+    speechCatalog(speech).then(({ catalog: next, usable }) => {
+      if (!live) return
+      setCatalog(next)
+      setPhase(usable ? 'listening' : 'setup')
+    }, () => { if (live) setPhase('setup') })
+    return () => { live = false }
+  }, [speech])
   const listen = phase === 'listening'
   useEffect(() => {
-    if (!listen || dictation.listening) return undefined
+    if (speech || !listen || dictation.listening) return undefined
     const timer = setTimeout(() => dictation.start({ continuous: false, onEnd: () => {} }), 250)
     return () => clearTimeout(timer)
   }, [listen, dictation.listening])
@@ -86,17 +121,75 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
   useEffect(() => {
     if (phase !== 'listening') dictation.stop()
   }, [phase])
+  // The plugin's recognizer: record one utterance, end it after a pause, transcribe it.
+  useEffect(() => {
+    if (!speech || !catalog || !listen) return undefined
+    const own = turn.current
+    let capture = null
+    let frame = 0
+    let stopped = false
+    let smooth = 0
+    const detect = turnDetector()
+    const limit = Math.max(1, catalog.maxDurationSeconds - 1) * 1000
+    const finish = async (current) => {
+      setPhase('transcribing')
+      try {
+        const wave = await current.finish(catalog.maxDurationSeconds)
+        const text = wave ? await transcribeWave(speech, catalog, wave, new AbortController().signal) : ''
+        if (turn.current !== own) return
+        if (text) submit(text)
+        else setPhase('listening')
+      } catch (error) {
+        if (turn.current !== own) return
+        setNote(t(CAPTURE_NOTES[error?.kind] ?? "Couldn't hear that"))
+        setPhase('listening')
+      }
+    }
+    openCapture().then((opened) => {
+      if (stopped) { opened.cancel(); return }
+      capture = opened
+      const began = performance.now()
+      const tick = () => {
+        const now = performance.now()
+        const level = capture.level()
+        smooth = smooth * 0.8 + level * 0.2
+        setServiceLevel(Math.round(smooth * 100) / 100)
+        const state = detect(level, now)
+        if (state === 'done' || (state === 'speech' && now - began >= limit)) {
+          const current = capture
+          capture = null
+          setServiceLevel(0)
+          void finish(current)
+          return
+        }
+        // Nothing said for a whole recording: start a fresh one.
+        if (state === 'waiting' && now - began >= limit) { setCycle(value => value + 1); return }
+        frame = requestAnimationFrame(tick)
+      }
+      tick()
+    }, (error) => {
+      if (stopped) return
+      setNote(t(CAPTURE_NOTES[error?.kind] ?? "Couldn't hear that"))
+      setPhase('paused')
+    })
+    return () => {
+      stopped = true
+      cancelAnimationFrame(frame)
+      capture?.cancel()
+      setServiceLevel(0)
+    }
+  }, [speech, catalog, listen, cycle])
   useEffect(() => {
     if (phase !== 'thinking' || running || waiting.current === null) return
     const [count, text] = [lastReply.slice(0, lastReply.indexOf('|')), lastReply.slice(lastReply.indexOf('|') + 1)]
     if (count === waiting.current || !text.trim()) return
     waiting.current = null
-    const speech = plainSpeech(text)
-    setSaid(speech)
+    const spoken = plainSpeech(text)
+    setSaid(spoken)
     setHeard('')
-    if (!window.speechSynthesis || !speech) { setPhase('listening'); return }
-    const utterance = new SpeechSynthesisUtterance(speech)
-    utterance.lang = /[\u3400-\u9fff]/.test(speech) ? 'zh-CN' : 'en-US'
+    if (!window.speechSynthesis || !spoken) { setPhase('listening'); return }
+    const utterance = new SpeechSynthesisUtterance(spoken)
+    utterance.lang = /[\u3400-\u9fff]/.test(spoken) ? 'zh-CN' : 'en-US'
     utterance.onend = () => setPhase(current => (current === 'speaking' ? 'listening' : current))
     utterance.onerror = utterance.onend
     setPhase('speaking')
@@ -104,28 +197,36 @@ export function VoiceMode({ sessionId, roster, actions, useSessions, useSessionS
     window.speechSynthesis.speak(utterance)
   }, [phase, running, lastReply])
   useEffect(() => () => window.speechSynthesis?.cancel(), [])
-  const level = useMicLevel(phase === 'listening' && dictation.listening)
-  const markState = phase === 'thinking' ? 'thinking' : phase === 'speaking' ? 'sending' : 'idle'
+  const micLevel = useMicLevel(!speech && phase === 'listening' && dictation.listening)
+  const level = speech ? serviceLevel : micLevel
+  const markState = phase === 'thinking' || phase === 'transcribing' ? 'thinking' : phase === 'speaking' ? 'sending' : 'idle'
+  const blocked = phase === 'unsupported' || phase === 'setup' || phase === 'starting'
   const togglePause = () => {
     if (phase === 'paused') { setPhase('listening'); return }
+    turn.current += 1
     window.speechSynthesis?.cancel()
     setPhase('paused')
   }
+  const openSetup = phase === 'setup' ? actions.voiceSetup() : null
   const caption = phase === 'speaking' ? said : heard
+  const shownNote = note || dictation.note
   return h('div', { className: 'bt-pane bt-voice-pane', style: { left: paneLeft } },
-    h('div', { className: 'bt-voice-stage', role: 'dialog', 'aria-label': t('Voice chat with {name}', { name }), 'data-phase': phase },
+    h('div', { className: 'bt-voice-stage', role: 'dialog', 'aria-label': t('Voice chat with {name}', { name }), 'data-phase': phase === 'transcribing' ? 'thinking' : phase },
       h('div', { className: 'bt-voice-orb', style: { '--bt-level': level } },
         h('span', { className: 'bt-voice-ring', 'aria-hidden': true }),
         h('span', { className: 'bt-voice-ring bt-voice-ring-2', 'aria-hidden': true }),
         bot ? h(BotMark, { bot, size: 112, state: markState, live: true, gaze: phase === 'listening' }) : room ? h(RoomAvatar, { room, roster, size: 112 }) : null),
       h('div', { className: 'bt-voice-name' }, name),
       h('div', { className: 'bt-voice-status', role: 'status' },
-        phase === 'thinking' ? h(Shimmer, null, t('Thinking…')) : VOICE_LABELS[phase] ? t(VOICE_LABELS[phase]) : ''),
+        phase === 'thinking' ? h(Shimmer, null, t('Thinking…'))
+          : phase === 'transcribing' ? h(Shimmer, null, t('Recognizing…'))
+            : VOICE_LABELS[phase] ? t(VOICE_LABELS[phase]) : ''),
       h('div', { className: 'bt-voice-caption', key: `${phase}:${caption.slice(0, 12)}` }, caption),
-      dictation.note ? h('div', { className: 'bt-voice-note' }, dictation.note) : null),
+      openSetup ? h('button', { type: 'button', className: 'bt-voice-setup', onClick: () => { close(); openSetup() } }, t('Set up voice input')) : null,
+      shownNote ? h('div', { className: 'bt-voice-note' }, shownNote) : null),
     h('div', { className: 'bt-voice-bar' },
       h('button', {
-        type: 'button', className: 'bt-voice-btn', 'aria-pressed': phase === 'paused', disabled: phase === 'unsupported',
+        type: 'button', className: 'bt-voice-btn', 'aria-pressed': phase === 'paused', disabled: blocked,
         'aria-label': phase === 'paused' ? t('Resume listening') : t('Pause'), onClick: togglePause,
       }, h(MicIcon, { size: 20 }), phase === 'paused' ? h('span', { className: 'bt-voice-slash', 'aria-hidden': true }) : null),
       h('button', { type: 'button', className: 'bt-voice-btn bt-voice-end', 'aria-label': t('End voice chat'), onClick: close }, h(CloseIcon))))

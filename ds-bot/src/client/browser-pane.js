@@ -243,6 +243,7 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages }) 
   const editing = draft !== null
   const secure = /^https:/i.test(page.url)
   return h('div', { className: 'bt-panel-view bt-panel-browser', 'aria-label': t("{name}'s browser", { name: bot.name }) },
+    h('button', { type: 'button', className: 'bt-button', 'aria-pressed': bot.mobileControl === true, onClick: () => actions.browserMobileControl(bot.id, bot.mobileControl !== true) }, bot.mobileControl ? t('Disable mobile browser control') : t('Allow mobile browser control')),
     h('div', { className: 'bt-browser-bar' },
       h('button', { type: 'button', className: 'bt-icon-btn', 'aria-label': t('Back'), title: t('Back'), disabled: !page.canGoBack, onClick: () => actions.browserCommand(tabId, 'back') }, h(BackIcon)),
       h('button', { type: 'button', className: 'bt-icon-btn', 'aria-label': t('Forward'), title: t('Forward'), disabled: !page.canGoForward, onClick: () => actions.browserCommand(tabId, 'forward') }, h(ForwardIcon)),
@@ -282,7 +283,7 @@ function BrowserView({ bot, tabId, leaving, landed, actions, useBrowserPages }) 
  * `{ id, view: 'details'|'browser', renaming, tab }`; `id` is the Session id the
  * panel follows. Without the Desktop bridge the browser view never shows.
  */
-export function BotPanel({ pane, leaving, roster, actions, useSessions, useSessionStatus, useActivity, useBrowserTabs, useBrowserPages }) {
+export function BotPanel({ pane, leaving, roster, actions, useSessions, useSessionStatus, useActivity, useWork, useBrowserTabs, useBrowserPages }) {
   const bot = roster.byId[pane.id]
   const canBrowse = Boolean(bot && roster.browser === true && actions.browserShow)
   const view = pane.view === 'browser' && canBrowse ? 'browser' : 'details'
@@ -482,11 +483,11 @@ export function BotPanel({ pane, leaving, roster, actions, useSessions, useSessi
     dragging ? createPortal(h('div', { className: 'bt-drag-shield', 'aria-hidden': true }), document.body) : null,
     hasStrip ? h(PanelStrip, { bot, subject: pane.id, view, ids: tabState.ids, active, reading, onView: switchView, actions: panelActions, useBrowserPages }) : null,
     view === 'browser' && bot
-      ? h(BrowserView, { key: `browser:${active}`, bot, tabId: active, leaving, landed: landed && !settling, actions, useBrowserPages })
+      ? h(BrowserView, { key: `browser:${active}`, bot: { ...bot, mobileControl: tabState.mobileControl }, tabId: active, leaving, landed: landed && !settling, actions, useBrowserPages })
       : h('div', { key: `details:${pane.id}:${pane.renaming ? 'rename' : ''}:${pane.tab ?? ''}`, className: 'bt-panel-view' },
           h(DetailsDrawer, {
             sessionId: pane.id, startRenaming: pane.renaming, startTab: pane.tab, hasStrip,
-            roster, actions: panelActions, useSessions, useSessionStatus, useActivity, useBrowserTabs, useBrowserPages,
+            roster, actions: panelActions, useSessions, useSessionStatus, useActivity, useWork, useBrowserTabs, useBrowserPages,
           })))
 }
 

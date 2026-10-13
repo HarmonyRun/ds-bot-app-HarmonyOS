@@ -42,6 +42,48 @@ export function modelOf(bot, roster) {
   return { ref, name: served?.name ?? rest.join('/'), provider: served?.providerName ?? provider, served: served !== undefined }
 }
 
+// The thinking levels of one model, `{efforts, defaultEffort?}` or undefined when it
+// has none. The catalog carries them for models Bots use; any other ref asks the host.
+const effortCache = new Map()
+function useEfforts(served, ref, actions) {
+  const [fetched, setFetched] = useState(undefined)
+  useEffect(() => {
+    setFetched(undefined)
+    if (ref === undefined || served?.reasoning !== undefined || actions?.efforts === undefined) return undefined
+    let live = true
+    if (effortCache.has(ref)) setFetched(effortCache.get(ref))
+    else void Promise.resolve(actions.efforts(ref)).then((value) => {
+      const reasoning = value?.efforts ? value : null
+      effortCache.set(ref, reasoning)
+      if (live) setFetched(reasoning)
+    }).catch(() => {})
+    return () => { live = false }
+  }, [ref, served?.reasoning !== undefined, actions])
+  return served?.reasoning ?? fetched
+}
+
+// The rows of the Thinking section: a Default row that clears the Bot's pick, then every
+// level the model serves.
+export function effortRows(reasoning) {
+  if (reasoning?.efforts === undefined || reasoning.efforts.length === 0) return []
+  return [
+    { effort: undefined, label: t('Default') },
+    ...reasoning.efforts.map(effort => ({ effort: effort.id, label: effort.name })),
+  ]
+}
+
+function EffortRows({ reasoning, current, onPick }) {
+  return h(Fragment, null,
+    h('div', { className: 'bt-menu-sep', role: 'separator' }),
+    h('div', { className: 'bt-model-group', role: 'presentation' }, t('Thinking level')),
+    effortRows(reasoning).map(row => h('button', {
+      key: row.effort ?? 'default', type: 'button', role: 'menuitemradio', 'aria-checked': row.effort === current,
+      onClick: () => onPick(row.effort),
+    },
+    h('span', { className: 'bt-menu-label' }, row.label),
+    h('span', { className: 'bt-model-tick', 'aria-hidden': true }, row.effort === current ? h(CheckIcon) : null))))
+}
+
 function ModelRows({ roster, current, onPick }) {
   return groupModels(roster.models).map(([provider, list]) => h(Fragment, { key: list[0].provider ?? provider },
     h('div', { className: 'bt-model-group', role: 'presentation' }, provider),
@@ -55,15 +97,24 @@ function ModelRows({ roster, current, onPick }) {
 }
 
 // The trigger shows the model name over its provider; the menu opens under it, or
-// above when the window has no room below.
-// `onPick` replaces saving to the Bot, for a Bot that does not exist yet.
-export function ModelMenu({ bot, roster, actions, run, wide = false, onPick }) {
+// above when the window has no room below. A Thinking section lists the levels of
+// the shown model when it has them.
+// `onPick`/`onPickEffort` replace saving to the Bot, for a Bot that does not exist yet.
+export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onPickEffort }) {
   const [place, setPlace] = useState(null)
   const [shownPlace, leaving] = useLinger(place, MENU_EXIT_MS)
   const button = useRef(null)
   const menu = useRef(null)
   const shown = modelOf(bot, roster)
   const current = bot.model ?? bot.appliedModel
+  const served = servedOf(roster, current)
+  const reasoning = useEfforts(served, current, actions)
+  // The level the Bot runs on: its pick when the model serves it, else the model's own.
+  const picked = reasoning?.efforts?.some(effort => effort.id === bot.effort) ? bot.effort : undefined
+  const currentEffort = picked ?? reasoning?.defaultEffort
+  const effortLabel = currentEffort === undefined
+    ? (reasoning?.efforts?.length > 0 ? t('Default') : undefined)
+    : reasoning.efforts.find(effort => effort.id === currentEffort)?.name ?? currentEffort
   const close = () => setPlace(null)
   useEffect(() => {
     if (place === null) return undefined
@@ -99,6 +150,11 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick }) {
     if (onPick) onPick(ref)
     else if (ref !== current || !bot.model) void run(actions.updateBot(bot.id, { model: ref }))
   }
+  const pickEffort = (effort) => {
+    close()
+    if (onPickEffort) onPickEffort(effort)
+    else if (effort !== bot.effort) void run(actions.updateBot(bot.id, { effort: effort ?? null }))
+  }
   const models = roster.models ?? []
   return h(Fragment, null,
     h('button', {
@@ -108,11 +164,14 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick }) {
     },
     h('span', { className: 'bt-model-copy' },
       h('span', { className: 'bt-model-name' }, shown?.name ?? t('Choose a model')),
-      shown ? h('span', { className: 'bt-model-provider' }, shown.served || models.length === 0 ? shown.provider : t('{provider} · not available', { provider: shown.provider })) : null),
+      shown ? h('span', { className: 'bt-model-provider' }, shown.served || models.length === 0
+        ? (effortLabel === undefined ? shown.provider : `${shown.provider} · ${effortLabel}`)
+        : t('{provider} · not available', { provider: shown.provider })) : null),
     h('svg', { className: 'bt-model-caret', width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: 'M5.5 8l4.5 4.5L14.5 8' }))),
     shownPlace ? createPortal(h('div', { ref: menu, className: `bt-menu bt-model-menu${shownPlace.bottom !== undefined ? ' bt-menu-up' : ''}`, role: 'menu', 'aria-label': t('Model for {name}', { name: bot.name }), style: shownPlace, 'data-leaving': leaving || undefined },
       models.length > 0 ? h(ModelRows, { roster, current, onPick: pick })
         : h('div', { className: 'bt-model-none' }, t('No models are set up in DeepSeek Harness yet.')),
+      effortRows(reasoning).length > 0 ? h(EffortRows, { reasoning, current: picked, onPick: pickEffort }) : null,
       h('div', { className: 'bt-menu-sep', role: 'separator' }),
       h('button', { type: 'button', role: 'menuitem', onClick: () => { close(); openHarnessSettings() } }, h(SlidersIcon), h('span', { className: 'bt-menu-label' }, t('Models and providers…')))), document.body) : null)
 }

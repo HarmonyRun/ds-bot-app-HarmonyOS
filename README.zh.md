@@ -1,7 +1,8 @@
 <p align="center">
+
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-    <img src="docs/images/logo.svg" alt="DS Bot" width="260">
+    <img src="docs/images/logo.svg" alt="DeepSeek Bot" width="260">
   </picture>
 </p>
 
@@ -9,36 +10,34 @@
 
 [English](README.md) | 中文
 
-![版本](https://img.shields.io/badge/版本-v0.1_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.1--alpha.1-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)
+![版本](https://img.shields.io/badge/版本-v0.1_预览-blue) ![DSH](https://img.shields.io/badge/DSH-0.2.0--rc.2-4D6BFE) ![许可](https://img.shields.io/badge/许可-Apache_2.0-green)
 
-DS Bot（后简称 ds bot）是一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（简称 dsh）的 bot 插件，插件将 dsh 改造为 bot 形式。你可以与自己创建的 bot 交流、工作。
+DeepSeek Bot（简称 DS Bot）是一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（简称 dsh）的 bot 插件，插件将 dsh 改造为 bot 形式。你可以与自己创建的 bot 交流、工作。
 
 ![和 Chief 说一句话，它就把 bot 和群聊建好](docs/images/team.zh.png)
 
-## 安装
+## 安装与连接
 
-先装好 dsh，并在 dsh 里配好至少一个模型。ds bot 直接使用 dsh 里的模型。
+本仓库包含 DSH 插件、手机连接桥接、独立 Android/iOS 客户端和共用 SDK。Bot、工具和模型运行在自己的电脑或服务器上，手机负责交互；主机必须保持开机并运行 DSH。
 
-**dsh Desktop（Windows、macOS）**
+1. 从 [GitHub Actions](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml) 下载同一次构建的 `dsbot-plugin` 和 `dsbot-android-arm64`，或者从 [Releases](https://github.com/QingJ01/DS-Bot-App/releases) 下载 `.tgz` 与已签名 `.apk`。Actions 下载的是 ZIP，先解压。文件名含 `-unsigned` 的 APK 未签名，不能安装。
+2. 安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases)，在 **插件 → 添加插件** 中填写下载的 `.tgz` 的完整路径，安装、启用并重启 DSH。此分支不要直接安装 npm 上的 `ds-bot`，那是上游版本，不含这里的完整移动端功能。
+3. 在电脑配置模型提供商和凭据，为 Chief 选择模型，先确认电脑聊天正常。
+4. 手机安装 ARM64 APK。电脑打开 **设置 → 手机设备 → 启用手机连接**，两端连接同一 Wi-Fi，在 App 扫码，然后回到电脑批准。
 
-1. 侧栏点 **插件** → **添加插件**。
-2. **包名或地址** 填 `ds-bot`。在中国大陆，**安装源** 选 **中国大陆镜像源**。
-3. 点 **安装**，再点 **立即启用**。如果提示“下次启动生效”，完全退出 dsh 再打开。
+插件自动配置本地 HTTPS，无需域名、额外 App 或安装证书；手机按二维码中的公钥验证主机身份。Android 开启后台接收服务后可接收运行时通知，无需 FCM/APNs。见[完整安装与配置教程](docs/getting-started.zh.md)、[一键 HTTPS](docs/mobile-local-https.zh.md)、[远程/VPS 部署](docs/mobile-install.zh.md)。
 
-连不上 npm 时，第 2 步也可以填 [Releases](https://github.com/FeiZhuLulu/DeepSeek-Bot/releases) 里下载的 `ds-bot-0.1.0.tgz` 的完整路径，或者 `github:FeiZhuLulu/DeepSeek-Bot#v0.1.0&path:/ds-bot`（需要装 Git）。
+## 移动端能力与限制
 
-**dsh Web（Windows、macOS、Linux）**
+已接入 Bot/群聊、流式回复与思考、长按消息操作、图片和文件、语音输入/对话、定时任务、记忆、用量、Skills、插件管理、专属工具结果、明确的工具批准和可选桌面浏览器控制。支持中英文、日间/夜间主题与原创鱼形图案。Bot 数据保留在主机；手机用安全存储保存凭据、本地缓存保存消息与草稿。
 
-需要 Node.js `22.19` 以上和 pnpm。
+Android 配对、聊天、公钥验证和运行时后台通知已在模拟器连接真实隔离 DSH、使用模拟模型验证。iOS 包含源码，尚未编译或真机验证，后台运行有系统时间限制。语音需要主机配置 Voice Input 和 FFmpeg；部分插件专属界面仍需电脑操作。目前没有应用商店发行或持续运行的托管云服务。[详细能力边界](apps/mobile/README.md)。
 
-```sh
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add ds-bot
-npx @deepseek-ai/dsh@0.2.1-alpha.1 web
-```
+## 构建与发布
 
-## 配置
+[GitHub Actions](.github/workflows/build.yml) 执行插件/SDK/App 检查、打包插件，并构建 ARM64 和 x86_64 Android APK。仓库保存加密的 `DeepSeekBot` 签名文件（国家 `CN`），密码由 GitHub Secret `ANDROID_KEYSTORE_PASSWORD` 提供。未配置 Secret 时只生成明确标注的**未签名** APK，并阻止标签发布；密码不会写入 Git。
 
-我强烈建议你直接通过和 bot 对话来配置其他 bot 和群聊。
+见[Actions、签名、下载与发布教程](docs/releasing.zh.md)。iOS 构建需要 macOS/Xcode 和 Apple 签名身份。开发命令见 [CONTRIBUTING.md](CONTRIBUTING.md)、[插件说明](ds-bot/README.md)及 [App 说明](apps/mobile/README.md)。
 
 ## 功能
 
@@ -58,7 +57,7 @@ npx @deepseek-ai/dsh@0.2.1-alpha.1 web
 
 ### 群聊
 
-ds bot 拥有群聊功能。群聊是非常好的多 bot 协作方式，但它会带来非常明显的费用问题。ds bot 为此特意做了优化：在一个群聊中，你需要设置一个管理员。你的消息默认由管理员回复，它会帮你调用其他 bot。你也可以直接 @ 你需要沟通的 bot，它会直接回应你。
+ds bot 拥有群聊功能。群聊是非常好的多 bot 协作方式，但它会带来非常明显的费用问题。ds bot 为此特意做了优化：在一个群聊中，你需要设置一个管理员。你的消息默认由管理员回复，它会帮你调用其他 bot。你也可以直接 @ 你需要沟通的 bot，它会直接回应你：输入 @，从列表里选 bot 就行。想让 bot 参考另一段对话，点输入框的 + → 引用对话。
 
 ![群聊：管理员 Chief 把活派给写手和程序员](docs/images/group.zh.png)
 
@@ -70,7 +69,7 @@ ds bot 拥有群聊功能。群聊是非常好的多 bot 协作方式，但它�
 
 ## 数据
 
-所有数据都在你自己的电脑上，在 dsh 主目录（默认 `~/.dsh`）的 `bot/` 和 `sessions/` 里。卸载插件不会删除这些数据。
+Bot 的权威数据保留在自己的 DSH 主机上，位于 dsh 主目录（默认 `~/.dsh`）的 `bot/` 和 `sessions/` 中。卸载插件不会删除这些数据。移动客户端还会在手机缓存对话和草稿；模型请求仍使用 DSH 中配置的提供商。详见[移动端数据与当前限制](docs/mobile.zh.md#数据与当前限制)。
 
 ## 开发
 
@@ -98,3 +97,5 @@ ds bot 拥有群聊功能。群聊是非常好的多 bot 协作方式，但它�
 ds bot 是独立的社区项目，**不是 DeepSeek 官方产品**，与 DeepSeek 没有隶属、认可或赞助关系。“DeepSeek”“DeepSeek Harness”等名称是各自所有者的商标，这里只用来说明本插件和什么一起用。
 
 bot 会消耗你自己的模型额度，也会按你的要求读写文件、运行命令。重要的操作请自己检查。
+
+本轮上游更新、手机点名与会话引用，以及透明悬浮聊天顶栏见[上游移植说明](docs/mobile-upstream.zh.md)。
