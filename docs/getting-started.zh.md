@@ -6,7 +6,7 @@
 
 - 一台运行 DSH 的 Windows/macOS 电脑，或运行 DSH Web 的 Linux 服务器。
 - 主机配置可用的模型与凭据；API Key 只填写到 DSH 的凭据界面，不发到聊天或提交到仓库。
-- Android ARM64 手机。x86_64 APK 用于对应模拟器；当前构建不包含 ARM32。iOS 源码需另行用 macOS/Xcode 构建。
+- Android ARM64 手机。x86_64 APK 用于对应模拟器；当前构建不包含 ARM32。iOS 的构建与支持范围见 [iOS 文档](ios.zh.md)。
 - 初次连接建议两端使用同一个 Wi-Fi，电脑保持开机。手机不是独立的模型服务器。
 
 主机集成基线为官方 npm DSH `0.2.0-rc.2`，CI 另检查 `0.2.1-alpha.1` 兼容性；建议先使用上述已验证版本。

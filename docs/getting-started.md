@@ -4,7 +4,7 @@ English | [中文](getting-started.zh.md)
 
 ## Requirements
 
-Use a running DSH Desktop computer or DSH Web server, a working model/provider credential configured on that host, and an ARM64 Android phone. The x86_64 build is for matching emulators; ARM32 is not included. iOS requires a separate macOS/Xcode build. The host runs the models, tools and Bots and must remain on. Start with both devices on the same Wi-Fi.
+Use a running DSH Desktop computer or DSH Web server, a working model/provider credential configured on that host, and an ARM64 Android phone. The x86_64 build is for matching emulators; ARM32 is not included. See the [iOS guide](ios.md) for builds and platform support. The host runs the models, tools and Bots and must remain on. Start with both devices on the same Wi-Fi.
 
 The official npm integration baseline is DSH `0.2.0-rc.2`; CI also checks `0.2.1-alpha.1` compatibility. Keep API keys in DSH's credential UI, never in Git or chats.
 
