@@ -9,9 +9,9 @@ English · [中文](README.zh.md) · [Install](docs/getting-started.md) · [Down
 DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) computer or server. Chat with a specialist, bring several Bots into a group, and follow their tools and tasks from one app. The phone shares the host's conversations, models and workspace.
 
 <p align="center">
-  <img src="docs/images/mobile/home.en.png" width="250" alt="DS Bot App conversation home">
-  <img src="docs/images/mobile/chat.en.png" width="250" alt="A Bot conversation with floating controls">
-  <img src="docs/images/mobile/night.en.png" width="250" alt="DS Bot App in dark mode">
+  <img src="docs/images/mobile/home.en.png?v=0.1.0-15" width="250" alt="DS Bot App conversation home">
+  <img src="docs/images/mobile/chat.en.png?v=0.1.0-15" width="250" alt="A Bot conversation with floating controls">
+  <img src="docs/images/mobile/night.en.png?v=0.1.0-15" width="250" alt="DS Bot App in dark mode">
 </p>
 
 <p align="center">Conversation home · Bot chat · Dark mode</p>
@@ -30,14 +30,21 @@ DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness
 | Appearance and language | Chinese/English, light/dark/system appearance, original fish graphics, and floating chat controls. Cached conversations and drafts remain available offline. |
 
 <p align="center">
-  <img src="docs/images/mobile/group.en.png" width="250" alt="Group conversation with Bot authors">
-  <img src="docs/images/mobile/create.en.png" width="250" alt="Create a Bot and customize its avatar">
-  <img src="docs/images/mobile/tools.en.png" width="250" alt="Tools, Skills and plugins">
+  <img src="docs/images/mobile/group.en.png?v=0.1.0-15" width="250" alt="Group conversation with Bot authors">
+  <img src="docs/images/mobile/create.en.png?v=0.1.0-15" width="250" alt="Create a Bot and customize its avatar">
+  <img src="docs/images/mobile/tools.en.png?v=0.1.0-15" width="250" alt="Tools, Skills and plugins">
 </p>
 
 <p align="center">Group chat · Create a Bot · Tools & skills</p>
 
-These are real Android App screenshots from an isolated demonstration team using a mock model. Only the App content is captured; Android system bars are excluded. The screenshots show the interface; they do not represent results from a production model.
+<p align="center">
+  <img src="docs/images/mobile/settings.en.png?v=0.1.0-15" width="250" alt="Settings with floating controls">
+  <img src="docs/images/mobile/capabilities.en.png?v=0.1.0-15" width="250" alt="Assign MCP servers, skills and packs to each Bot">
+</p>
+
+<p align="center">Settings · Capabilities</p>
+
+These are real screenshots of the signed v0.1.0 Android release (versionCode 15), connected to an isolated demonstration team using a mock model. Only the App content is captured; Android system bars are excluded. The screenshots show the interface; they do not represent results from a production model.
 
 ## Get started
 

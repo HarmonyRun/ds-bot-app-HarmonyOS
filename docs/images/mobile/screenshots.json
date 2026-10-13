@@ -1,8 +1,13 @@
 {
-  "source": "signed local Android review APK, versionCode 6; v0.1.0 release binaries withdrawn",
-  "apkSha256": "3f209de5f82502557a69b485a8fc0a3839977ceab6d2094f6dd271b7753d9100",
+  "source": "signed published GitHub Actions Android v0.1.0 APK",
+  "releaseUrl": "https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0",
+  "sourceCommit": "74bd6cfcd9b64e9c65ed48ca74b16cf2336bac65",
+  "actionsRun": "https://github.com/QingJ01/DS-Bot-App/actions/runs/38380801967",
+  "androidVersionCode": 15,
+  "apkSha256": "209f8de86ca9e8a21e17232117e941a2ec9980f411def1bc892edebcf348841f",
   "platform": "Android API 30 x86_64 emulator",
-  "model": "isolated official DSH with mock model",
+  "model": "scripted mock model on isolated official DSH 0.2.0-rc.2",
+  "capturedAt": "2026-10-13T11:35:47.311220+00:00",
   "systemBars": "excluded from native screenshot viewport; App pixels unmodified",
   "viewport": [
     411,
@@ -18,6 +23,107 @@
     "night",
     "group",
     "create",
-    "tools"
+    "settings",
+    "tools",
+    "capabilities"
+  ],
+  "captureMode": "reduced motion enabled; default brand accent",
+  "screenshots": [
+    {
+      "file": "home.en.png",
+      "locale": "en",
+      "page": "home",
+      "sha256": "e112d9d79882143a50593199b00897c107f44e6886d141da1dc14dcf3664a100"
+    },
+    {
+      "file": "chat.en.png",
+      "locale": "en",
+      "page": "chat",
+      "sha256": "abe2a281616b6ea438afed156cb81771d23627f363b840566937ced7681e114d"
+    },
+    {
+      "file": "night.en.png",
+      "locale": "en",
+      "page": "night",
+      "sha256": "866a316c7e8e1a269378d1e34114b7104a91770fdafe0fe9f195214c65c2916b"
+    },
+    {
+      "file": "group.en.png",
+      "locale": "en",
+      "page": "group",
+      "sha256": "0b4bc30f5122eeb6b8344095467f3c865ffaa8869f12d4edb3731aff01300806"
+    },
+    {
+      "file": "create.en.png",
+      "locale": "en",
+      "page": "create",
+      "sha256": "3aec7b4cb4c2194dad60a158bebf3120ddead881bd79b1a709ca78191da2a3ff"
+    },
+    {
+      "file": "settings.en.png",
+      "locale": "en",
+      "page": "settings",
+      "sha256": "b6d1fd16dd99918876386b5d049c8e1d077e9eea0182b5d9622dae0850d57810"
+    },
+    {
+      "file": "tools.en.png",
+      "locale": "en",
+      "page": "tools",
+      "sha256": "4b97dc00238ed1619b90d63e8b435dfd85892a99a9646a3ce73c02eeb6fc7f0e"
+    },
+    {
+      "file": "capabilities.en.png",
+      "locale": "en",
+      "page": "capabilities",
+      "sha256": "be9c426789027b0bd5063d2dca026ebcc3cbf769c5c1a8783f1d984009c75e89"
+    },
+    {
+      "file": "home.zh.png",
+      "locale": "zh",
+      "page": "home",
+      "sha256": "d485577fc95741dadf081ecf6669925ebdb5ec1640648e9fe06fc6d88cb9cbb1"
+    },
+    {
+      "file": "chat.zh.png",
+      "locale": "zh",
+      "page": "chat",
+      "sha256": "a89f734307f5e272e3842f665a5cf5b532926aab4ec279ec6321d79438365a81"
+    },
+    {
+      "file": "night.zh.png",
+      "locale": "zh",
+      "page": "night",
+      "sha256": "be44121528f9376d77e4b801154d839551086f7faeb6d3fc0ac0b0659d32f240"
+    },
+    {
+      "file": "group.zh.png",
+      "locale": "zh",
+      "page": "group",
+      "sha256": "46672dd2f0ae87453c5b839843c9cecafe79ff645ca95ba7b2ab610be4599a15"
+    },
+    {
+      "file": "create.zh.png",
+      "locale": "zh",
+      "page": "create",
+      "sha256": "488e81212a9485856dbf97580d8f5450720888c64590d45d86944550c8eef34c"
+    },
+    {
+      "file": "settings.zh.png",
+      "locale": "zh",
+      "page": "settings",
+      "sha256": "4b3a1b6a19bc6a12be7193007c8d93f6c5039c8ffc5a9970de8f108245c26fb1"
+    },
+    {
+      "file": "tools.zh.png",
+      "locale": "zh",
+      "page": "tools",
+      "sha256": "64ce60792709d014355ac08475a09d9b39ec84ab2adb1197f84b2790435ceb09"
+    },
+    {
+      "file": "capabilities.zh.png",
+      "locale": "zh",
+      "page": "capabilities",
+      "sha256": "7ea2f23f6860a824aee5f8f7842b4916cccb69e3362fb9fb015a846cfc4ea087"
+    }
   ]
 }

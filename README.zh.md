@@ -9,9 +9,9 @@
 DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）。你可以和专业 Bot 对话，让多个 Bot 在群聊中协作，并在手机上查看工具执行、管理任务。手机与电脑共用同一套会话、模型和工作区。
 
 <p align="center">
-  <img src="docs/images/mobile/home.zh.png" width="250" alt="DS Bot App 会话主页">
-  <img src="docs/images/mobile/chat.zh.png" width="250" alt="Bot 对话与悬浮聊天控件">
-  <img src="docs/images/mobile/night.zh.png" width="250" alt="DS Bot App 夜间模式">
+  <img src="docs/images/mobile/home.zh.png?v=0.1.0-15" width="250" alt="DS Bot App 会话主页">
+  <img src="docs/images/mobile/chat.zh.png?v=0.1.0-15" width="250" alt="Bot 对话与悬浮聊天控件">
+  <img src="docs/images/mobile/night.zh.png?v=0.1.0-15" width="250" alt="DS Bot App 夜间模式">
 </p>
 
 <p align="center">会话主页 · Bot 对话 · 夜间模式</p>
@@ -30,14 +30,21 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 | 外观与语言 | 中英文、日间/夜间/跟随系统，原创鱼形图案与悬浮聊天控件；离线可查看缓存和编辑草稿。 |
 
 <p align="center">
-  <img src="docs/images/mobile/group.zh.png" width="250" alt="显示 Bot 作者头像的群聊">
-  <img src="docs/images/mobile/create.zh.png" width="250" alt="创建 Bot 与头像自定义">
-  <img src="docs/images/mobile/tools.zh.png" width="250" alt="工具、Skills 和插件入口">
+  <img src="docs/images/mobile/group.zh.png?v=0.1.0-15" width="250" alt="显示 Bot 作者头像的群聊">
+  <img src="docs/images/mobile/create.zh.png?v=0.1.0-15" width="250" alt="创建 Bot 与头像自定义">
+  <img src="docs/images/mobile/tools.zh.png?v=0.1.0-15" width="250" alt="工具、Skills 和插件入口">
 </p>
 
 <p align="center">群聊协作 · 创建 Bot · 工具与技能</p>
 
-以上为原生 Android App 的实际截图，只截取 App 内容，不含系统状态栏与导航栏。演示团队运行在隔离主机上，使用模拟模型；截图展示界面，不代表真实模型的生成效果。
+<p align="center">
+  <img src="docs/images/mobile/settings.zh.png?v=0.1.0-15" width="250" alt="悬浮控件与设置页面">
+  <img src="docs/images/mobile/capabilities.zh.png?v=0.1.0-15" width="250" alt="为每个 Bot 分配 MCP、技能和能力包">
+</p>
+
+<p align="center">设置 · 能力库</p>
+
+以上为已签名 v0.1.0 正式版 Android App（versionCode 15）的实际截图，只截取 App 内容，不含系统状态栏与导航栏。演示团队运行在隔离主机上，使用模拟模型；截图展示界面，不代表真实模型的生成效果。
 
 ## 快速开始
 

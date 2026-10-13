@@ -1,8 +1,10 @@
 {
-  "source": "signed local Android review APK and isolated DSH Web, October 13 2026; no new Release",
-  "apkSha256": "38d05f56293cabfeb305d5c642889b5b6cb1d6e23f1308d6180c3691930999cc",
-  "androidVersionCode": 6,
-  "model": "scripted mock model on isolated official DSH",
+  "source": "published Android v0.1.0 APK and isolated DSH Web",
+  "releaseUrl": "https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0",
+  "sourceCommit": "74bd6cfcd9b64e9c65ed48ca74b16cf2336bac65",
+  "apkSha256": "209f8de86ca9e8a21e17232117e941a2ec9980f411def1bc892edebcf348841f",
+  "androidVersionCode": 15,
+  "model": "scripted mock model on isolated official DSH 0.2.0-rc.2",
   "screenshots": [
     {
       "file": "plugin-devices.zh.png",
@@ -12,7 +14,8 @@
       ],
       "locale": "zh",
       "source": "DSH Web browser content",
-      "pairingQrAndCredentials": "not present"
+      "pairingQrAndCredentials": "not present",
+      "sha256": "3f18d2345ef43bf536eae66a561ef7a6764f801f802d5455b628b57ced2c6e39"
     },
     {
       "file": "chat-polish.en.png",
@@ -21,8 +24,9 @@
         890
       ],
       "locale": "en",
-      "source": "native Android API 30 App content",
-      "systemBars": "excluded from native capture viewport"
+      "source": "same published App capture as chat.en.png",
+      "systemBars": "excluded from native capture viewport",
+      "sha256": "abe2a281616b6ea438afed156cb81771d23627f363b840566937ced7681e114d"
     }
   ],
   "retouched": false,
