@@ -30,7 +30,7 @@ cd ds-bot
 npm ci
 npm run build
 npm pack
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add "$PWD/ds-bot-0.1.2.tgz"
+npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add "$PWD/ds-bot-0.1.0.tgz"
 ```
 
 如果已有从本仓库构建的插件包，直接用它的绝对路径执行最后一条命令即可。

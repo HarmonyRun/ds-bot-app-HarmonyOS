@@ -39,7 +39,7 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 ## 快速开始
 
 1. **下载配套文件。** 在 [Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml) 的同一次成功运行中下载 `dsbot-plugin` 和 `dsbot-android-arm64`，解压 ZIP。已有 [Release](https://github.com/QingJ01/DS-Bot-App/releases) 时也可下载配套 `.tgz` 和已签名 `.apk`。文件名含 `-unsigned` 的 APK 不能安装；`x86_64` 用于模拟器。
-2. **安装主机插件。** 在 DSH **插件 → 添加插件** 中填下载的 `ds-bot-0.1.2.tgz` 完整路径，安装、启用并重启。模型和提供商凭据在电脑配置，先确认 Chief 能在电脑正常回复。
+2. **安装主机插件。** 在 DSH **插件 → 添加插件** 中填下载的 `ds-bot-0.1.0.tgz` 完整路径，安装、启用并重启。模型和提供商凭据在电脑配置，先确认 Chief 能在电脑正常回复。
 3. **安装手机 App。** Android 手机安装已签名 ARM64 APK。此前使用调试签名的测试包需先卸载，再切换到项目签名；电脑上的聊天记录不受影响。
 4. **同一 Wi-Fi 下配对。** 电脑打开 DS Bot **设置 → 手机设备 → 启用手机连接**，手机扫码，然后回到电脑批准该设备。
 
@@ -62,7 +62,7 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 
 ## 开发与构建
 
-[GitHub Actions](.github/workflows/build.yml) 检查插件、SDK 和 App，打包插件，并构建两种 Android 架构。仓库保存加密的 `DeepSeekBot` 签名文件（国家 `CN`）及公开证书；密码由 Actions Secret `ANDROID_KEYSTORE_PASSWORD` 提供。未配置时产物明确标注为未签名。`mobile-v*` 标签可发布配套已签名包的预发布版本。
+[GitHub Actions](.github/workflows/build.yml) 检查插件、SDK 和 App，打包插件，并构建两种 Android 架构。仓库保存加密的 `DeepSeekBot` 签名文件（国家 `CN`）及公开证书；密码由 Actions Secret `ANDROID_KEYSTORE_PASSWORD` 提供。未配置时产物明确标注为未签名。`v*` 标签在校验版本和发布说明后发布配套已签名包的正式版本。
 
 | 文档 | 入口 |
 | --- | --- |

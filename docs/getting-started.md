@@ -10,7 +10,9 @@ The official npm integration baseline is DSH `0.2.0-rc.2`; CI also checks `0.2.1
 
 ## Download matching packages
 
-Open [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml). From a successful run for the same commit, download `dsbot-plugin` and `dsbot-android-arm64`; extract the ZIP artifacts first. The plugin is `ds-bot-0.1.2.tgz`; an installable APK is `dsbot-android-arm64.apk`. Names ending in `-unsigned.apk` are not installable: the maintainer must configure the signing Secret and rebuild. `dsbot-android-x86_64` is for emulators. Each artifact includes `SHA256SUMS`.
+Use the [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0): `ds-bot-0.1.0.tgz` and `dsbot-android-arm64-v0.1.0.apk` for phones, or `dsbot-android-x86_64-v0.1.0.apk` for emulators. The Actions downloads below are for development builds.
+
+Open [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml). From a successful run for the same commit, download `dsbot-plugin` and `dsbot-android-arm64`; extract the ZIP artifacts first. The plugin is `ds-bot-0.1.0.tgz`; an installable APK is `dsbot-android-arm64.apk`. Names ending in `-unsigned.apk` are not installable: the maintainer must configure the signing Secret and rebuild. `dsbot-android-x86_64` is for emulators. Each artifact includes `SHA256SUMS`.
 
 You can also use matching files from [Releases](https://github.com/QingJ01/DS-Bot-App/releases). **The npm package `ds-bot` is upstream and does not contain this fork's complete mobile implementation.** Install this repository's tarball.
 
@@ -25,7 +27,7 @@ For DSH Web, install Node.js 24 LTS and pnpm, then run in your own workspace:
 
 ```sh
 npm install -g pnpm
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.2.tgz
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
 npx @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 

@@ -35,10 +35,10 @@ npm run build
 npm pack
 ```
 
-在 DSH Desktop 的 **Plugins → Add plugin** 中填写生成的 `ds-bot-0.1.2.tgz` 的绝对路径，安装后重启 DSH。应使用当前源码打包，旧的 npm 发布版不一定包含 Mobile Bridge。已有 DSH Web profile 可以使用：
+在 DSH Desktop 的 **Plugins → Add plugin** 中填写生成的 `ds-bot-0.1.0.tgz` 的绝对路径，安装后重启 DSH。应使用当前源码打包，旧的 npm 发布版不一定包含 Mobile Bridge。已有 DSH Web profile 可以使用：
 
 ```sh
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.2.tgz
+npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
 ```
 
 在 profile 的 `cordis.patch.yml` 中配置 `bot`。Web 也可以单独创建 `mobile.patch.yml`：

@@ -33,10 +33,10 @@ npm run build
 npm pack
 ```
 
-In DSH Desktop, use **Plugins → Add plugin** with the absolute path to the resulting `ds-bot-0.1.2.tgz`, then restart DSH. Use the package from this checkout; an older registry release may not contain Mobile Bridge. For an existing DSH Web profile, the corresponding install command is:
+In DSH Desktop, use **Plugins → Add plugin** with the absolute path to the resulting `ds-bot-0.1.0.tgz`, then restart DSH. Use the package from this checkout; an older registry release may not contain Mobile Bridge. For an existing DSH Web profile, the corresponding install command is:
 
 ```sh
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.2.tgz
+npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
 ```
 
 Configure the `bot` entry in the profile's `cordis.patch.yml`. For Web, a separate `mobile.patch.yml` can hold the following overlay:

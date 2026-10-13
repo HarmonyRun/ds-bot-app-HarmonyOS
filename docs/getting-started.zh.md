@@ -13,11 +13,13 @@
 
 ## 下载配套插件和 App
 
+推荐从 [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0) 下载 `ds-bot-0.1.0.tgz` 和 `dsbot-android-arm64-v0.1.0.apk`；模拟器用 `dsbot-android-x86_64-v0.1.0.apk`。以下 Actions 下载方式供开发构建使用。
+
 打开本仓库 [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)，选择同一提交的成功运行，在 Artifacts 下载：
 
 | 产物 | 用途 |
 | --- | --- |
-| `dsbot-plugin` | 解压后包含 `ds-bot-0.1.2.tgz`，供 DSH 安装 |
+| `dsbot-plugin` | 解压后包含 `ds-bot-0.1.0.tgz`，供 DSH 安装 |
 | `dsbot-android-arm64` | 手机使用的 ARM64 APK |
 | `dsbot-android-x86_64` | Android x86_64 模拟器 APK |
 
@@ -28,7 +30,7 @@ Artifacts 是 ZIP，先解压。已签名 APK 的文件名为 `dsbot-android-arm
 ## 电脑安装
 
 1. 从 [DSH 官方 Releases](https://github.com/deepseek-ai/deepseek-harness/releases) 安装适合系统的 Desktop。
-2. 打开 DSH 的 **插件 → 添加插件**，填下载的 `.tgz` 完整路径。例如 Windows 的 `C:\Downloads\ds-bot-0.1.2.tgz`。
+2. 打开 DSH 的 **插件 → 添加插件**，填下载的 `.tgz` 完整路径。例如 Windows 的 `C:\Downloads\ds-bot-0.1.0.tgz`。
 3. 安装、启用，完全退出 DSH 再打开；更新插件也需要重启。已有数据不需要删除。
 4. 在 Harness 设置中添加模型提供商，配置凭据，确认提供商能列出模型。为 Chief 选择模型，发送一句话确认能正常回复。
 5. 可以让 Chief 创建 Bot 与群聊，也可以用客户端的新建入口配置名称、角色、指令和模型。
@@ -39,7 +41,7 @@ Artifacts 是 ZIP，先解压。已签名 APK 的文件名为 `dsbot-android-arm
 
 ```sh
 npm install -g pnpm
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.2.tgz
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
 npx @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 

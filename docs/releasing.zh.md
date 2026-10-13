@@ -21,7 +21,7 @@
 
 ## 工作流会做什么
 
-`.github/workflows/build.yml` 在推送 main、PR、手动运行和 `mobile-v*` 标签时触发：
+`.github/workflows/build.yml` 在推送 main、PR、手动运行和 `v*` 标签时触发：
 
 1. 安装锁定依赖，验证插件测试/生成文件/静态检查、SDK 测试、App TypeScript/测试、本地调试脚本测试。
 2. 打包插件 `.tgz`，附校验和并上传 `dsbot-plugin`。
@@ -35,14 +35,14 @@
 
 在成功运行底部的 Artifacts 下载并解压。ARM64 给手机、x86_64 给模拟器，主机安装同一提交的 `dsbot-plugin`。普通 main 构建只上传 Actions artifacts，不创建 Release。
 
-需要发布时，先检查签名 Secret、两个 APK 和插件均通过。插件 `ds-bot/package.json` 与 App `app.json` 的版本由维护者更新；同步锁文件和双语变更说明。然后创建唯一标签，例如：
+需要发布时，先检查签名 Secret、两个 APK 和插件均通过。将 `ds-bot/package.json`、`apps/mobile/package.json`、两份锁文件及 `apps/mobile/app.json` 的版本更新为标签对应版本，并在 `docs/releases/v主版本.次版本.修订版本.md` 写双语说明。标签校验会在构建前拒绝缺少签名配置、版本不一致或缺少说明的发布。然后创建唯一的正式版本标签，例如：
 
 ```sh
-git tag mobile-v0.1.0
-git push origin mobile-v0.1.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-标签工作流重新构建并创建预发布 Release，附配套 `.tgz`、两种已签名 APK、公开证书与总校验和。如果缺少签名 Secret，发布任务失败，不会把未签名包发布成可安装版本。签名密码、私密备份、原生数据与 DSH_HOME 不会作为产物上传。
+标签工作流重新构建并创建正式 Release，附配套 `.tgz`、两种已签名 APK（例如 `dsbot-android-arm64-v0.1.0.apk`）、公开证书与总校验和。如果缺少签名 Secret，标签校验失败，不会把未签名包发布成可安装版本。签名密码、私密备份、原生数据与 DSH_HOME 不会作为产物上传。
 
 Artifacts 有 GitHub 保留期限，需要长期保存的版本使用 Releases。Release 的校验和按下载后的平铺文件名记录；Linux 在下载目录执行 `sha256sum -c SHA256SUMS`，macOS 用 `shasum -a 256 -c SHA256SUMS`，Windows 用 PowerShell `Get-FileHash 文件名 -Algorithm SHA256` 核对。
 

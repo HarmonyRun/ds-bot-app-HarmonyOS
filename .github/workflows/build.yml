@@ -3,7 +3,7 @@ name: Build plugin and Android
 on:
   push:
     branches: [main]
-    tags: ['mobile-v*']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -20,6 +20,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Check release signing credentials
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_PASSWORD" ]]; then
+            echo '::error::Set the ANDROID_KEYSTORE_PASSWORD repository Secret before publishing a release.'
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -27,6 +36,28 @@ jobs:
           cache-dependency-path: |
             ds-bot/package-lock.json
             apps/mobile/package-lock.json
+      - name: Check release versions and notes
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const tag = process.env.RELEASE_TAG;
+          if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Use a stable vMAJOR.MINOR.PATCH release tag');
+          const version = tag.slice(1);
+          for (const directory of ['ds-bot', 'apps/mobile']) {
+            const pkg = JSON.parse(fs.readFileSync(`${directory}/package.json`, 'utf8'));
+            const lock = JSON.parse(fs.readFileSync(`${directory}/package-lock.json`, 'utf8'));
+            if ([pkg.version, lock.version, lock.packages[''].version].some(value => value !== version)) {
+              throw new Error(`${directory} package/lock versions must match ${tag}`);
+            }
+          }
+          const app = JSON.parse(fs.readFileSync('apps/mobile/app.json', 'utf8'));
+          if (app.expo.version !== version) throw new Error('Expo version must match the release tag');
+          if (!fs.existsSync(`docs/releases/${tag}.md`)) throw new Error('Write bilingual release notes before tagging');
+          console.log(`Plugin and App versions match ${tag}`);
+          NODE
       - run: npm ci --no-fund --no-audit
         working-directory: ds-bot
       - run: npm run harness
@@ -119,12 +150,13 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [validate, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -139,8 +171,11 @@ jobs:
             exit 1
           fi
           mkdir release
-          cp out/dsbot-plugin/*.tgz out/dsbot-android-arm64/*.apk out/dsbot-android-x86_64/*.apk out/dsbot-android-arm64/DeepSeekBot.cer release/
+          cp out/dsbot-plugin/*.tgz out/dsbot-android-arm64/DeepSeekBot.cer release/
+          cp out/dsbot-android-arm64/dsbot-android-arm64.apk "release/dsbot-android-arm64-$RELEASE_TAG.apk"
+          cp out/dsbot-android-x86_64/dsbot-android-x86_64.apk "release/dsbot-android-x86_64-$RELEASE_TAG.apk"
+          notes="$GITHUB_WORKSPACE/docs/releases/$RELEASE_TAG.md"
           cd release
           sha256sum *.tgz *.apk *.cer > SHA256SUMS
           gh release create "$RELEASE_TAG" ./*.tgz ./*.apk SHA256SUMS DeepSeekBot.cer \
-            --repo "$REPOSITORY" --title "DS Bot $RELEASE_TAG" --generate-notes --prerelease
+            --repo "$REPOSITORY" --title "DS Bot $RELEASE_TAG" --notes-file "$notes" --verify-tag

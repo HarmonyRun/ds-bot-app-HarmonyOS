@@ -39,7 +39,7 @@ These are real Android App screenshots from an isolated demonstration team using
 ## Get started
 
 1. **Download matching packages.** From [Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml), download `dsbot-plugin` and `dsbot-android-arm64` from the same successful run and extract the ZIPs. If a [Release](https://github.com/QingJ01/DS-Bot-App/releases) is available, use its matching `.tgz` and signed `.apk`. APK names ending in `-unsigned` are not installable. `x86_64` is for emulators.
-2. **Install the host plugin.** In DSH, open Plugins → Add plugin and select the downloaded `ds-bot-0.1.2.tgz` by its absolute path. Enable it and restart DSH. Configure a model/provider credential on the host and test Chief there.
+2. **Install the host plugin.** In DSH, open Plugins → Add plugin and select the downloaded `ds-bot-0.1.0.tgz` by its absolute path. Enable it and restart DSH. Configure a model/provider credential on the host and test Chief there.
 3. **Install the phone App.** Install the signed ARM64 APK on your Android phone. Earlier debug-signed test builds require uninstalling before switching to the project release signature; host history stays on the computer.
 4. **Pair on Wi-Fi.** On the computer, open DS Bot Settings → Mobile devices → Enable phone connection. Scan the QR in the App, then approve the device on the computer.
 
@@ -62,7 +62,7 @@ The DSH host runs the models, Bots, tools and scheduled tasks and stores their a
 
 ## Build and contribute
 
-[GitHub Actions](.github/workflows/build.yml) checks the plugin, SDK and App, packs the plugin, and builds both Android architectures. The encrypted `DeepSeekBot` signing key (`C=CN`) and public certificate are versioned; the password is supplied by the `ANDROID_KEYSTORE_PASSWORD` Actions Secret. Missing signing credentials produce clearly named unsigned artifacts. `mobile-v*` tags can publish matching signed packages as prereleases.
+[GitHub Actions](.github/workflows/build.yml) checks the plugin, SDK and App, packs the plugin, and builds both Android architectures. The encrypted `DeepSeekBot` signing key (`C=CN`) and public certificate are versioned; the password is supplied by the `ANDROID_KEYSTORE_PASSWORD` Actions Secret. Missing signing credentials produce clearly named unsigned artifacts on development builds. `v*` tags publish matching signed releases after checking versions and release notes.
 
 | Guide | Link |
 | --- | --- |

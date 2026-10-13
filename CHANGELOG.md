@@ -2,7 +2,9 @@
 
 All notable changes to DS Bot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow [Semantic Versioning](https://semver.org/). Before 1.0, a minor version can contain breaking changes.
 
-## [Unreleased]
+## DS Bot App [v0.1.0] - 2026-10-13
+
+First coordinated release of this fork: both the host plugin and mobile App use version `0.1.0`. This version series is independent of the upstream plugin tags. [中文 / English release notes](docs/releases/v0.1.0.md).
 
 ### Added
 
@@ -40,6 +42,10 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 - A message sent to a group chat while a round is running joins that round before the next member speaks. Everyone still to speak sees it, and the members it is for answer it in the same round. Before, it waited for the whole round to end. A message with images or a referenced conversation still waits for its own round.
 - In your own messages, `@Name` of a Bot shows as that Bot and opens its chat, instead of a file named after the first word. A group chat calls exactly the Bots a message shows as called: code, links, web addresses and file references such as `@docs/guide.md` call nobody.
 - A Bot chat no longer stays stuck when the model keeps turning down its requests, for example over an image it cannot read. Images from finished turns are no longer sent with every later request. When a request is turned down on two turns in a row, the Bot moves on to a fresh conversation part and tells you that the last message could not be sent.
+
+## Upstream history
+
+The entries below describe upstream releases before this fork.
 
 ## [0.1.2] - 2026-10-11
 
@@ -109,7 +115,7 @@ If you used the legacy `dsh-bot` package, remove it before you install `ds-bot`.
 - Only one DSH can change a team at a time; a second DSH on the same DSH home opens it read-only ([Data and backups](ds-bot/README.md#data-and-backups)).
 - Group chats use many tokens: each member reads the group and answers in turn.
 
-[Unreleased]: https://github.com/Fei2411/DeepSeek-Bot/compare/v0.1.2...HEAD
+[v0.1.0]: https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0
 [0.1.2]: https://github.com/Fei2411/DeepSeek-Bot/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Fei2411/DeepSeek-Bot/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Fei2411/DeepSeek-Bot/releases/tag/v0.1.0

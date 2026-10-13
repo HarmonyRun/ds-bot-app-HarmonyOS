@@ -33,8 +33,8 @@ Tested with dsh `0.2.1-alpha.1` (Web and Desktop) on Linux.
 
 Install the **plugin tarball from this repository's GitHub Actions or Releases**. The npm package `ds-bot` belongs to the upstream project and does not include this fork's mobile bridge.
 
-- Desktop: Plugins → Add plugin → select the downloaded `ds-bot-0.1.2.tgz` by its absolute path; enable and restart DSH.
-- Web: `npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.2.tgz`.
+- Desktop: Plugins → Add plugin → select the downloaded `ds-bot-0.1.0.tgz` by its absolute path; enable and restart DSH.
+- Web: `npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz`.
 - Configure the model on the host, then Settings → Mobile devices → Enable phone connection; scan using the matching native App and approve on the host.
 
 See the [installation/configuration guide](../docs/getting-started.md), [中文教程](../docs/getting-started.zh.md), and [Actions/release guide](../docs/releasing.md). Tested npm Harness: `0.2.0-rc.2`; upstream compatibility checks also target `0.2.1-alpha.1`.

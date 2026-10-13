@@ -12,7 +12,7 @@ The current GitHub app cannot manage repository Secrets. The maintainer must ope
 
 ## Pipeline
 
-The build workflow runs on main pushes, PRs, manual dispatch and `mobile-v*` tags. It installs locked dependencies; checks plugin tests/generated bundle/lint, SDK tests, App TypeScript/tests and the Python device helper; packs the plugin; and builds standalone ARM64 and x86_64 APKs using Node 24, Java 17, Expo prebuild and Gradle.
+The build workflow runs on main pushes, PRs, manual dispatch and `v*` tags. It installs locked dependencies; checks plugin tests/generated bundle/lint, SDK tests, App TypeScript/tests and the Python device helper; packs the plugin; and builds standalone ARM64 and x86_64 APKs using Node 24, Java 17, Expo prebuild and Gradle.
 
 With the Secret, it signs APKs using the encrypted key and verifies the resulting certificate against the committed fingerprint. Without it, the artifact is explicitly named `-unsigned.apk`, emits a warning and **cannot be installed**. A successful unsigned build does not establish signing readiness. APK artifacts include checksums and, when signed, the public certificate. Android `versionCode` uses the workflow run number; retries of the same run retain it.
 
@@ -22,14 +22,14 @@ The separate Test workflow checks Linux/Windows, Node 22/24 and two DSH versions
 
 From the successful run's Artifacts, download and extract `dsbot-plugin` plus `dsbot-android-arm64` for phones or `dsbot-android-x86_64` for emulators. Install matching host/plugin files. Main builds upload artifacts only.
 
-To publish, first verify the password Secret, checks and both signed APKs. Update plugin/App versions, lockfiles and bilingual release notes as appropriate, then push a unique tag:
+To publish, first verify the password Secret, checks and both signed APKs. Update `ds-bot/package.json`, `apps/mobile/package.json`, both lockfiles and `apps/mobile/app.json` to match the tag, and write bilingual notes in `docs/releases/vMAJOR.MINOR.PATCH.md`. Tag validation rejects missing credentials, mismatched versions and missing notes before building. Then push a unique stable tag:
 
 ```sh
-git tag mobile-v0.1.0
-git push origin mobile-v0.1.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-The tag pipeline creates a prerelease with the plugin tarball, signed APKs, public certificate and combined checksums. Missing signing credentials fail the release job; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.
+The tag pipeline creates a public stable release with the plugin tarball, signed APKs (for example, `dsbot-android-arm64-v0.1.0.apk`), public certificate and combined checksums. Missing signing credentials fail tag validation; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.
 
 ## Local builds
 

@@ -10,7 +10,9 @@ tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort 
   --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEYSTORE_PASSWORD \
   --out "$output" "$input"
 "$tools/apksigner" verify --verbose --print-certs "$output"
-actual=$("$tools/apksigner" verify --print-certs "$output" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+# Build Tools 36 names scheme signers "V3.0 Signer:"; older tools use "Signer #1".
+# Every reported signer must have the project's certificate.
+actual=$("$tools/apksigner" verify --print-certs "$output" | sed -nE 's/^(Signer #[0-9]+|V[0-9.]+ Signer):? certificate SHA-256 digest: //p' | sort -u)
 expected=$(tr -d '[:space:]' < signing/certificate.sha256)
 if [[ "$actual" != "$expected" ]]; then
   echo 'APK certificate does not match the committed DeepSeekBot certificate' >&2
