@@ -2,9 +2,9 @@
 
 **把你的 Bot 团队，带到手机上。**
 
-中文 · [English](README.md) · [安装配置](docs/getting-started.zh.md) · [下载构建](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)
+中文 · [English](README.md) · [安装配置](docs/getting-started.zh.md) · [下载](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0)
 
-> `v0.1.0` 安装包已撤回，正在修复聊天栏与页面交互。请暂缓安装该版本；后续经过验证的版本会重新发布。
+> 本分支已同步上游 DS Bot v0.1.4，包含修复后的手机聊天控件。最初撤回的 v0.1.0 源码保存在 `archive/withdrawn-v0.1.0`；请安装当前 Release 的配套插件与 App。
 
 DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）。你可以和专业 Bot 对话，让多个 Bot 在群聊中协作，并在手机上查看工具执行、管理任务。手机与电脑共用同一套会话、模型和工作区。
 
@@ -24,6 +24,7 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 | 群聊协作 | 组建 Bot 群聊、选择管理员、@ 成员或引用其他对话；查看谁正在工作、谁在等待批准。 |
 | 消息与多模态 | 流式回复与思考，长按消息操作，附加图片和文件，语音输入与语音对话。 |
 | 工具与主机管理 | 专属工具结果卡片，允许/拒绝待批准操作，管理支持的 Skills、插件和连接器，以及可选桌面浏览器控制。 |
+| 共享能力 | 在手机上选择每个 Bot 可使用的 MCP 服务、技能和能力包，查看连接与批准状态；能力库在 DSH 电脑上配置。 |
 | 任务与记忆 | 管理定时任务和 Bot 记忆，搜索历史对话，在设置或详情页查看用量。 |
 | 通知 | Android 可开启前台接收服务获取运行时通知；此模式无需 FCM/APNs，云推送为可选项。 |
 | 外观与语言 | 中英文、日间/夜间/跟随系统，原创鱼形图案与悬浮聊天控件；离线可查看缓存和编辑草稿。 |
@@ -40,7 +41,7 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 
 ## 快速开始
 
-1. **下载配套文件。** 在 [Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml) 的同一次成功运行中下载 `dsbot-plugin` 和 `dsbot-android-arm64`，解压 ZIP。已有 [Release](https://github.com/QingJ01/DS-Bot-App/releases) 时也可下载配套 `.tgz` 和已签名 `.apk`。文件名含 `-unsigned` 的 APK 不能安装；`x86_64` 用于模拟器。
+1. **下载配套文件。** 使用 [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0) 中的插件 `.tgz` 和已签名 ARM64 `.apk`。开发构建也可在 [Actions](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml) 的同一次成功运行中下载 `dsbot-plugin` 和 `dsbot-android-arm64`，解压 ZIP。文件名含 `-unsigned` 的 APK 不能安装；`x86_64` 用于模拟器。
 2. **安装主机插件。** 在 DSH **插件 → 添加插件** 中填下载的 `ds-bot-0.1.0.tgz` 完整路径，安装、启用并重启。模型和提供商凭据在电脑配置，先确认 Chief 能在电脑正常回复。
 3. **安装手机 App。** Android 手机安装已签名 ARM64 APK。此前使用调试签名的测试包需先卸载，再切换到项目签名；电脑上的聊天记录不受影响。
 4. **同一 Wi-Fi 下配对。** 电脑打开 DS Bot **设置 → 手机设备 → 启用手机连接**，手机扫码，然后回到电脑批准该设备。

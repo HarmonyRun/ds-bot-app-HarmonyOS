@@ -107,8 +107,8 @@ function start(home, { listedExtra, logsExtra, subagentsExtra } = {}) {
     return response.json()
   }
   const meter = ctx.listeners.get('llm/stream').at(-1)
-  const stop = () => {
-    ctx.dispose()
+  const stop = async () => {
+    await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   return { call, ctx, home, meter, pages, stop, warnings }
@@ -161,7 +161,7 @@ test('a call made in a group chat stays group use after the room is gone', async
   t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5 }))
   const before = (await first.call('usage', { timeZone: 'Asia/Shanghai' })).value
   assert.equal(totals(before)['Chief/group'], 330)
-  first.ctx.dispose()
+  await first.ctx.dispose()
 
   const state = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
   state.rooms = {}
@@ -170,7 +170,7 @@ test('a call made in a group chat stays group use after the room is gone', async
   const second = start(home)
   const after = (await second.call('usage', { timeZone: 'Asia/Shanghai' })).value
   assert.equal(totals(after)['Chief/group'], 330)
-  second.ctx.dispose()
+  await second.ctx.dispose()
 })
 
 test('a plain chat journals its owner before the first scan, so a deleted Bot keeps its name', async (t) => {
@@ -183,7 +183,7 @@ test('a plain chat journals its owner before the first scan, so a deleted Bot ke
   assert.equal(first.meter({ sessionId: 'b2', messages: [] }, () => passed), passed)
   // The ledger opens behind the meter; give it a moment before the shutdown.
   await new Promise(resolve => setTimeout(resolve, 300))
-  first.ctx.dispose()
+  await first.ctx.dispose()
 
   const state = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
   delete state.bots.b2
@@ -197,7 +197,7 @@ test('a plain chat journals its owner before the first scan, so a deleted Bot ke
   })
   const view = (await second.call('usage', { timeZone: 'Asia/Shanghai' })).value
   assert.equal(totals(view)['Writer/chat'], 55)
-  second.ctx.dispose()
+  await second.ctx.dispose()
 })
 
 test('a subagent Session is read through its parent, even a parent that is gone; one that cannot be read warns once', async (t) => {

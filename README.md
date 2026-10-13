@@ -2,9 +2,9 @@
 
 **Your Bot team, on your phone.**
 
-English · [中文](README.zh.md) · [Install](docs/getting-started.md) · [Download](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)
+English · [中文](README.zh.md) · [Install](docs/getting-started.md) · [Download](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0)
 
-> The `v0.1.0` binaries have been withdrawn while chat layout and interaction fixes are validated. Wait for the next verified release before installing.
+> This fork includes upstream DS Bot v0.1.4 and the corrected mobile chat controls. The initial withdrawn v0.1.0 source is preserved under `archive/withdrawn-v0.1.0`; install the matching packages from the current Release.
 
 DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) computer or server. Chat with a specialist, bring several Bots into a group, and follow their tools and tasks from one app. The phone shares the host's conversations, models and workspace.
 
@@ -24,6 +24,7 @@ DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness
 | Group work | Bring Bots together, pick an administrator, mention a member or reference another conversation. See who is working or waiting for approval. |
 | Messages and media | Stream replies and reasoning, long-press for message actions, attach images/files, and use voice input or voice chat. |
 | Tools and host management | Open tool-result cards, approve or reject pending actions, manage supported Skills/plugins/connectors, and opt into desktop browser control. |
+| Shared capabilities | Choose each Bot’s MCP servers, skills and capability packs configured on your DSH computer; check connection and approval status. |
 | Tasks and memory | Manage scheduled tasks and Bot memory, search earlier conversations, and inspect usage from settings or details. |
 | Notifications | Receive Android runtime notifications with an optional foreground service. FCM/APNs are unnecessary for that mode; cloud push is optional. |
 | Appearance and language | Chinese/English, light/dark/system appearance, original fish graphics, and floating chat controls. Cached conversations and drafts remain available offline. |
@@ -40,7 +41,7 @@ These are real Android App screenshots from an isolated demonstration team using
 
 ## Get started
 
-1. **Download matching packages.** From [Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml), download `dsbot-plugin` and `dsbot-android-arm64` from the same successful run and extract the ZIPs. If a [Release](https://github.com/QingJ01/DS-Bot-App/releases) is available, use its matching `.tgz` and signed `.apk`. APK names ending in `-unsigned` are not installable. `x86_64` is for emulators.
+1. **Download matching packages.** Use the plugin `.tgz` and signed ARM64 `.apk` from the [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0). For development builds, download `dsbot-plugin` and `dsbot-android-arm64` from the same successful [Actions run](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml) and extract the ZIPs. APK names ending in `-unsigned` are not installable. `x86_64` is for emulators.
 2. **Install the host plugin.** In DSH, open Plugins → Add plugin and select the downloaded `ds-bot-0.1.0.tgz` by its absolute path. Enable it and restart DSH. Configure a model/provider credential on the host and test Chief there.
 3. **Install the phone App.** Install the signed ARM64 APK on your Android phone. Earlier debug-signed test builds require uninstalling before switching to the project release signature; host history stays on the computer.
 4. **Pair on Wi-Fi.** On the computer, open DS Bot Settings → Mobile devices → Enable phone connection. Scan the QR in the App, then approve the device on the computer.

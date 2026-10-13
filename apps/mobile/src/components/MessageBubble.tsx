@@ -1,3 +1,4 @@
+import { systemEventLabel } from "../logic/system-events";
 import { ToolResultView } from "./ToolResultView";
 import { tr } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
@@ -157,7 +158,7 @@ export function MessageBubble({ message, client, conversationId, serverId, bot, 
       <Sheet title={label} visible={expanded} onClose={() => setExpanded(false)}><ToolResultView tool={tool} /></Sheet>
     </View>;
   }
-  if (message.role === "system") return <Text selectable style={{ color: t.muted, fontSize: 12, lineHeight: 19, textAlign: "center", marginVertical: 12 }}>{message.text}</Text>;
+  if (message.role === "system") return <Text selectable style={{ color: t.muted, fontSize: 12, lineHeight: 19, textAlign: "center", marginVertical: 12 }}>{systemEventLabel(message.systemEvent, tr) || message.text}</Text>;
   return <View style={{ alignSelf: mine ? "flex-end" : "stretch", width: "100%", maxWidth: "100%", marginVertical: 10, gap: 4 }}>
     {showAuthor && !mine && bot ? <Pressable disabled={!onOpenBot} onPress={() => onOpenBot?.(bot.id)} accessibilityRole="button" accessibilityLabel={tr("Open ") + author + tr("'s chat")} style={{flexDirection:"row",alignItems:"center",gap:8,minHeight:36,alignSelf:"flex-start"}}><BotAvatar bot={bot} size={28}/><Text style={{color:t.muted,fontSize:13}}>{author}</Text></Pressable> : showAuthor && !mine && message.author ? <Text style={{color:t.muted,fontSize:13}}>{author}</Text> : null}
     {message.reasoning ? <View style={{ marginLeft: 0, gap: 5 }}>

@@ -17,12 +17,14 @@ import * as tools from './src/host/tools.js'
 import * as chatIndex from './src/host/chat-index.js'
 import * as groups from './src/host/groups.js'
 import * as approvals from './src/host/approvals.js'
+import * as resume from './src/host/resume.js'
 import * as memory from './src/host/memory.js'
 import * as parts from './src/host/parts.js'
 import * as images from './src/host/images.js'
 import * as browser from './src/host/browser.js'
 import * as secrets from './src/host/secrets.js'
 import * as connectors from './src/host/connectors.js'
+import * as capabilities from './src/host/capabilities.js'
 import * as schedules from './src/host/schedules.js'
 import * as usage from './src/host/usage.js'
 import * as update from './src/host/update.js'
@@ -39,9 +41,13 @@ export const inject = ['llm', 'tools', 'systemPrompt', 'sessionController', 'ses
 // the functions other modules call; they call them through `rt` at run time, never during
 // install. Listeners run and tools are listed in registration order, so this order holds:
 // usage meters model requests after every listener that rewrites them.
-const MODULES = [diagnostics, store, models, permissions, turns, delivery, roster, agents, prompt, timeContext, tools, chatIndex, groups, approvals, memory, parts, images, secrets, connectors, schedules, browser, usage, update, dshUpdate, channel, mobile]
+const MODULES = [diagnostics, store, models, permissions, turns, delivery, roster, agents, prompt, timeContext, tools, chatIndex, groups, approvals, resume, memory, parts, images, secrets, connectors, capabilities, schedules, browser, usage, update, dshUpdate, channel, mobile]
 
 export function apply(ctx, config = {}) {
+  createRuntime(ctx, config)
+}
+
+export function createRuntime(ctx, config = {}) {
   const home = config.home ?? join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'bot')
   const rt = {
     ctx,
@@ -54,4 +60,5 @@ export function apply(ctx, config = {}) {
     },
   }
   for (const module of MODULES) module.install(rt)
+  return rt
 }

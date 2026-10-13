@@ -10,7 +10,7 @@ The official npm integration baseline is DSH `0.2.0-rc.2`; CI also checks `0.2.1
 
 ## Download matching packages
 
-The public `v0.1.0` binaries have been withdrawn. Wait for the next verified Release; the Actions downloads below are development builds and do not establish real-device readiness.
+Download matching files from the [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0). This replaces the withdrawn initial build and includes upstream v0.1.4 plus the repaired mobile controls. The old source remains under `archive/withdrawn-v0.1.0`. Actions downloads below are development builds.
 
 Open [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml). From a successful run for the same commit, download `dsbot-plugin` and `dsbot-android-arm64`; extract the ZIP artifacts first. The plugin is `ds-bot-0.1.0.tgz`; an installable APK is `dsbot-android-arm64.apk`. Names ending in `-unsigned.apk` are not installable: the maintainer must configure the signing Secret and rebuild. `dsbot-android-x86_64` is for emulators. Each artifact includes `SHA256SUMS`.
 

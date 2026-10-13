@@ -164,8 +164,8 @@ function start({ home = mkdtempSync(join(tmpdir(), 'ds-bot-memory-')), replies =
   const section = sessionId => ctx.sections.get('bot-memory').text({ agent: { id: sessionId } })
   const read = (...path) => readFileSync(join(home, 'memory', ...path), 'utf8')
   const journal = () => read('journal.jsonl').trim().split('\n').map(line => JSON.parse(line))
-  const stop = ({ keep = false } = {}) => {
-    ctx.dispose()
+  const stop = async ({ keep = false } = {}) => {
+    await ctx.dispose()
     if (!keep) rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   return { ctx, home, call, tool, section, read, journal, requests, stop }
@@ -264,12 +264,12 @@ test('a Session keeps the memory it began with, across restarts, until its snaps
   await first.tool('remember', { text: 'Lives in Hangzhou', topic: 'home' }, 'b2')
   assert.equal(first.section('b2'), opened)
   // Another dsh run finds the snapshot and keeps the same bytes.
-  first.stop({ keep: true })
+  await first.stop({ keep: true })
   const second = start({ home: first.home })
   await second.tool('recall', {}, 'b2')
   assert.equal(second.section('b2'), opened)
   // Without its snapshot (renewMemory removes it), the Session freezes the memory anew.
-  second.ctx.dispose()
+  await second.ctx.dispose()
   const renewed = start({ home: first.home })
   t.after(() => renewed.stop())
   rmSync(join(first.home, 'memory', 'snapshots', 'b2.md'))

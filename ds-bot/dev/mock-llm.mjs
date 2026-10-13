@@ -23,12 +23,15 @@
 //   报错 (fake rejected key, 401; also as the text of 转告, so the receiving Bot fails)
 //   卡片 K (K×1000 characters, then a question card) · 笔记模式 截断一次|缺节一次|总截断|总缺节|失败|正常
 //   记住[@话题] 事实 · 团队记住 事实 (remember) · 忘掉 事实 (forget) · 回忆 [词] (recall)
+//   查能力 [词] (names the mcp__ tools and catalog skills that contain 词; also in a group)
 // Memory panel: a summary restating the entries; asks 记住|remember X, 团队记住 X,
 //   删掉|remove N, 改|edit N: X change entries, anything else gets the entry count.
 // Commands in a group:
 //   把X拉进群 · 把X踢出群 · 群名改成X · 讨论 (admin @all) · 私聊聊了啥 (repeats the briefing)
 //   查私聊 关键词 (read_own_chat) · 长文 N · 上下文里有 词 · 撑爆 · 报错 [名] (that member's call, or every member's, fails with 401)
 //   提权 (members other than the admin run a shell command that asks for full access)
+//   写成文字 (members write their tool call as text instead of making it; also in a Bot's own chat)
+//   派活 N (the admin hands the first other member N seconds of work; the admin answers its result)
 // A handoff turn answers "第 N 段接着做完了". Handoff notes and backend compaction each
 // return a full eight-section note marked "handoff 提示词" or "backend 提示词" (a Bot's
 // Session should only see the former; retries add "重试", merges add "合并了上一份笔记").
@@ -78,6 +81,8 @@ const tool = (name, input) => ({
 })
 const think = value => ({ type: 'thinking', thinking: value })
 const ESCALATION = '提权测试：用户在群里要求'
+const HANDED_WORK = '群里派的活'
+const WRITTEN_CALL = '我先看一下目录。\n<tool_call>\n<function=pwsh>\n<parameter=command>\nGet-ChildItem\n</parameter>\n</function>\n</tool_call>'
 // Deterministic filler that grows a conversation by about `chars` characters.
 const filler = (chars, tag) => Array.from({ length: Math.ceil(chars / 20) }, (_, index) => `${tag}第${index + 1}段：这是一段用来撑长上下文的测试文字。`).join('').slice(0, chars)
 const isResults = message => Array.isArray(message?.content) && message.content.some(block => block.type === 'tool_result')
@@ -162,7 +167,9 @@ function decide(body) {
     return [text(note(sections))]
   }
 
-  const result = blocks.find(block => block.type === 'tool_result')
+  // A stopped call's result can share a message with the next group turn, which wins.
+  const fresh = textBlocks(last?.content).some(value => value.trimStart().startsWith('[Group chat'))
+  const result = fresh ? undefined : blocks.find(block => block.type === 'tool_result')
   if (result) {
     const resultText = typeof result.content === 'string' ? result.content : textOf(result.content)
     const call = [...messages].reverse().find(m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(b => b.type === 'tool_use'))
@@ -195,6 +202,8 @@ function decide(body) {
       return [text(`终端输出里我看到的是：${resultText.replace(/\s+/g, ' ').trim().slice(0, 200)}`)]
     }
     if (used?.input?.justification === ESCALATION) return [text(result.is_error ? `没跑成：${resultText.slice(0, 80)}` : '命令跑完了，文件已经写好。')]
+    const job = new RegExp(`^${HANDED_WORK}-(\\d+)-`).exec(used?.input?.pattern ?? '')
+    if (job) return Object.assign([text(`干完了，用了 ${job[1]} 秒。`)], { delay: Number(job[1]) * 1000 })
     switch (used?.name) {
       case 'ds_bot_test_approval': return [text(resultText)]
       case 'group_relay': return [text('')]
@@ -295,6 +304,9 @@ function decide(body) {
     return [text(`群里回完了，一共 ${replies} 条回复。`)]
   }
   if (userText.startsWith('[Group chat') && userText.includes('The user just created this group')) return [text('群建好了，这个群要一起做点什么？')]
+  if (/^\[Group chat "[^"]*" · your tool call did not run\]/.test(userText) || userText.startsWith('[Your last reply wrote a tool call as text')) {
+    return [text('这次真的调用了，目录看完了。')]
+  }
   if (userText.startsWith('[Group chat')) {
     // Reads only this round's transcript block. The opener is the user's last line, or
     // a Bot's post that started the round. Count-off says the next number after the
@@ -325,16 +337,26 @@ function decide(body) {
       return [text(earlier.includes(ask[1]) ? `上下文里有「${ask[1]}」。` : `上下文里没有「${ask[1]}」。`)]
     }
     // Group Sessions: the frozen brief is in the Session's first message, the lookup a tool.
+    if ((ask = /查能力\s*(\S*)/.exec(userLine))) return [text(capabilityReport(me, tools, messages, ask[1]))]
     if ((ask = /查私聊\s*(\S*)/.exec(userLine))) return [tool('read_own_chat', ask[1] ? { query: ask[1] } : {})]
     if (/私聊聊了啥/.test(userLine)) {
       const all = messages.map(m => textOf(m.content)).join('\n')
       const brief = /Your own chat with the user so far[^\n]*\n([\s\S]*?)\nThis brief does not change/.exec(all)?.[1] ?? ''
       return [text(brief ? `简报最后一句：${brief.split('\n').at(-1)}` : '没有简报。')]
     }
+    if (/写成文字/.test(userLine) && !leads) return [text(WRITTEN_CALL)]
     const shell = ['pwsh', 'bash'].find(name => tools.has(name))
     if (/提权/.test(userLine) && !leads && shell) {
       return [text('这一步要写工作区外的文件，我申请一次提权。'), tool(shell, { command: 'echo ok', description: '在工作区外写一个测试文件', justification: ESCALATION, sandbox_permissions: 'danger-full-access' })]
     }
+    // "派活 N": the admin hands a member N seconds of work: a file lookup, then a model
+    // step that takes N seconds. The member posts the result when done, and the admin
+    // answers the result.
+    const handed = /^\S+: @(\S+) 干活 (\d+)/m.exec(block)
+    const lookup = ['glob', 'grep', 'read'].find(name => tools.has(name))
+    if ((ask = /派活\s*(\d+)/.exec(userLine)) && leads && peer) return [text(`@${peer} 干活 ${ask[1]}`)]
+    if (handed?.[1] === me && mentioner && lookup) return [tool(lookup, { pattern: `${HANDED_WORK}-${handed[2]}-*` })]
+    if (/^\S+: 干完了/.test(userLine) && leads) return [text('收到，辛苦了。')]
     // Ping-pong: whoever is mentioned mentions back, to exercise the per-member cap.
     if (/来回/.test(userLine)) return [text(mentioner ? `@${mentioner} 回你` : leads && peer ? `@${peer} 来回` : '[PASS]')]
     if (mentioner) return [text('进度正常，今天能交。')]
@@ -375,12 +397,14 @@ function decide(body) {
   if ((order = /^回忆(?:\s+(.+))?$/.exec(userText)) && tools.has('recall')) return [tool('recall', order[1] ? { query: order[1].trim() } : {})]
   if ((order = /^搜索\s*[:：]\s*([^\n]+)/.exec(userText)) && tools.has('web_search')) return [tool('web_search', { queries: order[1].trim().split(/\s*[|｜]\s*/) })]
   if (/^看(?:网页|页面)/.test(userText) && tools.has('read_browser')) return [tool('read_browser', {})]
+  if (userText.startsWith('写成文字')) return [text(WRITTEN_CALL)]
   // Context-line tests: grow the context, run a long multi-step turn, search history.
   if ((order = /^(?:长文|long)\s*(\d+)/.exec(userText))) return [text(filler(Number(order[1]) * 1000, '长文'))]
   if ((order = /^长任务\s*(\d+)(?:\s+(\d+))?/.exec(userText))) return [text(filler(Number(order[2] ?? 4) * 1000, '步骤0')), tool('list_bots', {})]
   if ((order = /^查记录\s*([^\n]+)/.exec(userText))) return [tool('read_own_chat', { query: order[1].trim() })]
   if ((order = /^查锚点\s*([^\n]+)/.exec(userText))) return [tool('read_own_chat', { around: order[1].trim() })]
   if ((order = /^查第\s*(\d+)\s*段/.exec(userText))) return [tool('read_own_chat', { part: Number(order[1]) })]
+  if ((order = /^查能力\s*(\S*)/.exec(userText))) return [text(capabilityReport(me, tools, messages, order[1]))]
   if ((order = /^上下文里有\s*(\S+)/.exec(userText))) {
     const all = messages.slice(0, -1).map(m => textOf(m.content)).join('\n')
     return [text(all.includes(order[1]) ? `上下文里有「${order[1]}」。` : `上下文里没有「${order[1]}」。`)]
@@ -477,6 +501,16 @@ function memoryReview(request) {
     changes.push({ op: 'add', text: asked[1] === '以后' ? `用户希望以后${asked[2]}` : `From now on, the user wants: ${asked[2]}` })
   }
   return { changes }
+}
+
+// The MCP tools in this request and the entries of the latest skill catalog, both limited
+// to names that contain `filter`.
+function capabilityReport(me, tools, messages, filter) {
+  const catalogs = messages.flatMap(m => textBlocks(m.content)).flatMap(value => [...value.matchAll(/<available_skills>([\s\S]*?)<\/available_skills>/g)])
+  const skills = (catalogs.at(-1)?.[1] ?? '').split('\n').map(line => /^- `([^`]+)`: (.*)$/.exec(line))
+    .filter(entry => entry && entry[1].includes(filter)).map(entry => `${entry[1]}（${entry[2]}）`)
+  const mcp = [...tools].filter(name => name.startsWith('mcp__') && name.includes(filter)).sort()
+  return `${me} 能力：工具 ${mcp.join(', ') || '无'}；技能 ${skills.join(', ') || '无'}`
 }
 
 function secretNote(note, tools) {
@@ -614,7 +648,7 @@ const server = createServer((req, res) => {
       sse(res, { type: 'message_delta', delta: { stop_reason: out.stop ?? (usedTool ? 'tool_use' : 'end_turn'), stop_sequence: null }, usage: { output_tokens: Math.ceil(JSON.stringify(out).length / 3) } })
       sse(res, { type: 'message_stop' })
       res.end()
-    }, (isSummary(body) ? SUMMARY_DELAY : DELAY) + Math.random() * JITTER)
+    }, (out.delay ?? (isSummary(body) ? SUMMARY_DELAY : DELAY)) + Math.random() * JITTER)
   })
 })
 

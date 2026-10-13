@@ -1,4 +1,5 @@
 import { AboutPanel } from "../host-settings/AboutPanel";
+import { CapabilitiesPanel } from "../host-settings/CapabilitiesPanel";
 import { SkillsPanel } from "../host-settings/SkillsPanel";
 import { PluginsPanel } from "../host-settings/PluginsPanel";
 import { NotificationsPanel } from "../components/NotificationsPanel";
@@ -31,6 +32,7 @@ import { PageTransition } from "../components/Motion";
 import { LocalePreference, useI18n } from "../i18n";
 export type SettingsPage =
   | "tools"
+  | "capabilities"
   | "skills"
   | "plugins"
   | "notifications"
@@ -144,7 +146,7 @@ export function SettingsScreen({
   function back() {
     setError("");
     setNotice("");
-    if (toolsChild && ["skills","plugins","connectors"].includes(page)) {setPage("tools");setToolsChild(false);}
+    if (toolsChild && ["skills","plugins","connectors","capabilities"].includes(page)) {setPage("tools");setToolsChild(false);}
     else if (page !== "index") setPage("index");
     else onBack?.();
   }
@@ -154,7 +156,7 @@ export function SettingsScreen({
         title={tr(
           page === "index"
             ? ""
-            : ({tools:"Tools & skills",skills:"Skills",plugins:"Plugins"}[page as "tools"|"skills"|"plugins"] || pages.find((p) => p.id === page)?.title || "Settings"),
+            : ({tools:"Tools & skills",skills:"Skills",plugins:"Plugins",capabilities:"Capabilities"}[page as "tools"|"skills"|"plugins"|"capabilities"] || pages.find((p) => p.id === page)?.title || "Settings"),
         )}
         onBack={page !== "index" || onBack ? back : undefined}
         close
@@ -197,7 +199,8 @@ export function SettingsScreen({
               {tr("DS Bot · Mobile")}</Text>
           </>
         )}
-        {page === "tools" && <Section title={tr("Tools & skills")}><SettingRow title={tr("Skills")} onPress={() => {setToolsChild(true);setPage("skills");}}/><SettingRow title={tr("Plugins")} onPress={() => {setToolsChild(true);setPage("plugins");}}/><SettingRow title={tr("Connectors")} onPress={() => {setToolsChild(true);setPage("connectors");}} last/></Section>}
+        {page === "tools" && <Section title={tr("Tools & skills")}><SettingRow title={tr("Skills")} onPress={() => {setToolsChild(true);setPage("skills");}}/><SettingRow title={tr("Plugins")} onPress={() => {setToolsChild(true);setPage("plugins");}}/><SettingRow title={tr("Connectors")} onPress={() => {setToolsChild(true);setPage("connectors");}}/><SettingRow title={tr("Capabilities")} onPress={() => {setToolsChild(true);setPage("capabilities");}} last/></Section>}
+        {page === "capabilities" && <CapabilitiesPanel client={client} team={team} online={online} refresh={refresh}/>}
         {page === "skills" && <SkillsPanel client={client} team={team} online={online} refresh={refresh}/>}
         {page === "plugins" && <PluginsPanel client={client} team={team} online={online} refresh={refresh}/>}
         {page === "notifications" && <NotificationsPanel serverId={host.serverId} client={client} online={online} open={openConversation} />}

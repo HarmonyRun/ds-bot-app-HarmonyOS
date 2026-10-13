@@ -54,7 +54,7 @@ async function start() {
   }))).json()).value.questions
   // Loading once fills the Session-owner indexes turns.js filters events by.
   await ctx.registeredTools.get('list_bots').execute({}, { agent: { id: 'chief' } })
-  return { emit, ask, questions, stop: () => { ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
+  return { emit, ask, questions, stop: async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) } }
 }
 
 const text = value => [{ type: 'text', text: value }]

@@ -13,7 +13,7 @@
 
 ## 下载配套插件和 App
 
-`v0.1.0` 公开安装包已撤回。请等待后续验证完成的 Release；以下 Actions 下载方式仅供开发构建使用，不代表已经完成真机验收。
+在 [v0.1.0 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.0) 下载配套文件。本次替换最初撤回的构建，包含上游 v0.1.4 和修复后的移动控件；旧源码保存在 `archive/withdrawn-v0.1.0`。以下 Actions 下载方式供开发构建使用。
 
 打开本仓库 [Actions → Build plugin and Android](https://github.com/QingJ01/DS-Bot-App/actions/workflows/build.yml)，选择同一提交的成功运行，在 Artifacts 下载：
 

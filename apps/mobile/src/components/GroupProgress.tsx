@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { AppState, ScrollView, Text, View } from "react-native";
 import { MobileClient } from "@ds-bot/mobile-sdk";
-import { Room, TeamState } from "../types";
+import { Room, TeamState, errorText } from "../types";
 import { useTheme } from "../theme";
 import { useI18n } from "../i18n";
 import { BotAvatar } from "./BotAvatar";
+import { Button, Notice } from "./UI";
 
 interface Round {
   callId: string;
@@ -19,18 +20,36 @@ export function GroupProgress({
   team,
   running,
   online,
+  allowStop = false,
+  onChanged,
 }: {
   client: MobileClient;
   room: Room;
   team: TeamState;
   running: boolean;
   online: boolean;
+  allowStop?: boolean;
+  onChanged?: () => Promise<void>;
 }) {
   const t = useTheme();
   const { tr } = useI18n();
   const [rounds, setRounds] = useState<Round[]>([]);
   const [unavailable, setUnavailable] = useState(false);
-  const busyMembers = room.members.filter(id => team.work?.bots[id] || team.work?.approvals.some(approval => approval.botId === id));
+  const [stopping, setStopping] = useState("");
+  const [error, setError] = useState("");
+  const membersWork = team.work?.rooms?.[room.id];
+  const workOf = (id: string) => membersWork?.find(work => work.botId === id) || (team.work?.bots[id]?.roomId === room.id ? team.work.bots[id] : undefined);
+  const waits = (id: string) => team.work?.approvals.some(approval => approval.botId === id && approval.roomId === room.id);
+  const busyMembers = room.members.filter(id => workOf(id) || waits(id));
+  async function stop(botId: string) {
+    if (stopping || !online || team.readOnly) return;
+    setStopping(botId); setError("");
+    try {
+      await client.action("stop-member-work", { roomId: room.id, botId });
+      await onChanged?.();
+    } catch (cause) { setError(tr("Could not stop member work.") + " " + errorText(cause)); }
+    finally { setStopping(""); }
+  }
   useEffect(() => {
     let alive = true;
     let generation = 0;
@@ -94,7 +113,7 @@ export function GroupProgress({
       </Text>
     );
   return (
-    <ScrollView
+    <View><Notice error text={error} /><ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{
@@ -107,13 +126,13 @@ export function GroupProgress({
       {(running && rounds.length ? room.members : busyMembers).map((id) => {
         const bot = team.bots.find((item) => item.id === id);
         if (!bot) return null;
-        const speaking = rounds.some((round) => round.speaking === id);
+        const speaking = rounds.some((round) => round.speaking === id) || membersWork?.some(work => work.botId === id && work.speaking);
         const replies = rounds
           .flatMap((round) => round.replies)
           .filter((reply) => reply.botId === id);
         const reply = replies[replies.length - 1];
-        const waiting = team.work?.approvals.some(approval => approval.botId === id);
-        const doing = team.work?.bots[id];
+        const waiting = waits(id);
+        const doing = workOf(id);
         const status = waiting ? tr("Waiting for approval") : speaking
           ? tr("Typing…")
           : reply?.kind === "failed"
@@ -155,9 +174,11 @@ export function GroupProgress({
                 </Text>
               )}
             </View>
+            {allowStop && doing && <Button title={tr("Stop member work")} compact secondary disabled={!!stopping || !!team.readOnly}
+              onPress={() => void stop(id)} />}
           </View>
         );
       })}
-    </ScrollView>
+    </ScrollView></View>
   );
 }

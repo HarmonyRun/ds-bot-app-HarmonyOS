@@ -9,10 +9,15 @@
 // goes to every member in roster order, admin first, or to the admin alone in admin
 // mode; "@Name" picks members. A reply that @mentions a member calls that member
 // next, bounded per member and per round; the admin's calls reach further.
+//
+// Work does not hold a round up: a member that is still busy with tools a little after
+// it started, or that is called while still at earlier work, lets the round go on. Its
+// turn keeps running in its group Session, and what it ends with is posted to the group,
+// where the member that asked for it answers.
 import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { ROOM_BOT_ROUNDS, ROOM_REPLY_TIMEOUT_MS, SOURCE_KIND } from './constants.js'
+import { ROOM_LATE_ROUNDS, ROOM_REPLY_TIMEOUT_MS, ROOM_WORK_GRACE_MS, SOURCE_KIND, TEAM_TOOLS } from './constants.js'
 import { escapeRegExp, splitRef, textOf } from './text.js'
 import { mentionSpans } from '../shared/mentions.js'
 import { GROUP_REF, output } from './tools.js'
@@ -48,9 +53,13 @@ const unseenLines = (room, memberId) => {
   return room.log.filter(line => line.seq > since && line.botId !== memberId).slice(-ROOM_DELTA_MAX)
 }
 
-const lineText = line => (line.kind === 'lookup'
-  ? `[${line.who} looked up its own chat${line.text ? ` for "${line.text}"` : ''}]`
-  : `${line.who}: ${line.text}`)
+const lineText = (line) => {
+  if (line.kind === 'lookup') return `[${line.who} looked up its own chat${line.text ? ` for "${line.text}"` : ''}]`
+  if (line.kind === 'resumed') return `[${line.who}'s work here was cut off when DeepSeek Harness restarted; it is picking it back up and posts when done]`
+  if (line.kind === 'cut') return `[${line.who}'s work here was cut off by a restart again, so it stopped; ask it to go on if it still matters]`
+  if (line.kind === 'stopped') return `[The user stopped ${line.who}'s work here]`
+  return `${line.who}: ${line.text}`
+}
 const transcript = lines => lines.map(lineText).join('\n')
 
 // Models often echo the transcript format ("Name: …") despite the instruction.
@@ -76,13 +85,15 @@ export const referenceNote = references => (references?.length
   ? `Conversations the user referenced in this round:\n\n${references.map(reference => reference.text).join('\n\n')}`
   : '')
 
-const ROOM_REPLY = 'Reply with your message for the group: one or two short messages, no name prefix. Reply [PASS] to stay silent when you have nothing new to add or the message is for someone else.'
+const ROOM_REPLY = 'Reply with your message for the group, no name prefix: in a discussion, one or two short messages. When you are asked to do something, do it now with your tools. The group does not wait for you, and your final reply is posted here when you finish, so give the result, never a promise to do it later. Reply [PASS] to stay silent when you have nothing new to add or the message is for someone else.'
+const ROOM_CALLS = 'Writing "@Name" calls that member next, to answer or to do what you ask; when it finishes work you gave it, you answer its result. To only mention a member, write its name without "@".'
 
 const slotLabel = (slot) => {
   if (slot.status === 'speaking') return `${slot.name} (you, now)`
   if (slot.status === 'posted') return `${slot.name} (posted)`
   if (slot.status === 'passed') return `${slot.name} (passed)`
   if (slot.status === 'missed') return `${slot.name} (no answer)`
+  if (slot.status === 'working') return `${slot.name} (working on it; posts when done)`
   if (slot.status === 'waiting-approval') return `${slot.name} (waiting for the user's approval; posts when done)`
   if (slot.status === 'failed') return `${slot.name} (could not answer: error)`
   if (slot.status === 'left') return `${slot.name} (left the group)`
@@ -92,7 +103,7 @@ const slotLabel = (slot) => {
 const adminNote = room => [
   'You are this group\'s admin.',
   room.mode === 'admin' ? 'Plain messages come to you first: answer them, or call the members who should answer with @Name.' : '',
-  'Writing "@Name" calls that member to speak right after you, and "@all" calls every member. When the user asks, change the group with update_group.',
+  '"@all" calls every member. When the user asks, change the group with update_group.',
 ].filter(Boolean).join(' ')
 
 // The opening turn of a group the user just made without a first message.
@@ -109,7 +120,10 @@ export function install(rt) {
   async function groupSessionFor(room, member) {
     room.sessions ??= {}
     const known = room.sessions[member.id]
-    if (known !== undefined) return { id: known, brief: undefined }
+    if (known !== undefined) {
+      await rt.ensureCapabilities(known)
+      return { id: known, brief: undefined }
+    }
     const id = await rt.createSession(`${member.name} · ${room.name}`)
     room.sessions[member.id] = id
     rt.groupOwners.set(id, { botId: member.id, roomId: room.id })
@@ -122,6 +136,7 @@ export function install(rt) {
     await rt.applyPermission(member, id)
       .catch(error => rt.warn('ds-bot: permission for %s in %s not applied: %s', member.name, room.name, error))
     await rt.save()
+    await rt.ensureCapabilities(id)
     return { id, brief: await rt.ownChatBrief(member) }
   }
 
@@ -138,9 +153,10 @@ export function install(rt) {
     const index = round.slots.findIndex(slot => slot.status === 'speaking')
     const before = index
     const after = round.slots.length - index - 1
-    const members = `Members: the user${peers.length ? `, ${peers.join(', ')}` : ''} and you${leads ? ' (admin)' : ''}. Members speak one at a time; each message is posted before the next speaker starts.`
+    const members = `Members: the user${peers.length ? `, ${peers.join(', ')}` : ''} and you${leads ? ' (admin)' : ''}. Members speak one at a time; each message is posted before the next speaker starts. ${ROOM_CALLS}`
     const notice = room.notice ? `Group notice (shared instructions for every member):\n${room.notice}` : ''
     if (round.kickoff) return [members, notice, leads ? adminNote(room) : '', roomKickoff(rt.uiLanguage?.())].filter(Boolean).join('\n\n')
+    const working = workingIn(room).filter(item => item.bot.id !== member.id)
     return [
       members,
       notice,
@@ -150,26 +166,41 @@ export function install(rt) {
         ? `This round so far${spokeThisRound ? ', since your last message' : ', starting with the new message'} (oldest first):\n${transcript(current)}`
         : 'Nothing new in this round since your last message.',
       round.shown?.includes(member.id) ? '' : referenceNote(round.references),
+      working.length > 0 ? `Still at work on what they were asked; each posts here when done: ${working.map(item => `${item.bot.name} (${minutesSince(item.since)} min)`).join(', ')}.` : '',
       `Speaking order for this round: ${round.slots.map(slotLabel).join(' → ')}.`,
       `You are number ${index + 1} of ${round.slots.length}. ${before === 0 ? 'Nobody spoke before you' : `${before} went before you`}${after === 0 ? ', and you are the last.' : `; ${after} after you will see your message.`}`,
       ROOM_REPLY,
     ].filter(Boolean).join('\n\n')
   }
 
+  // Members whose turn in this group is running, and since when.
+  const workingIn = room => room.members.flatMap((id) => {
+    const entry = rt.live.get(room.sessions?.[id])
+    const bot = rt.botOf(id)
+    return entry?.turn !== undefined && bot !== undefined ? [{ bot, since: entry.since ?? Date.now() }] : []
+  })
+  const minutesSince = at => Math.max(1, Math.round((Date.now() - at) / 60000))
+
   // One member turn inside the room; resolves to its final text, `{ failure }` when its
   // model call failed, `{ missed }` when it went quiet for too long, `{ approval }` when
-  // it waits for the user's approval, or null when the round was stopped. The wait
-  // restarts on each event of the member's Session, so a member at work is never cut off.
-  async function roomTurn(room, member, sessionId, text, note, signal, started) {
+  // it waits for the user's approval, `{ working }` when it goes on working without the
+  // round, or null when the round was stopped. The wait restarts on each event of the
+  // member's Session, so a member at work is never cut off. `by` is the member that
+  // called it, which answers what the turn posts after the round moved on.
+  async function roomTurn(room, member, sessionId, text, note, signal, started, by) {
     if (signal.aborted) return null
     const exchangeId = randomUUID()
     const turn = { botId: member.id, sessionId, exchangeId }
     started.push(turn)
     room.seen[member.id] = room.seq
+    // Checked before the delivery, which may start the turn at once.
+    const busy = rt.live.get(sessionId)?.turn !== undefined
     const done = new Promise((resolve) => {
       let timer
+      let grace
       const finish = (value) => {
         clearTimeout(timer)
+        clearTimeout(grace)
         rt.roomWaiters.delete(exchangeId)
         resolve(value)
       }
@@ -177,14 +208,17 @@ export function install(rt) {
         clearTimeout(timer)
         timer = setTimeout(() => finish({ missed: true }), ROOM_REPLY_TIMEOUT_MS)
       }
+      const work = () => { grace ??= setTimeout(() => finish({ working: true }), ROOM_WORK_GRACE_MS) }
       touch()
-      rt.roomWaiters.set(exchangeId, { sessionId, botId: member.id, roomId: room.id, resolve: finish, fail: failure => finish({ failure }), touch, approval: () => finish({ approval: true }) })
+      rt.roomWaiters.set(exchangeId, { sessionId, botId: member.id, roomId: room.id, resolve: finish, fail: failure => finish({ failure }), touch, work, approval: () => finish({ approval: true }) })
       signal.addEventListener('abort', () => finish(null), { once: true })
     })
     try {
-      await rt.deliver({ fromId: undefined, toId: member.id, sessionId, role: 'room', roomId: room.id, exchangeId, note, text })
+      await rt.deliver({ fromId: undefined, toId: member.id, sessionId, role: 'room', roomId: room.id, exchangeId, note, text, ...(by ? { askedBy: by } : {}) })
       // Still held by an earlier request: this turn cannot start until the user answers.
       if (rt.waitsForApproval?.(sessionId)) rt.roomWaiters.get(exchangeId)?.approval()
+      // Still at earlier work: the call waits in its inbox and is answered after that.
+      else if (busy) rt.roomWaiters.get(exchangeId)?.resolve({ working: true })
     } catch (error) {
       rt.warn('ds-bot: group delivery to %s failed: %s', member.name, error)
       rt.roomWaiters.get(exchangeId)?.resolve(null)
@@ -205,17 +239,25 @@ export function install(rt) {
   }
   rt.touchRoomTurn = (sessionId) => { for (const waiter of waitersOf(sessionId)) waiter.touch() }
   rt.yieldRoomTurn = (sessionId) => { for (const waiter of waitersOf(sessionId)) waiter.approval() }
+  // The team's own tools are quick; any other tool is the start of work.
+  const QUICK_TOOLS = new Set(TEAM_TOOLS)
+  rt.workRoomTurn = (sessionId, tool) => {
+    if (QUICK_TOOLS.has(tool)) return
+    for (const waiter of waitersOf(sessionId)) waiter.work()
+  }
 
   // A called member moves up if it is still waiting, or gets one more turn if it
   // already spoke; either way it goes right after slot `index`. `cap` is the caller's
-  // per-member turn bound for the round.
-  function callMembers(round, turns, index, callees, note, cap) {
+  // per-member turn bound for the round; `by` is the calling member, if a member called.
+  function callMembers(round, turns, index, callees, note, cap, by) {
     let next = index + 1
     for (const peer of callees) {
       if ((turns.get(peer.id) ?? 0) >= cap) continue
       const waiting = round.slots.findIndex((other, at) => at > index && other.id === peer.id && other.status === 'waiting')
       const called = waiting === -1 ? { id: peer.id, name: peer.name, status: 'waiting' } : round.slots.splice(waiting, 1)[0]
       called.note = note
+      if (by === undefined) delete called.by
+      else called.by = by
       round.slots.splice(next, 0, called)
       next += 1
     }
@@ -258,6 +300,7 @@ export function install(rt) {
     }
     // The user spoke in this room, so Bots may start their own rounds again.
     room.botRounds = 0
+    room.lateRounds = 0
     void rt.save().catch(() => {})
     return round.slots.length - before
   }
@@ -296,7 +339,7 @@ export function install(rt) {
       const prompt = roomPrompt(room, member, round)
       round.shown?.push(member.id)
       const text = session.brief === undefined ? prompt : `${session.brief}\n\n${prompt}`
-      const reply = await roomTurn(room, member, session.id, text, slot.note ?? 'your turn', signal, round.started)
+      const reply = await roomTurn(room, member, session.id, text, slot.note ?? 'your turn', signal, round.started, slot.by)
       round.speaking = null
       if (reply?.failure !== undefined) {
         // Not a pass: the user sees why the member is silent, and the round goes on.
@@ -310,6 +353,11 @@ export function install(rt) {
       if (reply?.approval) {
         slot.status = 'waiting-approval'
         round.replies.push({ kind: 'approval', botId: member.id, name: member.name, color: member.color, time: Date.now() })
+        continue
+      }
+      if (reply?.working) {
+        slot.status = 'working'
+        round.replies.push({ kind: 'working', botId: member.id, name: member.name, color: member.color, time: Date.now() })
         continue
       }
       if (reply === null || reply?.missed || isPass(reply)) {
@@ -329,7 +377,7 @@ export function install(rt) {
       const { all, found: named } = mentionsIn(reply, everyone)
       const found = named.filter(other => other.id !== member.id)
       const callees = leads && all ? [...found, ...others.filter(other => !found.includes(other))] : found
-      callMembers(round, turns, index, callees, `${member.name} mentioned you`, leads ? ROOM_ADMIN_TURNS_EACH : ROOM_TURNS_EACH)
+      callMembers(round, turns, index, callees, `${member.name} mentioned you`, leads ? ROOM_ADMIN_TURNS_EACH : ROOM_TURNS_EACH, member.id)
     }
   }
 
@@ -350,25 +398,37 @@ export function install(rt) {
       const posts = queued.length > 0 ? queued : [{ text: '' }]
       const startSeq = room.seq + 1
       // The opening greeting is a cue for the admin, not a line of the group; a member's
-      // late failure is an event of the round.
-      for (const post of posts.filter(item => !item.kickoff && !item.failed)) {
+      // late failure, its work picked up after a restart, or its work the user stopped is
+      // an event of the round.
+      const event = item => item.failed || item.resumed || item.stopped
+      for (const post of posts.filter(item => !item.kickoff && !event(item))) {
         // Image readings go into the log only; `@` names are picked from what the user typed.
         const text = post.images === undefined ? post.text : [post.text, ...await rt.imagesForGroup(post.images, room.id)].filter(Boolean).join('\n')
         appendRoom(room, post.botId
           ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId, text }
           : { who: 'User', text })
       }
-      if (posts.some(post => !post.botId && !post.kickoff)) room.botRounds = 0
+      if (posts.some(post => !post.botId && !post.kickoff)) {
+        room.botRounds = 0
+        room.lateRounds = 0
+      }
       await rt.save()
-      const opener = posts.at(-1)
+      // An event post never picks the speakers over a message queued with it.
+      const opener = posts.findLast(post => !event(post)) ?? posts.at(-1)
       const references = posts.flatMap(post => post.references ?? [])
+      // A member a Bot's post calls by name works for that Bot.
+      const named = opener.botId === undefined ? [] : mentionsIn(opener.text ?? '', room.members.map(rt.botOf).filter(Boolean)).found
       const round = {
         roomId: room.id,
         members: room.members,
         startSeq,
         ...(opener.kickoff ? { kickoff: true } : {}),
         ...(references.length > 0 ? { references, shown: [] } : {}),
-        slots: openingSpeakers(room, opener).map(member => ({ id: member.id, name: member.name, status: 'waiting', ...(opener.kickoff ? { note: 'the group was just created' } : {}) })),
+        slots: openingSpeakers(room, opener).map(member => ({
+          id: member.id, name: member.name, status: 'waiting',
+          ...(opener.kickoff ? { note: 'the group was just created' } : {}),
+          ...(named.includes(member) ? { by: opener.botId } : {}),
+        })),
         speaking: null,
         turns: 0,
         replies: [],
@@ -382,6 +442,15 @@ export function install(rt) {
         round.failed.push(bot?.name ?? post.name)
         round.replies.push({ kind: 'failed', botId: post.botId, name: bot?.name ?? post.name, color: bot?.color, code, ...(status ? { status } : {}), text: message, time: Date.now() })
       }
+      // The log line tells the admin and the other members on their next turn.
+      for (const post of posts.filter(item => item.resumed || item.stopped)) {
+        const bot = rt.botOf(post.botId)
+        const name = bot?.name ?? post.name
+        const kind = post.stopped ? 'stopped' : post.again ? 'cut' : 'resumed'
+        appendRoom(room, { who: name, botId: post.botId, kind, text: '' })
+        round.replies.push({ kind, botId: post.botId, name, color: bot?.color, time: Date.now() })
+      }
+      if (posts.some(post => post.resumed || post.stopped)) await rt.save()
       rt.roomProgress.set(exec.callId, round)
       try {
         await runRound(room, round, exec.signal, exec.agent)
@@ -476,7 +545,9 @@ export function install(rt) {
   }))
 
   // A Bot that posts never answers its own post. @mentions choose the speakers; else
-  // the admin answers alone in admin mode, or first of everyone.
+  // the admin answers alone in admin mode, or first of everyone. What a member posts
+  // after its round moved on is answered by the member that asked for it; work the
+  // user asked for is left for the user to read.
   function openingSpeakers(room, opener) {
     const everyone = room.members.map(rt.botOf).filter(Boolean)
     const members = everyone.filter(bot => bot.id !== opener.botId)
@@ -485,7 +556,7 @@ export function install(rt) {
     if (opener.quiet) return []
     const { all, found: named } = mentionsIn(opener.text, everyone, opener.references)
     const found = named.filter(bot => bot.id !== opener.botId)
-    if (opener.late) return found.length > 0 ? found : admin ? [admin] : []
+    if (opener.late) return found.length > 0 ? found : members.filter(bot => bot.id === opener.askedBy)
     if (found.length > 0 && !all) return found
     if (!all && room.mode === 'admin' && admin) return [admin]
     return admin ? [admin, ...members.filter(bot => bot !== admin)] : members
@@ -502,9 +573,10 @@ export function install(rt) {
   }
   rt.postToRoom = postToRoom
 
-  // A member the round moved on from (it went quiet or waited for an approval) posts
-  // what its turn ended with. Only the admin and anyone it names answer, and past the
-  // Bot round limit nobody does, so late posts cannot keep a group talking.
+  // A member the round moved on from (it went on working, went quiet or waited for an
+  // approval) posts what its turn ended with. The member that asked for it and anyone
+  // it names answer; past the late round limit nobody does, so late posts cannot keep a
+  // group talking.
   async function lateRoomReply(sessionId, info, reply) {
     const owner = rt.groupOwners.get(sessionId)
     const room = rt.roomOf(owner?.roomId ?? info.roomId)
@@ -512,13 +584,28 @@ export function install(rt) {
     if (room === undefined || member === undefined || !room.members.includes(member.id)) return
     const text = stripOwnName(member.name, reply)
     if (isPass(text)) return
-    const quiet = (room.botRounds ?? 0) >= ROOM_BOT_ROUNDS
-    if (!quiet) room.botRounds = (room.botRounds ?? 0) + 1
+    const quiet = (room.lateRounds ?? 0) >= ROOM_LATE_ROUNDS
+    if (!quiet) room.lateRounds = (room.lateRounds ?? 0) + 1
     await rt.save()
-    await postToRoom(room, member, text, { late: true, ...(quiet ? { quiet: true } : {}) })
+    await postToRoom(room, member, text, { late: true, ...(info.askedBy ? { askedBy: info.askedBy } : {}), ...(quiet ? { quiet: true } : {}) })
       .catch(error => rt.warn('ds-bot: late group reply from %s failed: %s', member.name, error))
   }
   rt.lateRoomReply = lateRoomReply
+
+  // The user stops a member's work in this group from the group's details. Messages
+  // still waiting for that member here go with it.
+  async function stopMemberWork(roomId, botId) {
+    await rt.load()
+    const room = rt.roomOf(roomId)
+    const member = rt.botOf(botId)
+    const sessionId = room?.sessions?.[botId]
+    if (room === undefined || member === undefined || sessionId === undefined || rt.live.get(sessionId)?.turn === undefined) return false
+    const agent = await rt.resolveAgent(sessionId)
+    agent.cancel({ kind: 'user' })
+    await postToRoom(room, member, '', { quiet: true, stopped: true })
+    return true
+  }
+  rt.stopMemberWork = stopMemberWork
 
   // The round said such a member posts when done; a failed model call is how it ended.
   // Nobody answers it.
@@ -550,8 +637,10 @@ export function install(rt) {
   async function reportRound(room, post, round) {
     const lines = round.replies.filter(reply => reply.kind === undefined).map(reply => `${reply.name}: ${reply.text}`)
     const waiting = round.replies.filter(reply => reply.kind === 'approval').map(reply => reply.name)
+    const working = round.replies.filter(reply => reply.kind === 'working').map(reply => reply.name)
     const text = [
       lines.length > 0 ? `Replies to your post (oldest first):\n${lines.join('\n')}` : 'Nobody replied to your post.',
+      working.length > 0 ? `Still working on it: ${working.join(', ')}. Each posts its result in the group when done, not to you; read_group_chat shows it.` : '',
       waiting.length > 0 ? `Waiting for the user's approval: ${waiting.join(', ')}. What they say afterwards is posted in the group, not sent to you; read_group_chat shows it.` : '',
       round.passed.length > 0 ? `Stayed silent: ${round.passed.join(', ')}.` : '',
       round.failed.length > 0 ? `Could not answer because their model call failed: ${round.replies.filter(reply => reply.kind === 'failed').map(reply => `${reply.name} (${failureLine({ code: reply.code, status: reply.status, message: reply.text })})`).join(', ')}.` : '',

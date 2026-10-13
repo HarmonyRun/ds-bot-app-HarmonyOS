@@ -7,12 +7,23 @@ import { createNotificationHub } from '../src/mobile/notifications.js'
 async function eventually(predicate) { for (let i=0;i<200;i++) { if(await predicate())return; await new Promise(resolve=>setTimeout(resolve,5)) } throw new Error('Notification did not settle') }
 const tick=()=>new Promise(resolve=>setImmediate(resolve))
 function fixture(){
-  let wake, frame, active=true
+  let wake, active=true
+  const frames=[]
   const valid=new Set(['one','two']), pushes=[]
   const adapter={conversations:async()=>({conversations:[{id:'owned'}]}),state:async()=>({questions:{}}),action:async()=>({requests:[]}),async *follow(_id,_options,signal){
-    yield {type:'reset',messages:[]};while(!signal.aborted){await new Promise(resolve=>{wake=resolve;signal.addEventListener('abort',resolve,{once:true})});if(signal.aborted)break;if(frame){const value=frame;frame=undefined;yield value}}
+    yield {type:'reset',messages:[]}
+    while(!signal.aborted){
+      if(!frames.length){
+        let release
+        await new Promise(resolve=>{release=resolve;wake=resolve;signal.addEventListener('abort',resolve,{once:true});if(signal.aborted)resolve()})
+        signal.removeEventListener('abort',release)
+        if(wake===release)wake=undefined
+      }
+      if(signal.aborted)break
+      if(frames.length)yield frames.shift()
+    }
   }}
-  return {adapter,valid,pushes,authorized:id=>valid.has(id),active:()=>active,sendPush:async(tokens,item)=>pushes.push({tokens,item}),emit(value){frame=value;wake?.()},disable(){active=false}}
+  return {adapter,valid,pushes,authorized:id=>valid.has(id),active:()=>active,sendPush:async(tokens,item)=>pushes.push({tokens,item}),emit(value){frames.push(value);wake?.()},disable(){active=false}}
 }
 test('notification events persist without transcripts, device reads are isolated and revoked devices cannot register',async t=>{
   const home=await mkdtemp(join(tmpdir(),'ds-bot-notifications-'));t.after(()=>rm(home,{recursive:true,force:true}))

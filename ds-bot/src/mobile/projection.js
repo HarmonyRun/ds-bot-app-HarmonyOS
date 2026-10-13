@@ -2,6 +2,7 @@ const textOf = content => (Array.isArray(content) ? content : []).filter(block =
 const reasoningOf = content => (Array.isArray(content) ? content : []).filter(block => block?.type === 'reasoning').map(block => block.text ?? '').join('\n')
 const privateKey = /token|password|passwd|secret|api[_-]?key|authorization|cookie|credential|private[_-]?key/i
 const INTERNAL_TOOLS = new Set(['group_relay'])
+const GROUP_EVENTS = { working: '{name} started on it', approval: '{name} paused for your approval', resumed: '{name} was cut off by a restart and picked its work back up', cut: '{name} was cut off by a restart again and stopped', stopped: "You stopped {name}'s work" }
 
 function cleanObject(value, state, depth = 0) {
   if (depth > 8) { state.truncated = true; return '[Nested detail omitted]' }
@@ -59,9 +60,14 @@ export function projectEvent(event, { sessionId, kind = 'bot', hiddenTurns = [],
     let result
     try { result = JSON.parse(textOf(data.message?.content)) } catch { return [] }
     return (Array.isArray(result?.replies) ? result.replies : []).flatMap((reply, index) => {
-      if (typeof reply?.text !== 'string' || reply.text === '') return []
-      return [{ ...base, id: `${base.id}:reply:${index}`, role: reply.kind ? 'system' : 'assistant', text: visible(reply.text),
-        createdAt: reply.time ?? base.createdAt, author: { id: reply.botId ?? '', name: visible(reply.name ?? 'Bot') } }]
+      if (!reply || typeof reply !== 'object') return []
+      const name = visible(typeof reply.name === 'string' ? reply.name.slice(0, 100) : 'Bot')
+      const event = Object.hasOwn(GROUP_EVENTS, reply.kind) ? GROUP_EVENTS[reply.kind] : undefined
+      const text = event ? event.replace('{name}', name) : typeof reply.text === 'string' ? visible(reply.text) : ''
+      if (!text) return []
+      return [{ ...base, id: `${base.id}:reply:${index}`, role: reply.kind ? 'system' : 'assistant', text,
+        ...(event ? { systemEvent: { kind: reply.kind, name } } : {}),
+        createdAt: reply.time ?? base.createdAt, author: { id: typeof reply.botId === 'string' ? reply.botId : '', name } }]
     })
   }
   if (event.type === 'tool/call' || event.type === 'tool/result') {
@@ -93,9 +99,14 @@ export function projectEvent(event, { sessionId, kind = 'bot', hiddenTurns = [],
   }
   if (event.type !== 'user/message') return []
   const source = data.source ?? {}
+  if (source.kind === 'bot' && (source.role === 'resume' || source.resumed === true || source.role === 'retry' || source.retried === true) && source.role !== 'post') {
+    const resumed = source.role === 'resume' || source.resumed === true
+    return [{ ...base, role: 'system', text: resumed ? 'Picked up its work after a restart' : 'Asked to make the tool call it wrote as text', systemEvent: { kind: resumed ? 'resumed' : 'retry' } }]
+  }
   const attachments = attachmentsOf(data.content, visible)
   let text = textOf(data.content)
   if (kind === 'room' && source.kind === 'bot' && source.role === 'post') {
+    if (source.failed !== undefined || source.resumed === true || source.stopped === true) return []
     text = text.replace(/^\[Group post from [^\]]*\]\n?/, '')
     return text ? [{ ...base, role: 'assistant', text: visible(text), author: { id: source.senderSessionId ?? '', name: visible(source.senderName ?? 'Bot') } }] : []
   }

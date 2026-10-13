@@ -22,9 +22,21 @@ runInNewContext(bundle.outputFiles[0].text, {
     return platform[name]
   },
 })
-const { busyMembers, summaryText } = module.exports
+const { busyMembers, summaryText, splitBusy, MemberDock } = module.exports
 // Values from the bundle's realm compare by content only.
 const plain = value => JSON.parse(JSON.stringify(value))
+// Renders the dock's own parts of an element tree, and lists its rows' labels.
+const expand = (node) => {
+  if (Array.isArray(node)) return node.flatMap(expand)
+  if (node === null || typeof node !== 'object') return node
+  if (['WorkRow', 'SummaryLine'].includes(node.type?.name)) return expand(node.type({ ...node.props, children: node.children }))
+  return { ...node, children: node.children.map(expand) }
+}
+const rowLabels = (node) => {
+  if (Array.isArray(node)) return node.flatMap(rowLabels)
+  if (node === null || typeof node !== 'object') return []
+  return [...(node.props.className === 'bt-mw-row' ? [node.props['aria-label']] : []), ...rowLabels(node.children)]
+}
 
 test('the members line names who waits for an approval first, then who is at work', () => {
   const names = { a: 'Anvil', b: 'Flint', c: 'Prism', d: 'Quill', e: 'King', f: 'Comet' }
@@ -40,4 +52,33 @@ test('the members line names who waits for an approval first, then who is at wor
   assert.deepEqual(plain(summaryText(busy.slice(1, 3))), { waiting: 'Flint and Prism are waiting for your approval', doing: '' })
   assert.deepEqual(plain(summaryText(busy.slice(4))), { waiting: '', doing: 'Comet · Thinking about it…' })
   assert.equal(busyMembers(room, { bots: {}, approvals: [] }, roster).length, 0)
+})
+
+const names = { a: 'Anvil', b: 'Flint', c: 'Prism', d: 'Quill' }
+const team = {
+  byId: Object.fromEntries(Object.entries(names).map(([id, name]) => [id, { id, name }])),
+  roomsById: { r1: { id: 'r1', name: 'Ops', members: ['a', 'b', 'c', 'd'] }, r2: { id: 'r2', name: 'Docs', members: ['a', 'b'] } },
+}
+const dock = (sessionId, work) => expand(MemberDock({ sessionId, useRoster: pick => pick(team), useWork: pick => pick(work), actions: {} }))
+
+test('a member at work in the group gets a row; the speaker, work elsewhere and approvals do not', () => {
+  const work = {
+    // Anvil runs in its own chat too; its work here wins.
+    bots: { a: { since: 1, tool: 'pwsh' }, b: { since: 1, roomId: 'r2', tool: 'edit' } },
+    rooms: { r1: [{ botId: 'a', since: 1, tool: 'write' }, { botId: 'd', since: 1, speaking: true }], r2: [{ botId: 'b', since: 1, tool: 'edit' }] },
+    approvals: [{ botId: 'c', roomId: 'r1' }],
+  }
+  const busy = busyMembers(team.roomsById.r1, work, team)
+  const { rows, rest } = splitBusy(busy)
+  assert.deepEqual(plain(rows.map(entry => [entry.bot.name, entry.doing.tool, entry.doing.roomId])), [['Anvil', 'write', 'r1']])
+  assert.deepEqual(plain(rest.map(entry => [entry.bot.name, entry.state])), [['Prism', 'ask'], ['Flint', 'work']])
+  assert.deepEqual(rowLabels(dock('r1', work)), ['Anvil · Writing changes…'])
+  assert.equal(busyMembers(team.roomsById.r2, work, team).length, 2)
+})
+
+test('a Bot\'s own chat shows the groups it is at work in, unless its own chat runs', () => {
+  const away = { bots: { a: { since: 1, roomId: 'r1', tool: 'pwsh' } }, rooms: { r1: [{ botId: 'a', since: 1, tool: 'pwsh' }], r2: [{ botId: 'a', since: 1 }] }, approvals: [] }
+  assert.deepEqual(rowLabels(dock('a', away)), ['in Ops · Running shell commands…', 'in Docs · Thinking about it…'])
+  assert.deepEqual(rowLabels(dock('a', { ...away, bots: { a: { since: 1 } } })), [])
+  assert.equal(dock('b', away), null)
 })

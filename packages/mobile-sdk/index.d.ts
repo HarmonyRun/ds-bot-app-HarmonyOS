@@ -38,6 +38,7 @@ export interface Message {
   requestId?: string;
   /** Last event represented by an updatable tool card; seq remains its call position. */
   updatedSeq?: number;
+  systemEvent?: { kind: 'working' | 'approval' | 'resumed' | 'cut' | 'stopped' | 'retry'; name?: string };
   tool?: ToolActivity;
   attachments?: Attachment[];
   author?: string | Record<string, unknown>;

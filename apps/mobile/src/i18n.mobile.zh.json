@@ -615,5 +615,20 @@
   "The stream closed.": "实时连接已关闭。",
   "On your computer, open Settings → Mobile devices → Enable phone connection. Scan the code on the same Wi-Fi, then approve your phone on the computer.": "在电脑上打开「设置 → 手机设备 → 启用手机连接」。手机与电脑连接同一 Wi-Fi，扫码后在电脑上批准连接。",
   "This pairing code has an invalid computer identity.": "配对码中的电脑身份无效，请在电脑上生成新的配对码。",
-  "A pinned computer identity requires HTTPS.": "验证电脑身份需要使用 HTTPS。"
+  "A pinned computer identity requires HTTPS.": "验证电脑身份需要使用 HTTPS。",
+  "Capabilities": "能力库",
+  "MCP server": "MCP 服务",
+  "Pack": "能力包",
+  "Ready": "已就绪",
+  "Needs approval": "需要批准",
+  "Could not connect": "无法连接",
+  "Use capability {name}": "使用能力 {name}",
+  "Could not update capabilities.": "无法更新能力设置。",
+  "Update your host plugin to manage capabilities.": "请更新电脑上的插件以管理能力库。",
+  "No capabilities yet. Add them in DS Bot settings on your computer.": "暂无能力，请在电脑的 DS Bot 设置中添加。",
+  "Configure MCP servers, skills and packs on your computer. Choose what each Bot can use here.": "在电脑上配置 MCP 服务、技能和能力包，在这里选择每个 Bot 可使用的能力。",
+  "Approve this MCP command on your computer.": "请在电脑上批准此 MCP 命令。",
+  "Stop {name} in this group": "停止 {name} 在此群的任务",
+  "Stop member work": "停止成员任务",
+  "Could not stop member work.": "无法停止成员任务。"
 }

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createTextAccumulator, projectEvent, projectQueue, projectRecords } from './projection.js'
+import { createTextAccumulator, detail, projectEvent, projectQueue, projectRecords } from './projection.js'
 import { createManagement, MANAGEMENT_ACTIONS } from './management.js'
 
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
@@ -28,6 +28,7 @@ const ACTIONS = {
   exchange: ['a', 'b'], earlier: ['sessionId', 'cursor'], parts: ['conversationId'], search: ['conversationId', 'query', 'cursor', 'limit'],
   context: ['conversationId', 'sessionId', 'seq', 'limit'],
   'reference-chats': ['conversationId'],
+  'bot-capability': ['botId', 'name', 'attached'], 'stop-member-work': ['roomId', 'botId'],
   schedules: [], 'schedule-create': ['target', 'title', 'prompt', 'when'], 'schedule-delete': ['sessionId', 'id'],
   'connector-connect': ['id', 'token'], 'connector-retry': ['id'], 'connector-disconnect': ['id'], 'browser-pages': [], 'browser-read': ['botId', 'start'], 'browser-control': ['botId', 'command', 'tabId', 'url', 'requestId', 'snapshotId', 'item', 'text', 'direction'],
   'secret-set': ['requestId', 'name', 'value', 'purpose', 'scope'], 'secret-allow': ['requestId'], 'secret-cancel': ['requestId'],
@@ -216,14 +217,31 @@ export function createAdapter(rt) {
         conversationId: id, ...(questionOwners.get(request.sessionId) === id ? { sessionId: request.sessionId } : {}),
       }))]))
     selected.browser = rt.browserEnabled === true
+    if (Array.isArray(value.capabilities)) selected.capabilities = value.capabilities.filter(item => item && typeof item.name === 'string' && ['mcp', 'skill', 'pack'].includes(item.kind)).map(item => ({
+      name: item.name, kind: item.kind, description: detail(String(item.description ?? ''), 2000, redact).text,
+      ...(item.kind === 'mcp' ? { transport: item.transport === 'streamable-http' ? 'streamable-http' : 'stdio', approved: item.approved === true } : {}),
+      ...(item.kind === 'pack' ? { items: (Array.isArray(item.items) ? item.items : []).filter(name => typeof name === 'string') } : {}),
+    }))
     const botIds = new Set((selected.bots ?? []).map(bot => bot.id))
     const roomIds = new Set(selected.rooms.map(room => room.id))
+    if (value.capabilityStatuses) selected.capabilityStatuses = Object.fromEntries(Object.entries(value.capabilityStatuses).filter(([id]) => botIds.has(id)).map(([id, statuses]) => [id,
+      Object.fromEntries(Object.entries(statuses ?? {}).filter(([name, status]) => selected.capabilities?.some(item => item.name === name) && status && ['ready', 'connecting', 'needs-approval', 'error'].includes(status.state)).map(([name, status]) => [name, {
+        state: status.state, ...(typeof status.error === 'string' ? { error: detail(status.error, 500, redact).text } : {}),
+      }])),
+    ]))
     selected.work = {
       bots: Object.fromEntries(Object.entries(value.work?.bots ?? {}).filter(([id]) => botIds.has(id)).map(([id, work]) => [id, {
         ...(typeof work.tool === 'string' ? { tool: redact(work.tool) } : {}),
         ...(Number.isFinite(work.since) ? { since: work.since } : {}),
         ...(roomIds.has(work.roomId) ? { roomId: work.roomId } : {}),
       }])),
+      rooms: Object.fromEntries(Object.entries(value.work?.rooms ?? {}).filter(([id]) => roomIds.has(id)).map(([id, work]) => [id,
+        (Array.isArray(work) ? work : []).filter(entry => botIds.has(entry.botId) && selected.rooms.find(room => room.id === id)?.members?.includes(entry.botId)).map(entry => ({
+          botId: entry.botId, ...(Number.isFinite(entry.since) ? { since: entry.since } : {}),
+          ...(typeof entry.tool === 'string' ? { tool: detail(entry.tool, 300, redact).text } : {}),
+          ...(entry.speaking === true ? { speaking: true } : {}),
+        })),
+      ])),
       approvals: (value.work?.approvals ?? []).filter(entry => botIds.has(entry.botId) && (!entry.roomId || roomIds.has(entry.roomId))).map(entry => ({
         id: entry.id, botId: entry.botId, sessionId: entry.sessionId, roomId: entry.roomId, answerable: entry.answerable === true,
         tool: redact(String(entry.tool ?? '')), reason: redact(String(entry.reason ?? '')), at: entry.at,
@@ -385,6 +403,15 @@ export function createAdapter(rt) {
     const questionSession = ['answer-question', 'dismiss-question'].includes(endpoint)
       && (view.rooms ?? []).some(room => room.parts?.includes(body.sessionId))
     const requireBot = id => { if (!bots.has(id)) throw error(404, 'mobile/not-found', 'This Bot is not on the team') }
+    if (endpoint === 'bot-capability') {
+      requireBot(body.botId)
+      if (typeof body.name !== 'string' || body.name.length > 32 || !view.capabilities?.some(item => item.name === body.name)) throw error(404, 'mobile/not-found', 'This capability is not on the team')
+      if (typeof body.attached !== 'boolean') throw error(400, 'mobile/invalid', 'Choose whether to attach this capability')
+    }
+    if (endpoint === 'stop-member-work') {
+      requireBot(body.botId)
+      if (!view.rooms?.some(room => room.id === body.roomId && room.members?.includes(body.botId))) throw error(404, 'mobile/not-found', 'This member is not in the group')
+    }
     if (['update-bot', 'duplicate-bot', 'delete-bot', 'set-main'].includes(endpoint)) requireBot(body.id)
     if (endpoint === 'set-flags' && !bots.has(body.id) && !rooms.has(body.id) && !agents.some(item => item.id === body.id)) throw error(404, 'mobile/not-found', 'This conversation is not on the team')
     if (endpoint === 'exchange') { requireBot(body.a); requireBot(body.b) }
@@ -703,8 +730,10 @@ export function createAdapter(rt) {
         content.push({ type: 'file', receiptId: uploaded.receiptId })
       }
     }
-    // Upload admission can await I/O; recheck the logical target afterwards.
+    await rt.ensureCapabilities?.(sessionId)
+    // Upload admission and capability mounting can await I/O; recheck the target.
     requireSession(await conversation(conversationId), sessionId, true)
+    if (rt.readOnly?.() !== undefined) throw error(409, 'bot/read-only', 'The team is read-only on this host')
     if (text.includes('dsh-session:')) await checkReferences(conversationId, text, scoped)
     scoped.throwIfAborted()
     const accepted = await publicCall(() => ctx.sessionController.prompt({ requestId, sessionId, mode: 'queue', content }, scoped))

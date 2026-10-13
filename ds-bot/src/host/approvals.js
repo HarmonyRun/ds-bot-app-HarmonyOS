@@ -29,11 +29,17 @@ export function install(rt) {
       at: Date.now(),
     }
     pending.set(id, entry)
-    if (owner === undefined) return Promise.resolve(next()).finally(() => pending.delete(id))
+    rt.noteApproval?.(sessionId, { tool: entry.tool, reason: entry.reason.slice(0, 200) })
+    const settled = () => {
+      pending.delete(id)
+      rt.noteApproval?.(sessionId, undefined)
+    }
+    if (owner === undefined) return Promise.resolve(next()).finally(settled)
     rt.yieldRoomTurn?.(sessionId)
     return new Promise((resolve) => {
       entry.answer = (outcome) => {
-        if (!pending.delete(id)) return
+        if (!pending.has(id)) return
+        settled()
         resolve(outcome)
       }
       if (request.signal?.aborted) entry.answer('cancelled')

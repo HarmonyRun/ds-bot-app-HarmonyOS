@@ -59,8 +59,8 @@ function start(team, { models = [], reasoning = {}, archiveError } = {}) {
     const response = await route.fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))
     return response.json()
   }
-  const stop = () => {
-    ctx.dispose()
+  const stop = async () => {
+    await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   return { call, stop, home, sent, selected, ctx, archived, warnings }
@@ -92,7 +92,7 @@ test('the first Main Bot waits for the user to pick a model, then greets', async
   assert.equal(team.defaultModel, 'deepseek/deepseek-v4-flash')
 
   assert.equal((await call('update-bot', { id: main.id, model: 'deepseek/deepseek-v4-pro' })).ok, true)
-  await settle()
+  await until(() => sent.length > 0)
   team = (await call('state', {})).value
   main = team.bots.find(bot => bot.id === team.mainBotId)
   assert.equal(main.model, 'deepseek/deepseek-v4-pro')
@@ -145,7 +145,7 @@ test('a group the user makes without a first message opens with its admin asking
   for (const listener of ctx.listeners.get('session/event')) listener({ id: room.id }, { type: 'user/message', data: sent[0].message })
   const controller = new AbortController()
   const relay = ctx.registeredTools.get('group_relay').execute({}, { agent: { id: room.id }, callId: 'relay', signal: controller.signal })
-  await settle()
+  await until(() => sent.length > 1)
   controller.abort()
   const result = JSON.parse(await relay)
   const turns = sent.slice(1)
@@ -356,13 +356,15 @@ test('a hidden Bot made Main Bot shows again, and a replaced Chief drops its hel
   const writer = (await call('create-bot', { name: 'Writer' })).value
   await call('set-flags', { id: writer.id, hidden: true })
   await settle()
-  const greeted = sent.length
+  // Only Chief's messages count: Writer's own greeting can go out late on a busy machine.
+  const toChief = () => sent.filter(item => item.sessionId === chief).length
+  const greeted = toChief()
   const team = (await call('set-main', { id: writer.id, main: true, replace: chief })).value
   assert.equal(team.bots.find(bot => bot.id === writer.id).hidden, undefined)
   assert.equal(team.bots.find(bot => bot.id === chief).waiting, undefined)
   await call('update-bot', { id: chief, model: 'deepseek/deepseek-v4-flash' })
   await settle()
-  assert.equal(sent.length, greeted)
+  assert.equal(toChief(), greeted)
 })
 
 const takeover = (home, team) => {
@@ -415,7 +417,7 @@ test('a rolled-back Bot does not come back with a save queued before the rollbac
   t.after(async () => {
     fsp.rename = rename
     syncBuiltinESMExports()
-    stop()
+    await stop()
   })
   // The first Bot also saves the team's workspace; later ones save only themselves.
   await call('create-bot', { name: 'Warm' })

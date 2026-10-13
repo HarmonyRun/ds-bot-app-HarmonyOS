@@ -336,6 +336,7 @@ function Shell() {
     const room = workspace.team.rooms.find((r) => r.id === item.id);
     const main = !!bot && mainIds.includes(bot.id);
     const active = item.id === conversation?.id;
+    const needsApproval = workspace.team.work?.approvals.some(entry => bot ? entry.botId === bot.id && !entry.roomId : room ? entry.roomId === room.id : false);
       return (
       <Pressable
         key={item.id}
@@ -378,6 +379,7 @@ function Shell() {
             }}
           >
             {item.name || tr("New conversation")}
+            {needsApproval ? " · " + tr("Waiting for approval") : ""}
           </Text>
           <Text numberOfLines={1} style={{fontSize:17,lineHeight:24,color:t.muted}}>
             {previews[item.id]?.text.replace(/\s+/g," ").trim() || (typeof item.preview === "string" && item.preview) ||

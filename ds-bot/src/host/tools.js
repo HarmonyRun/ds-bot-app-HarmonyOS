@@ -17,6 +17,10 @@ export function install(rt) {
   const { ctx, state } = rt
 
   const callerBot = (exec) => rt.botOf(rt.selfOf(exec.agent?.id))
+  const callerRoom = (exec) => {
+    const roomId = rt.groupOwners.get(exec.agent?.id)?.roomId
+    return roomId ? { fromRoomId: roomId } : {}
+  }
 
   const roomLine = (room, self) => {
     const members = room.members.map(rt.botOf).filter(Boolean)
@@ -100,7 +104,7 @@ export function install(rt) {
       const toUser = args.reply_to === 'user'
       const working = rt.live.get(rt.chatOf(target.id))?.turn !== undefined
       const steer = args.when !== 'queue' && !toUser
-      await rt.deliver({ fromId: sender.id, toId: target.id, text: args.message, role: 'request', hop, steer, ...(toUser ? { audience: 'user' } : {}) })
+      await rt.deliver({ fromId: sender.id, toId: target.id, text: args.message, role: 'request', hop, steer, ...(toUser ? { audience: 'user' } : callerRoom(exec)) })
       const sent = toUser
         ? `Delivered to ${target.name}. It will answer the user in its own chat; nothing comes back to you, so point the user to ${target.name}'s chat instead of relaying.`
         : working && steer
@@ -142,7 +146,7 @@ export function install(rt) {
         agent.cancel({ kind: 'hook', reason: 'ds-bot/stopped' })
       }
       const why = String(args.reason ?? '').trim() || 'Stop what you are doing; the previous turn was ended on purpose. Acknowledge briefly.'
-      await rt.deliver({ fromId: sender.id, toId: target.id, text: why, role: 'stopped' })
+      await rt.deliver({ fromId: sender.id, toId: target.id, text: why, role: 'stopped', ...callerRoom(exec) })
       return `Stopped ${target.name} in ${running.map(whereOf).join(' and ')}. It is told why in a new turn, whose reply comes back to you.`
     },
   }))
@@ -334,7 +338,7 @@ export function install(rt) {
     description: 'Post a message into a group chat as yourself. It starts a round: members reply in the group, where the user reads them. Main Bots may post into any group; an admin into its own group.',
     parameters: {
       group: GROUP_REF,
-      message: { type: 'string', required: true, description: 'What to say; write "@Name" to choose who answers' },
+      message: { type: 'string', required: true, description: 'What to say; write "@Name" to choose who answers, and a name without "@" to only mention a member' },
       report_back: { type: 'boolean', description: 'Also send the members\' replies back to you as a new message when the round ends' },
     },
     output,
@@ -420,6 +424,104 @@ export function install(rt) {
       return 'The card is on screen; the user\'s answer arrives as their next message.'
     },
   }))
+
+  ctx.tools.register(defineTool({
+    name: 'list_capabilities',
+    description: 'List shared MCP servers, skills, and packs, plus the capabilities attached to you.',
+    parameters: {},
+    output,
+    async execute(_args, exec) {
+      await rt.load()
+      const self = rt.selfOf(exec.agent?.id)
+      const bot = rt.botOf(self)
+      if (!bot) return 'Only Bots on the team can use list_capabilities.'
+      const items = Object.values(state.capabilities?.items ?? {})
+      if (items.length === 0) return 'No shared capabilities are saved yet.'
+      const statuses = rt.capabilityStatusesView()[bot.id] ?? {}
+      const lines = items.map(item => {
+        const extra = item.kind === 'pack' ? `; includes ${(item.items ?? []).join(', ') || 'nothing'}`
+          : item.kind === 'mcp' && item.transport === 'stdio' ? `; ${item.approved ? 'allowed' : 'needs user approval'}` : ''
+        const itemStatus = statuses[item.name]
+        const state = itemStatus ? ` (${itemStatus.state}${itemStatus.error ? `: ${itemStatus.error}` : ''})` : ''
+        const status = bot.capabilities?.includes(item.name) ? `; attached to you${state}` : ''
+        return `- ${item.name} (${item.kind})${item.description ? ` — ${item.description}` : ''}${extra}${status}`
+      })
+      return ['Shared capabilities:', ...lines].join('\n')
+    },
+  }))
+  ctx.tools.register(defineTool({
+    name: 'save_capability',
+    description: 'Create or update a shared MCP server, skill, or pack. Changes apply from your next message.',
+    parameters: {
+      name: { type: 'string', required: true, description: 'Lowercase letters, digits, and single hyphens, up to 32 characters; "github" is reserved' },
+      kind: { type: 'string', required: true, enum: ['mcp', 'skill', 'pack'] },
+      description: { type: 'string', description: 'What this capability provides' },
+      transport: { type: 'string', enum: ['stdio', 'streamable-http'], description: 'How to reach an MCP server: a local command or an HTTP URL' },
+      command: { type: 'string', description: 'Program that starts a local MCP server' },
+      args: { type: 'array', items: { type: 'string' }, description: 'Arguments for command' },
+      env: { type: 'object', additionalProperties: true, description: 'Environment variables for command; write $DSH_SECRET_<NAME> to insert a saved secret instead of the value' },
+      url: { type: 'string', description: 'MCP server URL' },
+      headers: { type: 'object', additionalProperties: true, description: 'HTTP headers; write $DSH_SECRET_<NAME> to insert a saved secret instead of the value' },
+      content: { type: 'string', description: 'Skill instructions' },
+      items: { type: 'array', items: { type: 'string' }, description: 'MCP server and skill names in the pack' },
+    },
+    output,
+    async execute(args, exec) {
+      await rt.load()
+      const self = rt.selfOf(exec.agent?.id)
+      if (!rt.botOf(self)) return 'Only Bots on the team can use save_capability.'
+      try {
+        const item = await rt.capabilitySave(args, { botId: self })
+        const approval = item.kind === 'mcp' && item.transport === 'stdio' && !item.approved
+          ? ' The user must allow this MCP server in DS Bot settings before it can work.'
+          : ''
+        return `Saved ${item.name}. Bots with it attached use the change from their next message.${approval}`
+      } catch (error) { return error.message }
+    },
+  }))
+  ctx.tools.register(defineTool({
+    name: 'delete_capability',
+    description: 'Remove a shared capability and detach it from every Bot and pack.',
+    parameters: { name: { type: 'string', required: true } },
+    output,
+    async execute(args, exec) {
+      await rt.load()
+      const self = rt.selfOf(exec.agent?.id)
+      if (!rt.botOf(self)) return 'Only Bots on the team can use delete_capability.'
+      try {
+        await rt.capabilityDelete(args.name, { botId: self })
+        return `Deleted ${args.name}; it was removed from every Bot and pack. The change applies from their next message.`
+      } catch (error) { return error.message }
+    },
+  }))
+  for (const [name, endpoint, verb] of [['attach_capability', 'attach', 'Attached'], ['detach_capability', 'detach', 'Detached']]) {
+    ctx.tools.register(defineTool({
+      name,
+      description: `${verb} a shared capability to yourself, or to another Bot if you are a Main Bot.`,
+      parameters: {
+        name: { type: 'string', required: true, description: 'Capability name from list_capabilities' },
+        bot: { type: 'string', description: 'Optional Bot name; only a Main Bot may change another Bot' },
+      },
+      output,
+      async execute(args, exec) {
+        await rt.load()
+        const self = rt.selfOf(exec.agent?.id)
+        if (!rt.botOf(self)) return `Only Bots on the team can use ${name}.`
+        try {
+          const result = await rt.changeCapabilityAttachment(endpoint, args, self)
+          const attached = state.capabilities.items[args.name]
+          const members = attached?.kind === 'pack'
+            ? (attached.items ?? []).map(child => state.capabilities.items[child]).filter(Boolean)
+            : attached ? [attached] : []
+          const approvals = members
+            .filter(item => item.kind === 'mcp' && item.transport === 'stdio' && item.approved !== true)
+            .map(item => ` The user must allow ${item.name} in DS Bot settings before it can work.`)
+            .join('')
+          return `${verb} ${args.name} ${args.bot ? `to ${result.bot}` : 'to yourself'}. Changes apply from ${result.bot}'s next message.${endpoint === 'attach' ? approvals : ''}`
+        } catch (error) { return error.message }
+      },
+    }))
+  }
 
   Object.assign(rt, { pickRoom })
 }

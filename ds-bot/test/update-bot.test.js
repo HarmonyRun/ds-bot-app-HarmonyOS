@@ -49,8 +49,8 @@ function start() {
   apply(ctx, { home })
   const tool = (name, args, sessionId) => ctx.registeredTools.get(name).execute(args, { agent: { id: sessionId } })
   const state = () => JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
-  const stop = () => {
-    ctx.dispose()
+  const stop = async () => {
+    await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   return { ctx, tool, state, stop }

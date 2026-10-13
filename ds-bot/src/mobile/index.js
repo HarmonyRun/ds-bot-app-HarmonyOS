@@ -49,7 +49,9 @@ export function install(rt) {
       stopApprovals = rt.ctx.on('approval/request', (request, next) => {
         const sessionId = request.agent?.session?.id ?? request.agent?.id
         if (rt.groupOwners?.has(sessionId)) return next()
-        return approvals.handle(request, next)
+        const owned = rt.chatOwners?.has(sessionId)
+        if (owned) rt.noteApproval?.(sessionId, { tool: String(request.toolName ?? ''), reason: rt.redactSecrets?.(String(request.reason ?? '').slice(0, 200)) ?? '' })
+        return Promise.resolve(approvals.handle(request, next)).finally(() => { if (owned) rt.noteApproval?.(sessionId, undefined) })
       }, { prepend: true })
     } catch (error) { await stop(); throw error }
   }

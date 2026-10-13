@@ -120,7 +120,7 @@ function start() {
     return result.value
   }
   const env = (agentId, command = '') => contributors.filter(entry => entry.live).at(-1)?.resolve({ agent: { id: agentId, session: { header: { id: agentId } } }, arguments: { command } }) ?? {}
-  const stop = () => { ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) }
+  const stop = async () => { await ctx.dispose(); rmSync(home, { recursive: true, force: true, maxRetries: 5 }) }
   return { ctx, home, call, tool, view, env, listeners, delivered, streamed, contributors, stop }
 }
 

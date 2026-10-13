@@ -2,7 +2,7 @@
 
 [English](releasing.md) | 中文
 
-> `v0.1.0` 安装包已撤回，标签保留用于源码追溯。修复验证完成后使用新的版本标签，例如 `v0.1.1`；不要重复推送或重建已撤回的 `v0.1.0` 发布。
+> 按仓库所有者的明确要求，本次 v0.1.0 重新发布上游 v0.1.4 与移动端修复。已撤回的旧源码归档为 `archive/withdrawn-v0.1.0`。这次仅替换该标签一次，后续发布仍应使用新版本号，例如 v0.1.1。
 
 ## 签名已经准备好
 
@@ -12,7 +12,7 @@
 
 ### 一次性配置 Secret
 
-当前应用授权不能管理 GitHub Secrets，因此维护者需要在 GitHub 完成这一步：
+本仓库已配置签名 Secret。新 fork 或需要替换密码时，由维护者在 GitHub 完成以下步骤；当前连接授权不支持管理 GitHub Secrets：
 
 1. 打开本仓库 **Settings → Secrets and variables → Actions → New repository secret**。
 2. Name 填 `ANDROID_KEYSTORE_PASSWORD`。

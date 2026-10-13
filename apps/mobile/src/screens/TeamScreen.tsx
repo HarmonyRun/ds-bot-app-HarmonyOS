@@ -1,3 +1,4 @@
+import { BotCapabilities } from "../host-settings/CapabilitiesPanel";
 import { useI18n } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -571,6 +572,7 @@ export function TeamScreen({
               />
               <View style={{paddingHorizontal:12}}><ThinkingLevelPicker client={client} model={team.models.find(model=>model.ref===bot.model)} value={bot.effort} disabled={locked} choose={effort=>saveBot({effort})}/></View>
             </Section>
+            {botId && <Section title={tr("Capabilities")}><BotCapabilities client={client} bot={team.bots.find(item => item.id === botId) || bot} team={team} online={online} refresh={refresh}/></Section>}
             {botId && !!team.permissions?.options.length && <Section title={tr("Permissions")} footer={tr("Applies to this Bot’s own chat, group chats and new conversation parts.")}>
               <View style={{flexDirection:"row",flexWrap:"wrap",gap:8,padding:12}}>{team.permissions.options.filter(option=>option.value!=="auto").map(option=><Button key={option.value} title={tr(({"read-only":"Read only","workspace-write":"Workspace","danger-full-access":"Full access"} as Record<string,string>)[option.value] || option.name || option.value)} compact danger={option.value==="danger-full-access" && bot.permission===option.value} secondary={(bot.permission || team.permissions?.defaultPreset)!==option.value} disabled={locked} onPress={()=>void saveBot({permission:option.value})}/>)}</View>
             </Section>}
@@ -823,7 +825,7 @@ export function TeamScreen({
         )}
         {page === "group" && (
           <>
-            {roomId && <><GroupProgress client={client} room={room} team={team} running={false} online={online && !team.readOnly}/><ApprovalCards client={client} conversationId={room.id} online={online && !team.readOnly} messages={[]}/></>}
+            {roomId && <><GroupProgress client={client} room={room} team={team} running={false} online={online && !team.readOnly} allowStop onChanged={refresh}/><ApprovalCards client={client} conversationId={room.id} online={online && !team.readOnly} messages={[]}/></>}
             <View style={{ alignItems: "center", padding: 12 }}>
               <RoomAvatar room={room} team={team} size={72} />
             </View>

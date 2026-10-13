@@ -30,8 +30,9 @@ export function fakeContext({ services = {} } = {}) {
       const dispose = execute()
       if (typeof dispose === 'function') disposers.push(dispose)
     },
+    // Settles once every cleanup has, including the writes some of them wait for.
     dispose() {
-      for (const dispose of disposers.splice(0).reverse()) dispose()
+      return Promise.allSettled(disposers.splice(0).reverse().map(dispose => dispose()))
     },
     tools: {
       register(tool) {

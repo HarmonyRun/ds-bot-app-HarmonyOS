@@ -13,6 +13,7 @@ export interface Bot {
   permission?: string;
   pinned?: boolean;
   hidden?: boolean;
+  capabilities?: string[];
 }
 export interface Room {
   id: string;
@@ -48,7 +49,10 @@ export interface Question {
   [key: string]: unknown;
 }
 export interface Reasoning { efforts: { id: string; name: string; description?: string }[]; defaultEffort?: string }
-export interface TeamWork { bots: Record<string, { tool?: string; since?: number; roomId?: string }>; approvals: { id: string; botId: string; roomId?: string; sessionId?: string; answerable?: boolean }[] }
+export interface MemberWork { botId: string; since?: number; tool?: string; speaking?: boolean }
+export interface Capability { name: string; kind: "mcp" | "skill" | "pack"; description?: string; transport?: string; approved?: boolean; items?: string[] }
+export interface CapabilityStatus { state: "ready" | "connecting" | "needs-approval" | "error"; error?: string }
+export interface TeamWork { bots: Record<string, { tool?: string; since?: number; roomId?: string }>; rooms?: Record<string, MemberWork[]>; approvals: { id: string; botId: string; roomId?: string; sessionId?: string; answerable?: boolean }[] }
 export interface TeamState {
   bots: Bot[];
   rooms: Room[];
@@ -70,6 +74,8 @@ export interface TeamState {
   connectors?: Array<Record<string, unknown>>;
   memoryNews?: Record<string, unknown>;
   memoryReviews?: Record<string, unknown>;
+  capabilities?: Capability[];
+  capabilityStatuses?: Record<string, Record<string, CapabilityStatus>>;
 }
 export function teamState(value: Record<string, unknown>): TeamState {
   return {

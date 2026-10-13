@@ -16,22 +16,23 @@ function start(state, { config = {}, services } = {}) {
     route = options
     return register(options)
   }
-  apply(ctx, { home, ...config })
+  const applyResult = apply(ctx, { home, ...config })
   const call = async (endpoint, payload) => {
     const response = await route.fetch(new Request('http://localhost/api/bot', { method: 'POST', body: JSON.stringify({ endpoint, payload }) }))
     return response.json()
   }
-  const stop = () => {
-    ctx.dispose()
+  const stop = async () => {
+    await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
-  return { ctx, call, stop }
+  return { ctx, call, stop, applyResult }
 }
 
 // Listeners run, and tools are listed, in the order they are registered.
 test('apply registers listeners, tools, and effects in a fixed order', (t) => {
-  const { ctx, stop } = start()
+  const { ctx, stop, applyResult } = start()
   t.after(stop)
+  assert.equal(applyResult, undefined)
   assert.deepEqual(ctx.calls, [
     'effect ds-bot: state lock',
     'on llm/adapters-updated',
@@ -52,12 +53,20 @@ test('apply registers listeners, tools, and effects in a fixed order', (t) => {
     'tool delete_group',
     'tool post_to_group',
     'tool ask_user',
+    'tool list_capabilities',
+    'tool save_capability',
+    'tool delete_capability',
+    'tool attach_capability',
+    'tool detach_capability',
     'effect ds-bot: chat index',
     'tool group_relay',
     'tool read_own_chat',
     'tool read_group_chat',
     'on llm/stream',
     'on approval/request (prepend)',
+    'on agent/inbox/discarded',
+    'on session/event',
+    'effect ds-bot: resume interrupted turns',
     'effect ds-bot: memory section',
     'prompt bot-memory 645',
     'tool remember',
@@ -80,6 +89,8 @@ test('apply registers listeners, tools, and effects in a fixed order', (t) => {
     'on llm/stream',
     'effect ds-bot: load secrets',
     'effect ds-bot: connectors',
+    'on agent/created',
+    'effect ds-bot: capabilities',
     'effect ds-bot: usage ledger',
     'on llm/stream',
     'effect ds-bot: update check',

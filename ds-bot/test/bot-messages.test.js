@@ -92,8 +92,8 @@ async function start(seed) {
     method: 'POST', body: JSON.stringify({ endpoint, payload }),
   }))).json()
   const exchanges = async () => (await call('exchange', { a: 'a', b: 'b' })).value ?? []
-  const stop = () => {
-    ctx.dispose()
+  const stop = async () => {
+    await ctx.dispose()
     rmSync(home, { recursive: true, force: true, maxRetries: 5 })
   }
   // Loading once fills the Session-owner indexes turns.js filters events by.

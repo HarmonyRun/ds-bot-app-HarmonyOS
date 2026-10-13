@@ -2,7 +2,7 @@
 
 English | [中文](releasing.zh.md)
 
-> The `v0.1.0` binaries have been withdrawn; the source tag remains for traceability. After validating the fixes, use a new version tag such as `v0.1.1`. Do not republish the withdrawn tag.
+> At the owner’s explicit request, v0.1.0 is republished with upstream v0.1.4 and the mobile fixes. The withdrawn source is archived as `archive/withdrawn-v0.1.0`. This is a one-time tag replacement; later releases should use a new version such as v0.1.1.
 
 ## Signing identity
 
@@ -10,7 +10,7 @@ English | [中文](releasing.zh.md)
 
 The password is not in Git. The owner's private backup ZIP contains the key and the file `ANDROID_KEYSTORE_PASSWORD`. Keep it offline; never upload the ZIP/password to GitHub, build artifacts or Releases. A person holding both the encrypted key and password can sign updates.
 
-The current GitHub app cannot manage repository Secrets. The maintainer must open **Settings → Secrets and variables → Actions → New repository secret**, name it `ANDROID_KEYSTORE_PASSWORD`, and paste the full contents of the private backup's password file (no quotes). Use a Secret, not a Variable. Then run **Actions → Build plugin and Android → Run workflow → main**. Enable Actions first if GitHub prompts. Do not expose the signing password to external-fork PR workflows.
+This repository already has its signing Secret configured. For a new fork or a password replacement, the current GitHub connection cannot manage repository Secrets; the maintainer must open **Settings → Secrets and variables → Actions → New repository secret**, name it `ANDROID_KEYSTORE_PASSWORD`, and paste the full contents of the private backup's password file (no quotes). Use a Secret, not a Variable. Then run **Actions → Build plugin and Android → Run workflow → main**. Enable Actions first if GitHub prompts. Do not expose the signing password to external-fork PR workflows.
 
 ## Pipeline
 
