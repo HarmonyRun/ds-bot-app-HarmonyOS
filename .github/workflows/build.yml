@@ -1,0 +1,144 @@
+name: Build plugin and Android
+
+on:
+  push:
+    branches: [main]
+    tags: ['mobile-v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ds-bot/package-lock.json
+            apps/mobile/package-lock.json
+      - run: npm ci --no-fund --no-audit
+        working-directory: ds-bot
+      - run: npm run harness
+        working-directory: ds-bot
+      - run: npm test -- --test-concurrency=2
+        working-directory: ds-bot
+      - run: node scripts/build-client.mjs --check
+        working-directory: ds-bot
+      - run: npm run lint
+        working-directory: ds-bot
+      - run: npm test
+        working-directory: packages/mobile-sdk
+      - run: npm ci --no-fund --no-audit
+        working-directory: apps/mobile
+      - run: npm run typecheck && npm test
+        working-directory: apps/mobile
+      - run: python3 -m unittest discover -s apps/mobile/scripts -p 'test_*.py'
+      - name: Pack tested plugin
+        working-directory: ds-bot
+        run: |
+          mkdir -p ../out/plugin
+          npm pack --pack-destination ../out/plugin
+          cd ../out/plugin
+          sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsbot-plugin
+          path: out/plugin/
+          if-no-files-found: error
+
+  android:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { abi: arm64-v8a, label: arm64 }
+          - { abi: x86_64, label: x86_64 }
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      DS_BOT_ANDROID_VERSION_CODE: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci --no-fund --no-audit
+      - run: npx --no-install expo prebuild --platform android --no-install
+      - name: Build standalone release
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=${{ matrix.abi }}
+      - name: Sign APK when release password is configured
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p ../../out/android-${{ matrix.label }}
+          src=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          dest=../../out/android-${{ matrix.label }}
+          if [[ '${{ github.event_name }}' != 'pull_request' && -n "$ANDROID_KEYSTORE_PASSWORD" ]]; then
+            bash scripts/sign-android.sh "$src" "$dest/dsbot-android-${{ matrix.label }}.apk"
+            cp signing/DeepSeekBot.cer signing/certificate.sha256 "$dest/"
+          else
+            echo '::warning::Signing is unavailable (PR or missing ANDROID_KEYSTORE_PASSWORD). This artifact is unsigned and cannot be installed. Configure the repository Secret and run on main.'
+            cp "$src" "$dest/dsbot-android-${{ matrix.label }}-unsigned.apk"
+          fi
+          cd "$dest"
+          sha256sum *.apk > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsbot-android-${{ matrix.label }}
+          path: out/android-${{ matrix.label }}/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    needs: [validate, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish matching plugin and signed APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if find out -name '*-unsigned.apk' | grep -q .; then
+            echo 'A release requires ANDROID_KEYSTORE_PASSWORD and signed APKs.' >&2
+            exit 1
+          fi
+          mkdir release
+          cp out/dsbot-plugin/*.tgz out/dsbot-android-arm64/*.apk out/dsbot-android-x86_64/*.apk out/dsbot-android-arm64/DeepSeekBot.cer release/
+          cd release
+          sha256sum *.tgz *.apk *.cer > SHA256SUMS
+          gh release create "$RELEASE_TAG" ./*.tgz ./*.apk SHA256SUMS DeepSeekBot.cer \
+            --repo "$REPOSITORY" --title "DS Bot $RELEASE_TAG" --generate-notes --prerelease
