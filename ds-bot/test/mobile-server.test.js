@@ -102,7 +102,8 @@ test('mobile pairing requires explicit desktop approval and keeps only token has
   assert.equal((await f.request('/state', { token: session.accessToken })).status, 200)
   const disk = await readFile(join(f.home, 'bridge.json'), 'utf8')
   for (const value of [session.accessToken, session.refreshToken, code.code, claim.claimToken]) assert.equal(disk.includes(value), false)
-  assert.equal((await stat(join(f.home, 'bridge.json'))).mode & 0o777, 0o600)
+  // Windows inherits the user's directory ACL; its mode bits do not represent Unix permissions.
+  if (process.platform !== 'win32') assert.equal((await stat(join(f.home, 'bridge.json'))).mode & 0o777, 0o600)
 })
 
 test('mobile refresh rotates credentials and device revocation closes streams immediately', async t => {
