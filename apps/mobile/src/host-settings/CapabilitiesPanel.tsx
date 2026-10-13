@@ -5,17 +5,9 @@ import { AnimatedPressable as Pressable } from "../components/Motion";
 import { Button, Icon, Label, Notice, Section } from "../components/UI";
 import { useTheme } from "../theme";
 import { useI18n } from "../i18n";
-import { Bot, Capability, CapabilityStatus, TeamState, errorText } from "../types";
+import { Bot, Capability, TeamState, errorText } from "../types";
+import { capabilityStatus } from "../logic/capabilities";
 
-function statusOf(item: Capability, statuses: Record<string, CapabilityStatus>) {
-  if (item.kind !== "pack") return statuses[item.name];
-  const children = (item.items || []).map(name => statuses[name]).filter(Boolean);
-  for (const state of ["error", "needs-approval", "connecting", "ready"] as const) {
-    const found = children.find(value => value.state === state);
-    if (found) return found;
-  }
-  return undefined;
-}
 
 export function BotCapabilities({ client, bot, team, online, refresh }: {
   client: MobileClient; bot: Bot; team: TeamState; online: boolean; refresh: () => Promise<void>;
@@ -39,7 +31,7 @@ export function BotCapabilities({ client, bot, team, online, refresh }: {
     {!team.capabilities.length && <Label muted>{tr("No capabilities yet. Add them in DS Bot settings on your computer.")}</Label>}
     {team.capabilities.map(item => {
       const attached = (bot.capabilities || []).includes(item.name);
-      const status = attached ? statusOf(item, team.capabilityStatuses?.[bot.id] || {}) : undefined;
+      const status = attached ? capabilityStatus(item, team.capabilityStatuses?.[bot.id] || {}) : undefined;
       const state = status?.state || (attached && item.kind === "mcp" && item.approved === false ? "needs-approval" : undefined);
       const stateText = state ? tr({ ready: "Ready", connecting: "Connecting…", "needs-approval": "Needs approval", error: "Could not connect" }[state]) : "";
       return <View key={item.name} style={{ borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, borderRadius: 18, overflow: "hidden" }}>
