@@ -36,6 +36,7 @@ jobs:
       - run: npm ci --no-fund --no-audit
       - name: Install DSH ${{ matrix.dsh }}
         run: npm run harness -- --no-save "@deepseek-ai/dsh@${{ matrix.dsh }}"
-      - run: npm test
+      # Match build validation so timer-driven tests do not compete with every file at once.
+      - run: npm test -- --test-concurrency=2
       - run: node scripts/build-client.mjs --check
       - run: npm run lint
