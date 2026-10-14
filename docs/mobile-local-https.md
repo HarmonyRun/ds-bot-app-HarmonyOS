@@ -15,7 +15,7 @@ The default port is `8788`; the plugin prefers IPv4 and also lists private and p
 
 ## IPv6 direct access
 
-IPv6 support is available in source and requires a build containing this change. The published `v0.1.0` plugin still lists IPv4 addresses only.
+IPv6 support requires the v0.1.1 or newer plugin and App. Version v0.1.0 lists IPv4 addresses only.
 
 A computer with public IPv6 can accept connections from another IPv6-capable network without a domain, coordination server, relay, or additional app.
 

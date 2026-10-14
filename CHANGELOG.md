@@ -4,6 +4,8 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ## Unreleased
 
+## DS Bot App [v0.1.1] - 2026-10-14
+
 ### Added
 
 - Sync upstream [v0.1.5](https://github.com/Fei2411/DeepSeek-Bot/releases/tag/v0.1.5), source `20ebc9213cbbde7249d71786765f86be00dc6663`, while retaining this fork's mobile bridge and IPv6 access.
@@ -13,6 +15,9 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ### Fixed
 
+- Simplify mobile folder selection with horizontal breadcrumbs and separate browsing/path entry. Localize plugin lifecycle, metadata and thinking levels; compact plugin tabs and enlarge message detail touch targets.
+- Match desktop blue themes and approval fallbacks to the App brand color, `#3964FE`.
+- Prevent an older host without the folder API from silently accepting unsupported folder changes.
 - Upstream question blocking and greeting behavior, unread Bot-message backpressure, provider conversation identity and memory default-model retries, PTC group activity and tool cards, Bot/Agent surface cleanup, work-details preferences, dark-skin user bubbles and DSH home resolution.
 - Keep mobile approval text in the selected language and remove host-skin fallbacks and shadows from mobile approval notices.
 - Keep IPv4 as the default while excluding IPv6 link-local, multicast and unspecified addresses from automatic setup. Bind IPv6 HTTPS to the selected address and retain host public-key identity when renewing certificates.

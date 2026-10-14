@@ -2,7 +2,7 @@
 
 最简单的同一 Wi-Fi 连接请看[一键本地 HTTPS](mobile-local-https.zh.md)：电脑启用、手机扫码、电脑批准，无需域名或额外 App。
 
-电脑有公网 IPv6、手机网络支持 IPv6 时，也可以使用[公网 IPv6 直连](mobile-local-https.zh.md#ipv6-直连)跨网络连接，无需域名或中继；路由器和电脑防火墙需放行所选手机连接端口。需安装包含 IPv6 支持的新插件构建，已发布的 `v0.1.0` 仍只自动列出 IPv4。
+电脑有公网 IPv6、手机网络支持 IPv6 时，也可以使用[公网 IPv6 直连](mobile-local-https.zh.md#ipv6-直连)跨网络连接，无需域名或中继；路由器和电脑防火墙需放行所选手机连接端口。IPv6 连接需要 v0.1.1 及以上的插件与 App。
 
 [English](mobile.md) | 中文
 
@@ -37,10 +37,10 @@ npm run build
 npm pack
 ```
 
-在 DSH Desktop 的 **Plugins → Add plugin** 中填写生成的 `ds-bot-0.1.0.tgz` 的绝对路径，安装后重启 DSH。应使用当前源码打包，旧的 npm 发布版不一定包含 Mobile Bridge。已有 DSH Web profile 可以使用：
+在 DSH Desktop 的 **Plugins → Add plugin** 中填写生成的 `ds-bot-0.1.1.tgz` 的绝对路径，安装后重启 DSH。应使用当前源码打包，旧的 npm 发布版不一定包含 Mobile Bridge。已有 DSH Web profile 可以使用：
 
 ```sh
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
+npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.1.tgz
 ```
 
 在 profile 的 `cordis.patch.yml` 中配置 `bot`。Web 也可以单独创建 `mobile.patch.yml`：
@@ -267,7 +267,7 @@ MOBILE_PORT=8894 MOBILE_WEB_ORIGIN=http://localhost:8081 dev/bench.sh mobile 319
 
 ## 工作目录与上游 v0.1.5
 
-新版源码构建已同步上游 v0.1.5。在 Bot 或群聊详情打开「工作目录」，可选择主机已知项目、输入完整主机路径，或在主机提供目录浏览器时逐级浏览。Bot 可重置为「团队工作区」，群聊可恢复「各 Bot 自己的目录」。这些是电脑上的路径，不是手机存储；主机拒绝 DSH 数据目录及包含它们的父目录。
+v0.1.1 已同步上游 v0.1.5。在 Bot 或群聊详情打开「工作目录」，可选择主机已知项目、输入完整主机路径，或在主机提供目录浏览器时逐级浏览。Bot 可重置为「团队工作区」，群聊可恢复「各 Bot 自己的目录」。这些是电脑上的路径，不是手机存储；主机拒绝 DSH 数据目录及包含它们的父目录。
 
 切换目录后，Bot 对话在新分段继续，历史保留；群成员从下一轮群内任务起切换。Bot 自己或 Main Bot 通过工具改变目录时，仍保留上游扩大写入范围的审批检查。手机界面作为已配对用户发起设置，不替代或绕过 Bot 工具审批。
 

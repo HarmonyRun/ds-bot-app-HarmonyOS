@@ -2,7 +2,7 @@
 
 English | [中文](releasing.zh.md)
 
-> At the owner’s explicit request, v0.1.0 is republished with upstream v0.1.4 and the mobile fixes. The withdrawn source is archived as `archive/withdrawn-v0.1.0`. This is a one-time tag replacement; later releases should use a new version such as v0.1.1.
+Use a new version tag for each release. The withdrawn initial v0.1.0 source remains archived under `archive/withdrawn-v0.1.0`.
 
 ## Signing identity
 
@@ -31,7 +31,7 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-The tag pipeline creates a public stable release with the plugin tarball, signed APKs (for example, `dsbot-android-arm64-v0.1.0.apk`), public certificate and combined checksums. Missing signing credentials fail tag validation; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.
+The tag pipeline creates a public stable release with the plugin tarball, signed APKs (for example, `dsbot-android-arm64-v0.1.1.apk`), public certificate and combined checksums. Missing signing credentials fail tag validation; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.
 
 ## Local builds
 

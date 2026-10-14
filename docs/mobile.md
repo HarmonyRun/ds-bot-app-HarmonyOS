@@ -2,7 +2,7 @@
 
 For the simplest same-Wi-Fi setup, use [one-click local HTTPS](mobile-local-https.md): enable on the computer, scan in the updated native app, and approve. No domain or extra app is required.
 
-If the computer has public IPv6 and the phone network supports IPv6, [direct IPv6 access](mobile-local-https.md#ipv6-direct-access) can also connect across networks without a domain or relay. Both firewalls must allow the selected mobile port. This requires a plugin build containing IPv6 support; the published `v0.1.0` plugin lists IPv4 only.
+If the computer has public IPv6 and the phone network supports IPv6, [direct IPv6 access](mobile-local-https.md#ipv6-direct-access) can also connect across networks without a domain or relay. Both firewalls must allow the selected mobile port. Use the v0.1.1 or newer plugin and App for IPv6 support.
 
 English | [中文](mobile.zh.md)
 
@@ -35,10 +35,10 @@ npm run build
 npm pack
 ```
 
-In DSH Desktop, use **Plugins → Add plugin** with the absolute path to the resulting `ds-bot-0.1.0.tgz`, then restart DSH. Use the package from this checkout; an older registry release may not contain Mobile Bridge. For an existing DSH Web profile, the corresponding install command is:
+In DSH Desktop, use **Plugins → Add plugin** with the absolute path to the resulting `ds-bot-0.1.1.tgz`, then restart DSH. Use the package from this checkout; an older registry release may not contain Mobile Bridge. For an existing DSH Web profile, the corresponding install command is:
 
 ```sh
-npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.0.tgz
+npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add /absolute/path/ds-bot-0.1.1.tgz
 ```
 
 Configure the `bot` entry in the profile's `cordis.patch.yml`. For Web, a separate `mobile.patch.yml` can hold the following overlay:
@@ -261,7 +261,7 @@ Choose **Export conversation** in chat history to export all available host hist
 
 ## Additional mobile features
 
-New source builds include upstream v0.1.5 working folders. In a Bot or group details page, open **Working folder** to select a known host project, enter an absolute host path, or browse when the host provides a directory browser. Reset to **Team workspace** or **Each Bot's own folder**. These are computer paths, not phone storage. DSH data directories and their ancestors are rejected by the host. Folder changes continue in new parts; a group's members move on their next group turn. Bot-initiated changes outside the team workspace keep upstream approval checks.
+Version v0.1.1 includes upstream v0.1.5 working folders. In a Bot or group details page, open **Working folder** to select a known host project, enter an absolute host path, or browse when the host provides a directory browser. Reset to **Team workspace** or **Each Bot's own folder**. These are computer paths, not phone storage. DSH data directories and their ancestors are rejected by the host. Folder changes continue in new parts; a group's members move on their next group turn. Bot-initiated changes outside the team workspace keep upstream approval checks.
 
 Mobile tool cards now include PTC sub-calls, declared file deliveries and file-change summaries while the host retains those summaries. File cards show paths/descriptions and recorded line counts. Host filesystem paths are not phone download URLs; these cards do not open host native dialogs or grant arbitrary filesystem reads. Existing message attachments still use the authenticated preview/download flow above.
 

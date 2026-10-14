@@ -24,7 +24,7 @@ DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness
 | Tools and host management | Open tool-result cards, approve or reject pending actions, manage supported Skills/plugins/connectors, and opt into desktop browser control. |
 | Shared capabilities | Choose each Bot’s MCP servers, skills and capability packs configured on your DSH computer; check connection and approval status. |
 | Tasks and memory | Manage scheduled tasks and Bot memory, search earlier conversations, and inspect usage from settings or details. |
-| Working folders | Choose a host project or folder for a Bot, or one folder for a group. Chats continue in fresh parts while keeping their history. Available in new source builds. |
+| Working folders | Choose a host project or folder for a Bot, or one folder for a group. Chats continue in fresh parts while keeping their history. Available in v0.1.1 and later. |
 | Notifications | Task and approval reminders with Android background reception and optional cloud push. |
 | Appearance and language | Chinese/English and light/dark/system appearance. Cached conversations and drafts remain available offline. |
 
@@ -55,7 +55,7 @@ Start on the same Wi-Fi. The plugin sets up local HTTPS without a domain or manu
 
 Use this repository's matching plugin package. The upstream npm package named `ds-bot` does not include the complete phone connection implementation.
 
-New source builds also support [public IPv6 direct access](docs/mobile-local-https.md#ipv6-direct-access) across networks without a domain or relay. The published `v0.1.0` plugin lists IPv4 only.
+Version 0.1.1 also supports [public IPv6 direct access](docs/mobile-local-https.md#ipv6-direct-access) across networks without a domain or relay.
 
 iOS source is available; no IPA is currently provided. See the [iOS guide](docs/ios.md) for builds and platform support.
 
