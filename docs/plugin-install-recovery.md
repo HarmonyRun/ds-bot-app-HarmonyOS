@@ -1,43 +1,43 @@
-# 插件安装修复 / Plugin installation recovery
+# 插件安装与排错 / Plugin installation and troubleshooting
 
-## Windows
+## 正常安装：在 DSH 粘贴一行
 
-1. 下载 [v0.1.1 本地安装助手](https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/dsbot-plugin-installer-v0.1.1-r2.zip)，**解压整个 ZIP**。
-2. 双击 `prepare-plugin.cmd`。助手校验包的 SHA-256，保存到 `%LOCALAPPDATA%\DSBot\packages\v0.1.1-r2`，并复制完整的 `ds-bot@file:…` 安装文本。
-3. 打开 DSH **插件 → 添加插件**，粘贴、安装、启用，完全退出并重启 DSH。无需先卸载。
-
-剪贴板不可用时，从助手窗口或保存目录的 `INSTALL.txt` 复制一整行。保留助手保存的 `.tgz`；pnpm 以后修复依赖时可能需要它。解压的助手文件夹可以删除。无需管理员权限，也不要求另外安装 Node.js 或 pnpm。助手只准备文件，最终安装由 DSH 执行。
-
-ZIP 中的插件与公开 `ds-bot-0.1.1-r2.tgz` 完全相同，没有重新打包或改写旧下载：
+打开 **插件 → 添加插件**，粘贴下面完整文本，点击安装、启用，然后重启 DSH：
 
 ```text
-SHA-256 b79c61fef0f46e4a54c098706b7d578d47f085c10e5c4f111981b829f3da2a8a
+github:QingJ01/DS-Bot-App#d6b187709b9a1045f63bfb77efff7ff546e39b36&path:ds-bot
 ```
 
-## macOS / Linux 或手动安装
+这是当前 `0.1.1 r2` 的正式安装入口。Windows、macOS、Linux 使用同一行；不需要下载 `.tgz`、运行脚本、删除缓存或额外安装 Git。电脑需要能访问 GitHub 及依赖源。手机使用同一 Release 的 r2 APK。
 
-下载同一 `.tgz`，校验 `SHA256SUMS-r2`，保存到长期保留的目录。在 DSH 添加插件界面填写 `ds-bot@file:` 加绝对路径，例如：
+## 已经卡在安装错误
 
-```text
-ds-bot@file:/Users/you/DSBot/packages/ds-bot-0.1.1-r2.tgz
-```
+- **`ERR_PNPM_MISSING_TARBALL_INTEGRITY`**：退出旧的安装错误对话框，重新打开“添加插件”，粘贴上面的 GitHub 文本。旧窗口的“重试”会继续安装原来的 `.tgz` URL。
+- **旧 `0.1.0` 的 `ERR_PNPM_TARBALL_INTEGRITY`（Wanted / Got 不一致）**：在 DSH 卸载旧 DS Bot 插件，再按上面安装。插件卸载不要求删除聊天数据；不要清空 DSH 数据目录。
+- **网络错误**：确认电脑可访问 GitHub 和依赖源。被网络阻断时可使用下方本地文件方式。
 
-Windows 手动路径示例为 `ds-bot@file:C:/Users/you/DSBot/packages/ds-bot-0.1.1-r2.tgz`。替换实际路径，GUI 中不要额外加引号；安装后重启。
+## 备用：本地文件安装
 
-## 为什么重装也失败
+从 Release 下载 `ds-bot-0.1.1-r2.tgz`，放到长期保留的目录，使用 `SHA256SUMS-r2` 校验。在 DSH **添加插件** 中填写 `.tgz` 的绝对路径，例如 `C:\Users\you\DSBot\ds-bot-0.1.1-r2.tgz`；macOS/Linux 填写对应的绝对路径。安装后重启，保留文件供 pnpm 以后修复依赖使用。
 
-这次的 `ERR_PNPM_MISSING_TARBALL_INTEGRITY` 与此前旧包字节变化导致的校验不匹配是两个问题。我们用 pnpm `11.7.0` 和 DSH 的 `nodeLinker: hoisted`、`autoInstallPeers: false` 配置复现了：首次下载成功，卸载后复用缓存时，新锁文件缺少远程包的 `integrity` 字段，随后安装被拒绝。显式 `ds-bot@https://…` 也会触发。
+旧版 Windows 准备助手仍保留为历史附件；普通安装使用上面的 GitHub 文本即可。若手动使用助手准备的包，在 GUI 中使用包的绝对路径，不要把命令行的 `ds-bot@file:…` 别名当成通用 GUI 安装文本。
 
-本地文件安装会计算并写入正确 SHA-512；安装助手在此之前再核对固定 SHA-256。它不修改 DSH、锁文件或聊天，不关闭任何校验。问题发生在插件加载之前，所以插件运行代码无法修复 DSH 内的包管理器；这里修复的是本项目的安装分发方式。远程 URL 重装入口是否恢复正常，需要 DSH/pnpm 后续修复。
+## 开发者：为什么改用 GitHub 安装
 
-回归检查使用真实包和 pnpm，覆盖首次安装、卸载后缓存重装、失败锁文件恢复、删除 `node_modules` 后冻结锁文件重装；Windows 还检查中文/空格路径、助手重复运行、源包/目标包损坏拒绝。见 [Actions](https://github.com/QingJ01/DS-Bot-App/actions/workflows/plugin-installer.yml)。旧版的原始包恢复记录见[这里](releases/integrity-repair-20261014.md)。
+pnpm `11.7.0` 在 DSH 的 `nodeLinker: hoisted`、`autoInstallPeers: false` 配置下，缓存重装普通远程 tarball 时可能漏写 `integrity`。给 Release URL 加 `ds-bot@` 不能解决这一问题。插件尚未加载，无法通过插件运行代码修复包管理器。
+
+正式入口改为 pnpm/DSH 原生支持的 GitHub 包规格，固定完整 40 位提交，并选择仓库内 `ds-bot` 目录。它包含预构建客户端，没有安装时构建脚本；完整提交避免解析可移动分支或依赖 Git 查找标签。GitHub 依赖由 pnpm 的 Git 来源规则校验，不关闭锁文件、文件校验或供应链策略。
+
+[安装元数据](../releases/plugin-install.json)记录正式规格。[Windows/Linux Actions](https://github.com/QingJ01/DS-Bot-App/actions/workflows/plugin-installer.yml)检查：首次安装、缓存卸载重装、当前失败锁文件恢复、删除 `node_modules` 后冻结重装、无 Git 环境，以及全部 52 个插件文件与原 r2 Release 包逐字节一致。历史安装包与 APK 不覆盖；以后升级发布新的固定提交规格。
+
+[旧版下载修复记录](releases/integrity-repair-20261014.md) · [完整配置](getting-started.zh.md)
 
 ## English
 
-Download the [local installer ZIP](https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/dsbot-plugin-installer-v0.1.1-r2.zip), extract everything and run `prepare-plugin.cmd` on Windows. It verifies the fixed SHA-256 above, saves the unchanged plugin under `%LOCALAPPDATA%\DSBot\packages\v0.1.1-r2`, and copies an explicit `ds-bot@file:…` specification. Paste it into **DSH → Plugins → Add plugin**, install, enable and restart DSH. Uninstalling first is unnecessary. If clipboard access fails, copy the line from the console or the destination's `INSTALL.txt`.
+Paste the complete GitHub specification above into **DSH → Plugins → Add plugin**, install, enable and restart. This is the current `0.1.1 r2` installation entry for Windows, macOS and Linux. It needs GitHub and dependency-registry access, but no archive download, helper script, cache deletion or separate Git installation. Use the matching r2 Android APK.
 
-The helper prepares files; DSH performs the installation. It requires no administrator access or separate Node.js/pnpm install. Keep the saved `.tgz` for later dependency repairs. The extracted helper folder can be removed afterward. On macOS/Linux, verify the downloaded tarball using `SHA256SUMS-r2`, keep it in a permanent directory, then enter `ds-bot@file:` followed by its absolute path in DSH. Use the examples above, adjusted for your machine.
+For missing `integrity`, leave the failed dialog and use **Add plugin** with the new text; **Retry** keeps the old tarball URL. For a legacy `0.1.0` checksum mismatch, uninstall the old DS Bot plugin first, then install with the GitHub specification. Do not delete DSH data, lockfiles or chats.
 
-The failure is reproducible with pnpm `11.7.0` and DSH's hoisted linker: a cached remote tarball loses its integrity metadata during reinstallation. Naming the remote dependency explicitly does not prevent it. Local archive installs retain the correct SHA-512, and the helper additionally verifies the release SHA-256. This changes distribution, not DSH internals: the failure happens before plugin code runs. Restoring remote-URL reinstalls requires a DSH/pnpm fix.
+Local archives remain a fallback: download the r2 `.tgz`, verify `SHA256SUMS-r2`, keep it in a permanent folder and enter its absolute path into DSH. The older Windows preparation helper remains archived; use the saved file's absolute path in the GUI rather than assuming the CLI's named `ds-bot@file:…` syntax works in every DSH dialog.
 
-The workflow tests real cold, cached, failed-state and frozen installs on Windows/Linux, plus Windows helper repeatability, Unicode/space paths and corruption rejection. Existing release tarballs, APKs and tags remain unchanged. No lockfile deletion or integrity bypass is involved.
+The normal remote-tarball cache path in pnpm 11.7.0 can lose integrity with DSH's hoisted linker. The new entry uses the supported GitHub-package resolver, pins the complete source commit and selects the prebuilt plugin directory. It keeps pnpm's Git-source and file-verification rules enabled. Tests cover cold/cached/frozen installs, failed-state recovery, a Git-free environment and byte-for-byte equality of all 52 installed files with the immutable r2 release. Future updates publish new pinned installation text; existing tags, packages and APKs stay unchanged.

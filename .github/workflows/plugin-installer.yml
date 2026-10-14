@@ -7,12 +7,16 @@ on:
       - 'scripts/plugin-installer/**'
       - 'scripts/build-plugin-installer.py'
       - 'scripts/test-plugin-install.py'
+      - 'scripts/test-github-install.py'
+      - 'releases/plugin-install.json'
       - '.github/workflows/plugin-installer.yml'
   pull_request:
     paths:
       - 'scripts/plugin-installer/**'
       - 'scripts/build-plugin-installer.py'
       - 'scripts/test-plugin-install.py'
+      - 'scripts/test-github-install.py'
+      - 'releases/plugin-install.json'
       - '.github/workflows/plugin-installer.yml'
   workflow_dispatch:
     inputs:
@@ -57,6 +61,11 @@ jobs:
           DSBOT_PLUGIN_ARCHIVE: input/ds-bot-0.1.1-r2.tgz
           NO_UPDATE_NOTIFIER: '1'
         run: python scripts/test-plugin-install.py
+      - name: Verify the public one-line GitHub installation
+        env:
+          DSBOT_PLUGIN_ARCHIVE: input/ds-bot-0.1.1-r2.tgz
+          NO_UPDATE_NOTIFIER: '1'
+        run: python scripts/test-github-install.py
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
         with:

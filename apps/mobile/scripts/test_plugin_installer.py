@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,14 @@ SPEC.loader.exec_module(INSTALLER)
 
 
 class PluginInstallerTests(unittest.TestCase):
+    def test_normal_install_text_is_consistent_across_user_guides(self):
+        spec = json.loads((ROOT / "releases/plugin-install.json").read_text())["spec"]
+        for name in ["README.md", "README.zh.md", "docs/getting-started.md",
+                     "docs/getting-started.zh.md", "docs/plugin-install-recovery.md",
+                     "docs/releases/v0.1.1-r2.md"]:
+            with self.subTest(document=name):
+                self.assertIn(spec, (ROOT / name).read_text(encoding="utf-8"))
+
     def test_untrusted_archive_is_rejected_before_creating_output(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

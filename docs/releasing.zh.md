@@ -50,6 +50,8 @@ Artifacts 有 GitHub 保留期限，需要长期保存的版本使用 Releases�
 
 ## 修订已发布版本
 
+正式插件安装入口记录在 `releases/plugin-install.json`：使用完整 40 位源码提交的 GitHub 包规格，指定 `ds-bot` 子目录。发布后更新该文件和中英文 README/安装说明，运行 `scripts/test-github-install.py`（`DSBOT_PLUGIN_ARCHIVE` 指向配套 `.tgz`），确认普通 DSH 安装文本、缓存重装、无 Git 安装及全部打包文件一致。普通用户不需要运行下面的历史本地安装助手。
+
 Windows 本地安装助手由 `Verify and publish plugin installer` 工作流单独发布，不需要重建 APK。它从已有 Release 下载 `.tgz`，核对 `scripts/plugin-installer/release.json` 中固定的 SHA-256，在 Linux/Windows 测试 DSH 的 hoisted 安装配置后，才允许手动勾选 `publish` 添加 ZIP 与独立校验文件。不会覆盖已有资产。更新目标版本时同时更新助手元数据、说明和工作流中的版本/文件名；每次发布使用新的助手文件名。详细安装行为见[安装修复说明](plugin-install-recovery.md)。
 
 不要覆盖已发布的归档或移动源码标签：已有 pnpm 锁文件记录了原文件的校验值。修订 `0.1.1` 时，package/Expo 版本仍为 `0.1.1`，编写 `docs/releases/v0.1.1-r2.md`，再推送新标签 `v0.1.1-r2`。Actions 向已有 `v0.1.1` Release 添加带修订号的插件、APK 和 `SHA256SUMS-r2`，并更新说明。原下载文件和签名证书保持不变，Android versionCode 递增。任何已有修订文件都会阻止发布，即使上次只上传了部分文件；再次发布请使用下一个修订号，避免更改已下载的内容。手动触发的 `Restore legacy plugin integrity` 工作流仅修复历史 `0.1.0` 错误：校验保存的原包，将重发包单独保留，恢复原下载地址和校验清单。它不改源码标签或 APK。

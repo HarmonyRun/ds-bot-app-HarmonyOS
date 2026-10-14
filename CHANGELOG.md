@@ -4,6 +4,8 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ## Installation integrity repair — 2026-10-14
 
+- Make the pinned GitHub package specification the normal DSH installation entry. First installs and cached reinstalls no longer require a local preparation script; the installed files match the immutable r2 archive.
+- Verify the exact published installation text on Windows/Linux, including recovery from a failed remote install, frozen reinstall and a Git-free environment with install scripts enabled.
 - Reproduce pnpm 11.7.0's cached remote-tarball missing-integrity failure with DSH's hoisted linker. Switch recommended installation to verified local archives, including explicit package names for recovery.
 - Add a Windows preparation helper that verifies the unchanged release archive, saves it in a permanent user folder and copies the DSH installation text. Add Windows/Linux cold, cached, failed and frozen-install regression checks.
 - Restore the original `0.1.0` archive at its recorded URL and preserve the republication separately, keeping existing original lockfile checks valid.

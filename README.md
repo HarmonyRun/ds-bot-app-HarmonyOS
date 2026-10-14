@@ -47,9 +47,15 @@ Screenshots use demonstration data. [Capture details](docs/images/mobile/README.
 
 ## Get started
 
-1. Download the plugin `.tgz` and Android ARM64 `.apk` from the same [Release](https://github.com/QingJ01/DS-Bot-App/releases/latest). For `0.1.1`, choose the revised files containing `r2`.
-2. On Windows, download the plugin installer ZIP from the same Release, extract it and run `prepare-plugin.cmd`. Paste the copied text into DSH **Plugins → Add plugin**, install, enable and restart. Other systems can use [local archive installation](docs/getting-started.md#updating-an-existing-installation). Configure your model on the computer.
-3. Install the APK on your phone. On the computer, open DS Bot **Settings → Mobile devices → Enable phone connection**, scan the QR with the App and approve the device on the computer.
+1. Install [DSH Desktop](https://github.com/deepseek-ai/deepseek-harness/releases). Open **Plugins → Add plugin**, paste the text below, install, enable and restart.
+2. Configure your model on the computer. Download the Android ARM64 APK from [Releases](https://github.com/QingJ01/DS-Bot-App/releases/latest); choose the `r2` file for `0.1.1`.
+3. Install the APK. On the computer, open DS Bot **Settings → Mobile devices → Enable phone connection**, scan its QR with the phone and approve the device.
+
+```text
+github:QingJ01/DS-Bot-App#d6b187709b9a1045f63bfb77efff7ff546e39b36&path:ds-bot
+```
+
+Copy the complete line. No plugin archive download or helper script is needed.
 
 Start on the same Wi-Fi. The plugin sets up local HTTPS without a domain or manual certificate installation. The host runs your Bots, tools and tasks using the configured model provider. Keep the computer or server online while using the App.
 
