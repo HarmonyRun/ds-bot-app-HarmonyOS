@@ -2,6 +2,8 @@
 
 For the simplest same-Wi-Fi setup, use [one-click local HTTPS](mobile-local-https.md): enable on the computer, scan in the updated native app, and approve. No domain or extra app is required.
 
+If the computer has public IPv6 and the phone network supports IPv6, [direct IPv6 access](mobile-local-https.md#ipv6-direct-access) can also connect across networks without a domain or relay. Both firewalls must allow the selected mobile port. This requires a plugin build containing IPv6 support; the published `v0.1.0` plugin lists IPv4 only.
+
 English | [中文](mobile.zh.md)
 
 See the [validation record (Chinese)](mobile-validation.zh.md) for completed checks and remaining device tests. This remains a preview.

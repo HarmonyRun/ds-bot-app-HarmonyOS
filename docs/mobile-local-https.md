@@ -11,7 +11,23 @@ Update both DS Bot and the native mobile app. Local HTTPS requires no domain, Ta
 
 Allow private-network access if the computer's firewall asks. Camera permission and iOS local-network permission may also appear. The plugin cannot approve OS permissions for you.
 
-The default port is `8788`; the plugin chooses an IPv4 LAN address. If several interfaces are available, choose the Wi-Fi address before enabling. Guest Wi-Fi, AP isolation, VPNs, or a firewall may prevent the phone reaching that address. If the computer changes networks or IP address, generate a new QR and pair the new address. Routine certificate renewal does not require pairing again.
+The default port is `8788`; the plugin prefers IPv4 and also lists private and public IPv6 addresses. If several interfaces are available, choose the Wi-Fi address before enabling. Guest Wi-Fi, AP isolation, VPNs, or a firewall may prevent the phone reaching that address. If the computer changes networks or IP address, turn the connection off and on, generate a new QR and pair the new address. Routine certificate renewal does not require pairing again.
+
+## IPv6 direct access
+
+IPv6 support is available in source and requires a build containing this change. The published `v0.1.0` plugin still lists IPv4 addresses only.
+
+A computer with public IPv6 can accept connections from another IPv6-capable network without a domain, coordination server, relay, or additional app.
+
+1. Turn off an existing phone connection on the computer. Select an address marked **Public IPv6** in Mobile devices, then enable the connection.
+2. Allow incoming TCP `8788` to that address in the computer and router IPv6 firewalls (or the selected custom port). Only the mobile port needs access; leave the DSH management port private. The plugin does not change firewalls.
+3. Scan the new QR in the native app and approve it on the computer. Test external access using IPv6-capable cellular data.
+
+An IPv6 origin is written as `https://[IPv6-address]:8788`; brackets are required. The plugin generates the correct QR and IP certificate automatically. The app still verifies the computer's public-key pin.
+
+Private IPv6 beginning with `fc` or `fd` requires a network with a route to that address; it is not public Internet access. Link-local `fe80` addresses require different interface scopes on each device and are not listed. A public IPv6 address does not prove reachability: the carrier, routing and firewalls must also allow connections. An IPv4-only phone network cannot connect directly. When IPv6 is selected, HTTPS binds only to that address.
+
+IPv6 prefixes and temporary addresses can change. Turn the connection off and on, choose the current address and pair again if the old address stops working. This version does not discover address changes through a public service. The project provides no hosted coordination or relay service.
 
 ## Identity and restart
 
@@ -25,6 +41,6 @@ Existing manual HTTPS configuration is preserved. Explicit `mobile.enabled: fals
 
 ## Scope
 
-Both devices must be directly reachable. This feature does not create an Internet tunnel or keep a powered-off computer available. For remote access, use the existing [public HTTPS deployment](mobile.md).
+Both devices must be directly reachable, either locally or through public IPv6 as described above. This feature does not create an Internet tunnel or keep a powered-off computer available. Other remote deployment options are in the [deployment guide](mobile.md).
 
 A browser or Expo Go cannot use this certificate-pinning transport; install the updated native app. Android background reception uses the same pin and does not require FCM/APNs while its background service runs. Existing iOS background execution limits still apply. EAS configuration is not needed for this feature. GitHub Actions can sign APKs with the project DeepSeekBot key when the password Secret is configured. Earlier test APKs used debug signing; switching certificates requires uninstalling the old App and pairing again. See [signing and releases](releasing.md).

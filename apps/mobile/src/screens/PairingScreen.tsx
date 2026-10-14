@@ -154,8 +154,11 @@ export function PairingScreen({
         <Label>{tr("Connect your host")}</Label>
         <Label muted>
           {tr(
-            "On your computer, open Settings → Mobile devices → Enable phone connection. Scan the code on the same Wi-Fi, then approve your phone on the computer.",
+            "On your computer, open Settings → Mobile devices, choose a reachable IPv4 or IPv6 address, and enable phone connection. Scan the code, then approve your phone on the computer.",
           )}
+        </Label>
+        <Label muted>
+          {tr("Public IPv6 also works across networks when your phone supports IPv6 and both firewalls allow the connection.")}
         </Label>
         <PairingScanner disabled={busy} onScan={(text) => { setRaw(text); void pair(text); }} />
         <Field

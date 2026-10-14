@@ -892,5 +892,11 @@
   "{name} was cut off by a restart again and stopped": "{name} 的工作又被重启打断，已停下",
   "Picked up its work after a restart": "重启后接着做之前的工作",
   "Asked to make the tool call it wrote as text": "工具调用被写成了文字，已让它重新调用",
-  "A Bot": "一个 Bot"
+  "A Bot": "一个 Bot",
+  "Connect over your local network or a reachable IPv6 address. No domain or extra app is needed.": "通过局域网或可达的 IPv6 地址连接，无需域名或额外 App。",
+  "Public IPv6": "公网 IPv6",
+  "Local IPv6": "内网 IPv6",
+  "Both devices need a route to this address. Allow the selected port in your firewall.": "手机必须能访问此地址，请在防火墙中允许所选端口的连接。",
+  "Public IPv6 can connect across networks when your phone supports IPv6 and your router and computer allow incoming connections. No relay is used.": "公网 IPv6 可跨网络直连，手机需支持 IPv6，路由器和电脑需允许入站连接。不使用中继。",
+  "Connect this computer to Wi-Fi or Ethernet, then choose its listed IPv4 or IPv6 address.": "请将电脑连接到 Wi-Fi 或有线网络，然后选择列表中的 IPv4 或 IPv6 地址。"
 }

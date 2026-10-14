@@ -58,20 +58,23 @@ export function MobileDevicesPage() {
   const devices = (state?.devices ?? []).filter(device => !device.revokedAt)
   const activePairing = pairing && enabled && pairing.url === state.url && Date.now() < new Date(pairing.expiresAt).getTime()
   const problem = error || refreshError || state?.error || state?.https?.error
+  const chosenAddress = enabled ? state?.https?.address : address || state?.https?.addresses?.[0]?.address
+  const selectedAddress = state?.https?.addresses?.find(item => item.address === chosenAddress)
   return h('div', { className: 'bt-mobile-page', 'aria-busy': busy },
     problem ? h('div', { className: 'bt-mobile-error', role: 'alert' }, h('span', { className: 'bt-error' }, hostText(problem)), button('Retry', () => void run('status'))) : null,
     !state ? h('p', { role: 'status' }, t('Loading devices…')) : h('div', { className: 'bt-set-card' },
       h('div', { className: 'bt-mobile-intro' },
         h('span', { className: 'bt-mobile-mark', 'aria-hidden': true }, h(PhoneIcon)),
-        h('div', { className: 'bt-set-copy' }, h('h3', null, t('Connect your phone')), h('p', { className: 'bt-set-hint' }, t('Use DS Bot Mobile on the same Wi-Fi. No domain or extra app is needed.'))),
+        h('div', { className: 'bt-set-copy' }, h('h3', null, t('Connect your phone')), h('p', { className: 'bt-set-hint' }, t('Connect over your local network or a reachable IPv6 address. No domain or extra app is needed.'))),
         h('span', { className: 'bt-mobile-status', 'data-enabled': enabled || undefined }, t(enabled ? 'Phone connection enabled' : 'Phone connection off'))),
       !enabled ? row('off', t('Phone connection'), t(state.locked ? 'Mobile access is disabled by this host configuration.' : 'Enable the connection, scan the QR code, then approve your phone.'),
         !state.locked && state.https?.provider === 'local' ? h('div', { className: 'bt-mobile-actions' },
           (state.https.addresses?.length ?? 0) > 1 ? h('select', { className: 'bt-select', 'aria-label': t('Computer network address'), value: address, onChange: event => setAddress(event.target.value), disabled: busy },
-            h('option', { value: '' }, t('Automatic network address')), ...state.https.addresses.map(item => h('option', { key: item.address, value: item.address }, item.name + ' · ' + item.address))) : null,
+            h('option', { value: '' }, t('Automatic network address')), ...state.https.addresses.map(item => h('option', { key: item.address, value: item.address }, item.name + ' · ' + (item.family === 6 ? t(item.scope === 'global' ? 'Public IPv6' : 'Local IPv6') + ' · ' : '') + item.address))) : null,
           button('Enable phone connection', () => void run('https.enable', address ? { address } : {}), true)) : null)
         : row('host', t('Connection address'), state.url ?? t('Mobile bridge'), button('Create pairing code', () => void run('pairing.create'), true)),
-      enabled && state.https?.provider === 'local' ? row('https', t('Local HTTPS is running'), t('Keep both devices on the same Wi-Fi. If the firewall asks, allow access on your private network.'), button('Turn off phone connection', () => { if (window.confirm(t('Disconnect all phones from this host?'))) void run('https.disable') })) : null),
+      enabled && state.https?.provider === 'local' ? row('https', t('Local HTTPS is running'), t('Both devices need a route to this address. Allow the selected port in your firewall.'), button('Turn off phone connection', () => { if (window.confirm(t('Disconnect all phones from this host?'))) void run('https.disable') })) : null,
+      selectedAddress?.scope === 'global' ? h('p', { className: 'bt-set-hint bt-mobile-note' }, t('Public IPv6 can connect across networks when your phone supports IPv6 and your router and computer allow incoming connections. No relay is used.')) : null),
     activePairing ? section('pairing', t('Pair your phone'), h('div', { className: 'bt-mobile-pairing' },
       h('div', { className: 'bt-mobile-qr' }, h('img', { src: pairing.qrDataUrl, width: 200, height: 200, alt: t('Scan this code in DS Bot Mobile to request access.') })),
       h('div', { className: 'bt-mobile-steps' },

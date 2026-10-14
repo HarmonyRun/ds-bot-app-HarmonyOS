@@ -85,10 +85,13 @@ test('server URLs require HTTPS and never allow embedded credentials or arbitrar
   assert.equal(validateServerUrl('https://bot.example/mobile/v1/'), 'https://bot.example');
   assert.equal(validateServerUrl('http://localhost:3000', { allowInsecure: true }), 'http://localhost:3000');
   assert.equal(validateServerUrl('http://127.0.0.1:3000', { allowInsecure: true }), 'http://127.0.0.1:3000');
+  assert.equal(validateServerUrl('http://[::1]:3000', { allowInsecure: true }), 'http://[::1]:3000');
+  assert.equal(validateServerUrl('https://[2001:db8:0:0::7]:8788/mobile/v1/'), 'https://[2001:db8::7]:8788');
+  assert.equal(validateServerUrl('https://[fd12:3456::1]:8788'), 'https://[fd12:3456::1]:8788');
   for (const url of ['http://localhost', 'http://bot.example', 'https://u:p@bot.example', 'https://bot.example/path', 'https://bot.example?token=secret', 'https://bot.example#token', 'file:///tmp/bot', 'javascript:alert(1)']) {
     assert.throws(() => validateServerUrl(url), MobileError);
   }
-  for (const url of ['http://192.168.1.9', 'http://localhost.attacker.example', 'http://[::]']) {
+  for (const url of ['http://192.168.1.9', 'http://localhost.attacker.example', 'http://[::]', 'http://[2001:db8::7]', 'http://[fd12::1]']) {
     assert.throws(() => validateServerUrl(url, { allowInsecure: true }), { code: 'insecure_url' });
   }
 });

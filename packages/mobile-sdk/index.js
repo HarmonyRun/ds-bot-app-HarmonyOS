@@ -13,7 +13,7 @@ export class MobileError extends Error {
 export function validateServerUrl(value, { allowInsecure = false } = {}) {
   let url;
   try { url = new URL(value); } catch { throw new MobileError('invalid_url', 'Enter a complete HTTPS server address.'); }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if (url.protocol !== 'https:' && !(allowInsecure && url.protocol === 'http:' && loopback)) {
     throw new MobileError('insecure_url', 'HTTPS is required. Development HTTP is limited to localhost.');
   }

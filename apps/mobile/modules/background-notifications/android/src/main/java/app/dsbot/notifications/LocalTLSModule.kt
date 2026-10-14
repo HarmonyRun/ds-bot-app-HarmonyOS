@@ -52,7 +52,7 @@ class LocalTLSModule : Module() {
         call.enqueue(object : Callback {
           override fun onFailure(call: Call, e: IOException) {
             calls.remove(id, call)
-            promise.reject("LOCAL_TLS_FAILED", "Could not verify or reach this computer. Check Wi-Fi and scan a new pairing code if its identity changed.", null)
+            promise.reject("LOCAL_TLS_FAILED", "Could not verify or reach this computer. Check its network address and firewall, then scan a new pairing code if its identity changed.", null)
           }
           override fun onResponse(call: Call, response: Response) {
             try {

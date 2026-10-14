@@ -1,7 +1,7 @@
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, sign, X509Certificate } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { isIP } from 'node:net'
 import { join } from 'node:path'
+import { ipBytes } from './ip-address.js'
 
 const der = (tag, bytes) => {
   const value = Buffer.from(bytes)
@@ -23,7 +23,8 @@ const pem = bytes => '-----BEGIN CERTIFICATE-----\n' + bytes.toString('base64').
 const fingerprint = key => 'sha256:' + createHash('sha256').update(createPublicKey(key).export({ format: 'der', type: 'spki' })).digest('hex')
 
 export function generateLocalCertificate(privateKey, addresses, now = Date.now()) {
-  if (!Array.isArray(addresses) || !addresses.length || addresses.some(ip => isIP(ip) !== 4)) throw new Error('Choose an IPv4 address for local mobile access.')
+  if (!Array.isArray(addresses) || !addresses.length) throw new Error('Choose an IPv4 or IPv6 address for mobile access.')
+  const names = [...new Set(addresses)].map(ipBytes)
   const publicKey = createPublicKey(privateKey).export({ format: 'der', type: 'spki' })
   const serialBytes = randomBytes(16)
   serialBytes[0] |= 0x80
@@ -32,7 +33,7 @@ export function generateLocalCertificate(privateKey, addresses, now = Date.now()
     extension('0603551d13', seq(), true),
     extension('0603551d0f', hex('03020780'), true),
     extension('0603551d25', seq(hex('06082b06010505070301'))),
-    extension('0603551d11', seq(...[...new Set(addresses)].map(ip => der(0x87, Buffer.from(ip.split('.').map(Number)))))),
+    extension('0603551d11', seq(...names.map(bytes => der(0x87, bytes)))),
   ))
   const tbs = seq(der(0xa0, hex('020102')), serial, algorithm, name,
     seq(time(new Date(now - 300000)), time(new Date(now + 365 * 86400000))), name, publicKey, extensions)

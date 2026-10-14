@@ -54,6 +54,8 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 
 请使用本仓库提供的配套插件包，npm 上游的同名 `ds-bot` 不包含完整手机连接功能。
 
+新版源码构建还支持[公网 IPv6 跨网络直连](docs/mobile-local-https.zh.md#ipv6-直连)，无需域名或中继；已发布的 `v0.1.0` 插件仍只自动列出 IPv4。
+
 iOS 源码已提供，当前没有 IPA 安装包；构建与支持说明见 [iOS 文档](docs/ios.zh.md)。
 
 [安装与配置](docs/getting-started.zh.md) · [功能与通知配置](docs/mobile-features.zh.md) · [远程连接](docs/mobile-install.zh.md)

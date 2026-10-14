@@ -630,5 +630,8 @@
   "Approve this MCP command on your computer.": "请在电脑上批准此 MCP 命令。",
   "Stop {name} in this group": "停止 {name} 在此群的任务",
   "Stop member work": "停止成员任务",
-  "Could not stop member work.": "无法停止成员任务。"
+  "Could not stop member work.": "无法停止成员任务。",
+  "On your computer, open Settings → Mobile devices, choose a reachable IPv4 or IPv6 address, and enable phone connection. Scan the code, then approve your phone on the computer.": "在电脑上打开「设置 → 手机设备」，选择手机可达的 IPv4 或 IPv6 地址并启用手机连接。手机扫码后，在电脑上批准连接。",
+  "Public IPv6 also works across networks when your phone supports IPv6 and both firewalls allow the connection.": "公网 IPv6 也可跨网络直连，手机网络需支持 IPv6，路由器和电脑防火墙需允许连接。",
+  "Could not verify or reach this computer. Check its network address and firewall, then scan a new pairing code if its identity changed.": "无法验证或连接此电脑，请检查网络地址和防火墙；如果电脑身份发生变化，请重新扫码配对。"
 }

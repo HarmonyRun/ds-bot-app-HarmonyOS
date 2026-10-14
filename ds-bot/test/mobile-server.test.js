@@ -3,11 +3,13 @@ import { once } from 'node:events'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, X509Certificate } from 'node:crypto'
 import test from 'node:test'
+import https from 'node:https'
 import { WebSocket } from 'ws'
 import { createMobileServer } from '../src/mobile/server.js'
 import { createAuthStore } from '../src/mobile/auth.js'
+import { ensureLocalCertificate } from '../src/mobile/local-certificate.js'
 
 function fakeAdapter() {
   const calls = []
@@ -33,6 +35,43 @@ function fakeAdapter() {
     },
   }
 }
+
+test('IPv6 HTTPS pairing and WSS events verify the IP certificate and require device authorization', async t => {
+  const home = await mkdtemp(join(tmpdir(), '.dsh-test-mobile-ipv6-'))
+  let server, socket
+  t.after(async () => { socket?.terminate(); await server?.close(); await rm(home, { recursive: true, force: true }) })
+  const certificate = await ensureLocalCertificate(join(home, 'tls'), ['::1'])
+  const ca = await readFile(certificate.certPath)
+  server = await createMobileServer({ home, adapter: fakeAdapter(), config: { host: '::1', port: 0, ...certificate } })
+  assert.equal(new URL(server.url).hostname, '[::1]')
+  // Node 24.19's DNS ASCII conversion rejects bare IPv6 in checkServerIdentity.
+  // Keep normal CA/expiry checks and verify the binary IP SAN with X509 instead.
+  const checkServerIdentity = (hostname, peer) => new X509Certificate(peer.raw).checkIP(hostname) ? undefined : new Error('The certificate does not match the IPv6 address.')
+  assert.ok(checkServerIdentity('::2', { raw: new X509Certificate(ca).raw }) instanceof Error)
+  const request = (path, body) => new Promise((resolve, reject) => {
+    const req = https.request(`${server.url}/mobile/v1${path}`, { ca, checkServerIdentity, method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {} }, response => {
+      let text = ''
+      response.on('data', chunk => { text += chunk })
+      response.on('end', () => resolve({ status: response.statusCode, body: JSON.parse(text) }))
+    })
+    req.on('error', reject); req.end(body ? JSON.stringify(body) : undefined)
+  })
+  assert.equal((await request('/state')).status, 401)
+  const code = await server.operator('pairing.create')
+  assert.equal(code.url, server.url)
+  const claim = (await request('/pairings', { code: code.code, deviceName: 'IPv6 test phone' })).body
+  assert.equal((await request('/pairings/complete', { claimToken: claim.claimToken })).body.status, 'pending')
+  await server.operator('pairing.approve', { requestId: claim.requestId })
+  const session = (await request('/pairings/complete', { claimToken: claim.claimToken })).body
+  socket = new WebSocket(`${server.url.replace('https:', 'wss:')}/mobile/v1/events`, { ca, checkServerIdentity })
+  await once(socket, 'open')
+  const message = once(socket, 'message')
+  socket.send(JSON.stringify({ type: 'auth', token: session.accessToken, conversationId: 'bot-one' }))
+  assert.equal(JSON.parse(String((await message)[0])).type, 'ready')
+  const closed = once(socket, 'close')
+  await server.operator('device.revoke', { id: session.deviceId })
+  assert.equal((await closed)[0], 4403)
+})
 
 async function fixture(t, config = {}) {
   const home = await mkdtemp(join(tmpdir(), '.dsh-test-mobile-'))

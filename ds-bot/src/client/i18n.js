@@ -43,6 +43,12 @@ const ZH = {
   "Revoke an unused device before pairing another.": "请先撤销不再使用的设备，再配对新设备。",
   "Too many pending pairing requests.": "待批准的配对请求过多，请先处理现有请求。",
 
+  "Connect over your local network or a reachable IPv6 address. No domain or extra app is needed.": "通过局域网或可达的 IPv6 地址连接，无需域名或额外 App。",
+  "Public IPv6": "公网 IPv6",
+  "Local IPv6": "内网 IPv6",
+  "Both devices need a route to this address. Allow the selected port in your firewall.": "手机必须能访问此地址，请在防火墙中允许所选端口的连接。",
+  "Public IPv6 can connect across networks when your phone supports IPv6 and your router and computer allow incoming connections. No relay is used.": "公网 IPv6 可跨网络直连，手机需支持 IPv6，路由器和电脑需允许入站连接。不使用中继。",
+  "Connect this computer to Wi-Fi or Ethernet, then choose its listed IPv4 or IPv6 address.": "请将电脑连接到 Wi-Fi 或有线网络，然后选择列表中的 IPv4 或 IPv6 地址。",
   "Loading devices…": "正在加载设备…",
   "Could not refresh mobile devices.": "无法刷新手机设备。",
   "Connect your phone": "连接手机",

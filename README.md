@@ -54,6 +54,8 @@ Start on the same Wi-Fi. The plugin sets up local HTTPS without a domain or manu
 
 Use this repository's matching plugin package. The upstream npm package named `ds-bot` does not include the complete phone connection implementation.
 
+New source builds also support [public IPv6 direct access](docs/mobile-local-https.md#ipv6-direct-access) across networks without a domain or relay. The published `v0.1.0` plugin lists IPv4 only.
+
 iOS source is available; no IPA is currently provided. See the [iOS guide](docs/ios.md) for builds and platform support.
 
 [Installation](docs/getting-started.md) · [Features and notifications](docs/mobile-features.zh.md) · [Remote access](docs/mobile-install.zh.md)

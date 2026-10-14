@@ -2,6 +2,17 @@
 
 All notable changes to DS Bot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow [Semantic Versioning](https://semver.org/). Before 1.0, a minor version can contain breaking changes.
 
+## Unreleased
+
+### Added
+
+- Direct mobile access over private or public IPv6 with automatic IP certificates, bracketed pairing URLs, persisted address selection and bilingual setup guidance. Public IPv6 requires an IPv6-capable phone network and incoming firewall access; no hosted coordination or relay service is used.
+
+### Fixed
+
+- Keep IPv4 as the default while excluding IPv6 link-local, multicast and unspecified addresses from automatic setup. Bind IPv6 HTTPS to the selected address and retain host public-key identity when renewing certificates.
+- Normalize IPv6 brackets for iOS certificate hostname checks and allow IPv6 loopback HTTP only in explicit SDK development mode.
+
 ## DS Bot App [v0.1.0] - 2026-10-13 (republished)
 
 Sync upstream [v0.1.4](https://github.com/Fei2411/DeepSeek-Bot/releases/tag/v0.1.4), commit `5c2726279d3bcabaad6aea403c46c88fcf9ba8d8`, while keeping this fork’s coordinated version and mobile implementation. The withdrawn source is archived under `archive/withdrawn-v0.1.0`.

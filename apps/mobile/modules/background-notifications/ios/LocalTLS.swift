@@ -3,6 +3,10 @@ import Security
 import CryptoKit
 
 func validLocalPin(_ value: String) -> Bool { value.range(of: "^sha256:[a-f0-9]{64}$", options: .regularExpression) != nil }
+private func unbracketedHost(_ value: String?) -> String? {
+  guard let value = value else { return nil }
+  return value.hasPrefix("[") && value.hasSuffix("]") ? String(value.dropFirst().dropLast()) : value
+}
 func validateLocalURL(_ origin: String, _ url: String, socket: Bool = false) -> Bool {
   guard let base = URLComponents(string: origin), let target = URLComponents(string: url) else { return false }
   return base.scheme == "https" && base.host != nil && base.user == nil && base.password == nil && base.query == nil && base.fragment == nil && ["", "/"].contains(base.path)
@@ -62,13 +66,13 @@ class LocalTrustDelegate: NSObject, URLSessionTaskDelegate {
   func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
     if pin.isEmpty { completionHandler(.performDefaultHandling, nil); return }
     guard validLocalPin(pin), challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-      let expected = URLComponents(string: origin), challenge.protectionSpace.host == expected.host,
+      let expected = URLComponents(string: origin), let peerHost = unbracketedHost(challenge.protectionSpace.host), peerHost == unbracketedHost(expected.host),
       challenge.protectionSpace.port == (expected.port ?? 443), let trust = challenge.protectionSpace.serverTrust,
       SecTrustGetCertificateCount(trust) == 1, let cert = SecTrustGetCertificateAtIndex(trust, 0), let spki = certificateSPKI(cert),
       "sha256:" + SHA256.hash(data: spki).map({ String(format: "%02x", $0) }).joined() == pin else {
       completionHandler(.cancelAuthenticationChallenge, nil); return
     }
-    SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, challenge.protectionSpace.host as CFString))
+    SecTrustSetPolicies(trust, SecPolicyCreateSSL(true, peerHost as CFString))
     SecTrustSetAnchorCertificates(trust, [cert] as CFArray)
     SecTrustSetAnchorCertificatesOnly(trust, true)
     guard SecTrustEvaluateWithError(trust, nil) else { completionHandler(.cancelAuthenticationChallenge, nil); return }

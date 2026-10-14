@@ -78,6 +78,12 @@ var ZH = {
   "The device does not exist.": "此设备已不存在。",
   "Revoke an unused device before pairing another.": "请先撤销不再使用的设备，再配对新设备。",
   "Too many pending pairing requests.": "待批准的配对请求过多，请先处理现有请求。",
+  "Connect over your local network or a reachable IPv6 address. No domain or extra app is needed.": "通过局域网或可达的 IPv6 地址连接，无需域名或额外 App。",
+  "Public IPv6": "公网 IPv6",
+  "Local IPv6": "内网 IPv6",
+  "Both devices need a route to this address. Allow the selected port in your firewall.": "手机必须能访问此地址，请在防火墙中允许所选端口的连接。",
+  "Public IPv6 can connect across networks when your phone supports IPv6 and your router and computer allow incoming connections. No relay is used.": "公网 IPv6 可跨网络直连，手机需支持 IPv6，路由器和电脑需允许入站连接。不使用中继。",
+  "Connect this computer to Wi-Fi or Ethernet, then choose its listed IPv4 or IPv6 address.": "请将电脑连接到 Wi-Fi 或有线网络，然后选择列表中的 IPv4 或 IPv6 地址。",
   "Loading devices…": "正在加载设备…",
   "Could not refresh mobile devices.": "无法刷新手机设备。",
   "Connect your phone": "连接手机",
@@ -10482,6 +10488,8 @@ function MobileDevicesPage() {
   const devices = (state?.devices ?? []).filter((device) => !device.revokedAt);
   const activePairing = pairing && enabled && pairing.url === state.url && Date.now() < new Date(pairing.expiresAt).getTime();
   const problem = error || refreshError || state?.error || state?.https?.error;
+  const chosenAddress = enabled ? state?.https?.address : address || state?.https?.addresses?.[0]?.address;
+  const selectedAddress = state?.https?.addresses?.find((item) => item.address === chosenAddress);
   return (0, import_react27.createElement)(
     "div",
     { className: "bt-mobile-page", "aria-busy": busy },
@@ -10493,7 +10501,7 @@ function MobileDevicesPage() {
         "div",
         { className: "bt-mobile-intro" },
         (0, import_react27.createElement)("span", { className: "bt-mobile-mark", "aria-hidden": true }, (0, import_react27.createElement)(PhoneIcon)),
-        (0, import_react27.createElement)("div", { className: "bt-set-copy" }, (0, import_react27.createElement)("h3", null, t("Connect your phone")), (0, import_react27.createElement)("p", { className: "bt-set-hint" }, t("Use DS Bot Mobile on the same Wi-Fi. No domain or extra app is needed."))),
+        (0, import_react27.createElement)("div", { className: "bt-set-copy" }, (0, import_react27.createElement)("h3", null, t("Connect your phone")), (0, import_react27.createElement)("p", { className: "bt-set-hint" }, t("Connect over your local network or a reachable IPv6 address. No domain or extra app is needed."))),
         (0, import_react27.createElement)("span", { className: "bt-mobile-status", "data-enabled": enabled || void 0 }, t(enabled ? "Phone connection enabled" : "Phone connection off"))
       ),
       !enabled ? row(
@@ -10507,14 +10515,15 @@ function MobileDevicesPage() {
             "select",
             { className: "bt-select", "aria-label": t("Computer network address"), value: address, onChange: (event) => setAddress(event.target.value), disabled: busy },
             (0, import_react27.createElement)("option", { value: "" }, t("Automatic network address")),
-            ...state.https.addresses.map((item) => (0, import_react27.createElement)("option", { key: item.address, value: item.address }, item.name + " · " + item.address))
+            ...state.https.addresses.map((item) => (0, import_react27.createElement)("option", { key: item.address, value: item.address }, item.name + " · " + (item.family === 6 ? t(item.scope === "global" ? "Public IPv6" : "Local IPv6") + " · " : "") + item.address))
           ) : null,
           button("Enable phone connection", () => void run("https.enable", address ? { address } : {}), true)
         ) : null
       ) : row("host", t("Connection address"), state.url ?? t("Mobile bridge"), button("Create pairing code", () => void run("pairing.create"), true)),
-      enabled && state.https?.provider === "local" ? row("https", t("Local HTTPS is running"), t("Keep both devices on the same Wi-Fi. If the firewall asks, allow access on your private network."), button("Turn off phone connection", () => {
+      enabled && state.https?.provider === "local" ? row("https", t("Local HTTPS is running"), t("Both devices need a route to this address. Allow the selected port in your firewall."), button("Turn off phone connection", () => {
         if (window.confirm(t("Disconnect all phones from this host?"))) void run("https.disable");
-      })) : null
+      })) : null,
+      selectedAddress?.scope === "global" ? (0, import_react27.createElement)("p", { className: "bt-set-hint bt-mobile-note" }, t("Public IPv6 can connect across networks when your phone supports IPv6 and your router and computer allow incoming connections. No relay is used.")) : null
     ),
     activePairing ? section("pairing", t("Pair your phone"), (0, import_react27.createElement)(
       "div",

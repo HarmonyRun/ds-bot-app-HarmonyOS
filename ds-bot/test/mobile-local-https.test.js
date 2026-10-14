@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { X509Certificate, createPrivateKey, generateKeyPairSync } from 'node:crypto'
 import https from 'node:https'
-import { ensureLocalCertificate } from '../src/mobile/local-certificate.js'
+import { ensureLocalCertificate, generateLocalCertificate } from '../src/mobile/local-certificate.js'
 import { createLocalHttps, localAddresses } from '../src/mobile/local-https.js'
 
 async function fixture(t) { const home = await mkdtemp(join(tmpdir(), 'dsbot-local-tls-')); t.after(() => rm(home, { recursive: true, force: true })); return home }
@@ -81,4 +81,44 @@ test('manual configuration, explicit disable, corrupt settings, owner changes, a
 })
 test('network selection prefers LAN Wi-Fi over virtual adapters and excludes loopback', () => {
   assert.deepEqual(localAddresses({ docker0: [{ address: '172.17.0.1', family: 'IPv4', internal: false }], wlan0: [{ address: '192.168.3.4', family: 'IPv4', internal: false }], lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }] }).map(item => item.address), ['192.168.3.4', '172.17.0.1'])
+})
+test('IPv6 certificates verify compressed, expanded and mapped IP SANs and retain identity after address changes', async t => {
+  const home = await fixture(t)
+  const addresses = ['127.0.0.1', '::1', 'fd12:3456::1', '2001:db8::7', '::ffff:192.0.2.7']
+  const first = await ensureLocalCertificate(home, addresses)
+  const pem = await readFile(first.certPath)
+  const certificate = new X509Certificate(pem)
+  assert.ok(certificate.checkIP('2001:db8:0:0:0:0:0:7'))
+  for (const address of addresses) assert.ok(certificate.checkIP(address), address)
+  assert.equal(certificate.checkIP('2001:db8::8'), undefined)
+  await ensureLocalCertificate(home, addresses)
+  assert.deepEqual(await readFile(first.certPath), pem)
+  const renewed = await ensureLocalCertificate(home, [...addresses, '2001:db8::8'])
+  assert.equal(renewed.tlsPin, first.tlsPin)
+  assert.ok(new X509Certificate(await readFile(renewed.certPath)).checkIP('2001:db8::8'))
+  const key = createPrivateKey(await readFile(first.keyPath))
+  for (const address of ['fe80::1%wlan0', '[2001:db8::1]', '2001:db8:::1', 'host.example']) assert.throws(() => generateLocalCertificate(key, [address]))
+})
+test('IPv6 selection excludes link-local, multicast, unspecified and mapped addresses while preserving IPv4 defaults', () => {
+  const addresses = ['192.168.3.4', '2001:db8::7', 'fd12:3456::1', 'fe80::1', 'fe80::1%wlan0', 'ff02::1', '::', '::1', '::ffff:192.0.2.7']
+  const interfaces = { wlan0: addresses.map(address => ({ address, family: address.includes(':') ? 6 : 4, internal: false })) }
+  const selected = localAddresses(interfaces)
+  assert.deepEqual(selected.map(item => item.address), ['192.168.3.4', 'fd12:3456::1', '2001:db8::7'])
+  assert.deepEqual(selected.map(item => item.scope), [undefined, 'private', 'global'])
+})
+test('selecting IPv6 uses a bracketed QR origin, binds only that address and restores the same pin', async t => {
+  const home = await fixture(t)
+  const starts = []
+  const options = { home, load: async () => {}, readOnly: () => undefined, addresses: () => [{ address: '192.168.3.4', name: 'Wi-Fi' }, { address: '2001:DB8:0:0:0:0:0:7', name: 'Wi-Fi' }], start: async config => starts.push(config), stop: async () => {} }
+  const local = await createLocalHttps(options)
+  await assert.rejects(local.enable({ address: '2001:db8::8' }), /listed IPv4 or IPv6/)
+  const state = await local.enable({ address: '2001:DB8:0:0:0:0:0:7' })
+  assert.equal(state.url, 'https://[2001:db8::7]:8788')
+  assert.equal(starts[0].host, '2001:DB8:0:0:0:0:0:7')
+  assert.equal(state.address, starts[0].host)
+  await assert.rejects(local.enable({ address: '192.168.3.4' }), /Turn off/)
+  const restored = await createLocalHttps(options)
+  await restored.restore()
+  assert.equal(restored.snapshot().url, state.url)
+  assert.equal(restored.snapshot().tlsPin, state.tlsPin)
 })

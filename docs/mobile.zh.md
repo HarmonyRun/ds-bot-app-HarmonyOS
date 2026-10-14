@@ -2,9 +2,11 @@
 
 最简单的同一 Wi-Fi 连接请看[一键本地 HTTPS](mobile-local-https.zh.md)：电脑启用、手机扫码、电脑批准，无需域名或额外 App。
 
+电脑有公网 IPv6、手机网络支持 IPv6 时，也可以使用[公网 IPv6 直连](mobile-local-https.zh.md#ipv6-直连)跨网络连接，无需域名或中继；路由器和电脑防火墙需放行所选手机连接端口。需安装包含 IPv6 支持的新插件构建，已发布的 `v0.1.0` 仍只自动列出 IPv4。
+
 [English](mobile.md) | 中文
 
-首次安装请看[手机端部署安装](mobile-install.zh.md)：按 VPS、局域网、HTTPS 隧道、Tailscale 四种方式说明。
+首次安装请看[手机端部署安装](mobile-install.zh.md)：说明 VPS、局域网、公网 IPv6、HTTPS 隧道和 Tailscale 部署。
 
 已完成的检查和待做真机测试见[验证记录](mobile-validation.zh.md)。当前仍为预览版。
 
