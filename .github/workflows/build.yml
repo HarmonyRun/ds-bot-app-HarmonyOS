@@ -206,12 +206,15 @@ jobs:
           cd release
           sha256sum *.tgz *.apk *.cer > "$sums_file"
           if [[ -n "$revision" ]]; then
-            if gh release view "$publish_tag" --repo "$REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$sums_file"; then
-              echo 'This revision is already published; use a new revision tag.' >&2
-              exit 1
-            fi
+            existing=$(gh release view "$publish_tag" --repo "$REPOSITORY" --json assets --jq '.assets[].name')
+            for asset in "$plugin_file" ./*.apk "$sums_file"; do
+              if printf '%s\n' "$existing" | grep -Fxq "${asset#./}"; then
+                echo 'A file from this revision is already published; use a new revision tag.' >&2
+                exit 1
+              fi
+            done
             gh release upload "$publish_tag" "$plugin_file" ./*.apk "$sums_file" \
-              --repo "$REPOSITORY" --clobber
+              --repo "$REPOSITORY"
             gh release edit "$publish_tag" --repo "$REPOSITORY" --title "DS Bot $publish_tag" \
               --notes-file "$notes" --latest
           else

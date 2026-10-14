@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 @unittest.skipUnless(shutil.which("node") and shutil.which("bash"), "Node and Bash are required")
 class ReleasePublicationTests(unittest.TestCase):
-    def run_publication(self, tag, published=False, bad_checksum=False):
+    def run_publication(self, tag, published=False, bad_checksum=False, partial=False):
         with tempfile.TemporaryDirectory(prefix="dsbot-release-test-") as directory:
             task = Path(directory)
             (task / "scripts").mkdir()
@@ -43,7 +43,7 @@ calls.append(args);log.write_text(json.dumps(calls))
 if args[:2]==['release','download']:
     for item in (root/'legacy-input').iterdir():shutil.copyfile(item,root/'legacy'/item.name)
 elif args[:2]==['release','view']:
-    print('SHA256SUMS-r2' if os.environ.get('REVISION_PUBLISHED')=='1' else 'SHA256SUMS')
+    print('ds-bot-0.1.1-r2.tgz' if os.environ.get('REVISION_PUBLISHED')=='partial' else 'SHA256SUMS-r2' if os.environ.get('REVISION_PUBLISHED')=='1' else 'SHA256SUMS')
 elif args[:2] not in [['release','upload'],['release','edit'],['release','create']]:sys.exit(2)
 ''')
             script.chmod(0o755)
@@ -52,7 +52,7 @@ elif args[:2] not in [['release','upload'],['release','edit'],['release','create
             program = "\n".join(line[10:] for line in block.splitlines())
             environment = dict(os.environ, PATH=str(task / "bin") + os.pathsep + os.environ["PATH"],
                                RELEASE_TAG=tag, REPOSITORY="owner/repo", GITHUB_WORKSPACE=str(task),
-                               REVISION_PUBLISHED="1" if published else "0")
+                               REVISION_PUBLISHED="partial" if partial else "1" if published else "0")
             result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", program], cwd=task,
                                     env=environment, capture_output=True, text=True)
             calls = json.loads((task / "commands.json").read_text()) if (task / "commands.json").exists() else []
@@ -65,6 +65,7 @@ elif args[:2] not in [['release','upload'],['release','edit'],['release','create
         self.assertIn("ds-bot-0.1.1-r2.tgz", upload)
         self.assertIn("./dsbot-android-arm64-v0.1.1-r2.apk", upload)
         self.assertIn("SHA256SUMS-r2", upload)
+        self.assertNotIn("--clobber", upload)
         for original in ["ds-bot-0.1.1.tgz", "SHA256SUMS", "DeepSeekBot.cer"]:
             self.assertNotIn(original, upload)
         self.assertTrue(any(call[:3] == ["release", "edit", "v0.1.1"] for call in calls))
@@ -84,5 +85,10 @@ elif args[:2] not in [['release','upload'],['release','edit'],['release','create
 
     def test_original_integrity_failure_stops_publication(self):
         code, calls, _ = self.run_publication("v0.1.1-r2", bad_checksum=True)
+        self.assertNotEqual(code, 0)
+        self.assertFalse(any(call[1] in ["upload", "edit"] for call in calls))
+
+    def test_partial_revision_cannot_overwrite_a_downloaded_archive(self):
+        code, calls, _ = self.run_publication("v0.1.1-r2", partial=True)
         self.assertNotEqual(code, 0)
         self.assertFalse(any(call[1] in ["upload", "edit"] for call in calls))

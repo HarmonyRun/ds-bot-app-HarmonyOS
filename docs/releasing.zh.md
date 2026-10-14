@@ -50,7 +50,7 @@ Artifacts 有 GitHub 保留期限，需要长期保存的版本使用 Releases�
 
 ## 修订已发布版本
 
-不要覆盖已发布的归档或移动源码标签：已有 pnpm 锁文件记录了原文件的校验值。修订 `0.1.1` 时，package/Expo 版本仍为 `0.1.1`，编写 `docs/releases/v0.1.1-r2.md`，再推送新标签 `v0.1.1-r2`。Actions 向已有 `v0.1.1` Release 添加带修订号的插件、APK 和 `SHA256SUMS-r2`，并更新说明。原下载文件和签名证书保持不变，Android versionCode 递增。已完成的修订不允许覆盖；再次修复请使用下一个修订号。
+不要覆盖已发布的归档或移动源码标签：已有 pnpm 锁文件记录了原文件的校验值。修订 `0.1.1` 时，package/Expo 版本仍为 `0.1.1`，编写 `docs/releases/v0.1.1-r2.md`，再推送新标签 `v0.1.1-r2`。Actions 向已有 `v0.1.1` Release 添加带修订号的插件、APK 和 `SHA256SUMS-r2`，并更新说明。原下载文件和签名证书保持不变，Android versionCode 递增。任何已有修订文件都会阻止发布，即使上次只上传了部分文件；再次发布请使用下一个修订号，避免更改已下载的内容。手动触发的 `Restore legacy plugin integrity` 工作流仅修复历史 `0.1.0` 错误：校验保存的原包，将重发包单独保留，恢复原下载地址和校验清单。它不改源码标签或 APK。
 
 ## 本地构建与签名
 

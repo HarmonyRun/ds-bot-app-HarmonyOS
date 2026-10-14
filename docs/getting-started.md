@@ -23,6 +23,18 @@ You can also use matching files from [Releases](https://github.com/QingJ01/DS-Bo
 3. In Harness settings, configure your provider and credential. Choose Chief's model and test a message on the computer.
 4. Ask Chief to create Bots/groups, or use the client creation pages to set names, roles, instructions and models.
 
+### Updating an existing installation
+
+In DSH **Plugins → Add plugin**, use the explicit dependency name:
+
+```text
+ds-bot@https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/ds-bot-0.1.1-r2.tgz
+```
+
+Fully restart DSH afterward and update the App. Updating the old package in place still uses its old URL. The explicit name lets pnpm replace the dependency before reading that URL, including lockfiles from either `0.1.0` publication. Do not delete lockfiles or conversation data.
+
+The original `0.1.0` URL has been restored to the initial archive matching `sha512-8506Zru5…`; failed installations with that lockfile can retry. The later republished archive is preserved separately. For a lock recording `sha512-she1FgmT…`, use the explicit specification above instead of changing checksums. See the [integrity repair](releases/integrity-repair-20261014.md).
+
 For DSH Web, install Node.js 24 LTS and pnpm, then run in your own workspace:
 
 ```sh

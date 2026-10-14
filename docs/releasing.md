@@ -35,7 +35,7 @@ The tag pipeline creates a public stable release with the plugin tarball, signed
 
 ## Revising a published version
 
-Never replace a published archive or move its source tag: existing pnpm lockfiles record the original bytes. To revise `0.1.1`, keep package/Expo versions at `0.1.1`, write `docs/releases/v0.1.1-r2.md`, then push a new `v0.1.1-r2` tag. Actions adds revision-named plugin/APKs and `SHA256SUMS-r2` to the existing `v0.1.1` Release and updates its notes. It preserves all original assets and the signing certificate; Android versionCode increases. A completed revision cannot be overwritten; use the next revision number for another fix.
+Never replace a published archive or move its source tag: existing pnpm lockfiles record the original bytes. To revise `0.1.1`, keep package/Expo versions at `0.1.1`, write `docs/releases/v0.1.1-r2.md`, then push a new `v0.1.1-r2` tag. Actions adds revision-named plugin/APKs and `SHA256SUMS-r2` to the existing `v0.1.1` Release and updates its notes. It preserves all original assets and the signing certificate; Android versionCode increases. Any existing revision asset blocks publication, including a partially uploaded revision; use the next revision number rather than replacing downloaded bytes. The manually dispatched `Restore legacy plugin integrity` workflow is a bounded repair for the historical `0.1.0` mistake: it validates the archived original, preserves the republication under a distinct name, and restores the original URL/checksums. It does not change source tags or APKs.
 
 ## Local builds
 
