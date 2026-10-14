@@ -151,9 +151,9 @@ export const MOBILE_APPROVAL_CSS = `
 .bt-mobile-approval-actions>.bt-mobile-approval-hint{margin-right:auto}
 .bt-mobile-approval button,.bt-mobile-approval-notice{font:inherit;cursor:pointer;border:1px solid var(--bt-line,#e5e5e5);border-radius:10px;padding:7px 13px;background:var(--bt-hover,#f4f4f4);color:inherit}
 .bt-mobile-approval button:disabled{opacity:.5;cursor:default}
-.bt-mobile-approval button.bt-mobile-approval-allow{background:var(--bt-accent,#4d6bfe);color:var(--bt-accent-ink,#fff);border-color:transparent}
+.bt-mobile-approval button.bt-mobile-approval-allow{background:var(--bt-accent,#3964fe);color:var(--bt-accent-ink,#fff);border-color:transparent}
 .bt-mobile-approval-error{margin:8px 14px;color:var(--dsw-alias-state-error-primary,#b42318)}
 .bt-mobile-approval-notices{position:fixed;right:20px;top:72px;z-index:160;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 40px));font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
 .bt-mobile-approval-notice{display:flex;flex-direction:column;text-align:left;background:var(--bt-card,#fff);color:var(--bt-ink,#181818)}
-.bt-mobile-approval button:focus-visible,.bt-mobile-approval-body:focus-visible,.bt-mobile-approval-notice:focus-visible{outline:2px solid var(--bt-accent,#4d6bfe);outline-offset:2px}
+.bt-mobile-approval button:focus-visible,.bt-mobile-approval-body:focus-visible,.bt-mobile-approval-notice:focus-visible{outline:2px solid var(--bt-accent,#3964fe);outline-offset:2px}
 `
