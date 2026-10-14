@@ -55,6 +55,33 @@ const githubLatest = (tag, manifest) => ({
   [`https://raw.githubusercontent.com/QingJ01/DS-Bot-App/${tag}/ds-bot/package.json`]: manifest,
 })
 
+test('concurrent Harness checks all return the shared lookup status', async () => {
+  const { rt, fetched } = start({ source: `${PKG.name}@${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }) })
+  const views = await Promise.all([rt.dshUpdateCheck(), rt.dshUpdateCheck(), rt.dshUpdateCheck({ fresh: true })])
+  for (const view of views) { assert.equal(view.verified, '9.9.9'); assert.equal(view.available, true) }
+  assert.equal(fetched.length, 1)
+})
+
+test('a synchronous npm launcher failure does not leave Harness installing forever', async () => {
+  const { rt } = start({ source: `${PKG.name}@${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }),
+    spawn: () => { throw new Error('launcher unavailable') },
+  })
+  await rt.dshUpdateCheck()
+  assert.equal(rt.dshUpdateStart().phase, 'failed')
+  assert.equal(rt.dshUpdateView().error, 'launcher unavailable')
+  assert.equal(rt.dshUpdateView().available, true)
+})
+
+test('Harness compatibility comes from the released revision rather than its original tag', async () => {
+  const { rt } = start({ source: 'github:QingJ01/DS-Bot-App#v0.1.0&path:ds-bot', answers: {
+    'https://api.github.com/repos/QingJ01/DS-Bot-App/releases/latest': {
+      tag_name: 'v9.0.0', assets: [{ name: 'ds-bot-9.0.0-r2.tgz' }, { name: 'SHA256SUMS-r2' }],
+    },
+    'https://raw.githubusercontent.com/QingJ01/DS-Bot-App/v9.0.0-r2/ds-bot/package.json': { dsBot: { verifiedDsh: '9.9.9' } },
+  } })
+  assert.equal((await rt.dshUpdateCheck()).verified, '9.9.9')
+})
+
 test('the newest released bot declares the verified DSH, offered to an older npm install', async () => {
   const { rt, spawns } = start({ source: `${PKG.name}@^${PKG.version}`, answers: registryLatest({ verifiedDsh: '9.9.9' }) })
   const view = await rt.dshUpdateCheck()

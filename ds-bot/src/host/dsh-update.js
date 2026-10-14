@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path'
 
 import {
   CHECK_TTL_MS, cleanVersion, encodeName, fetchJson, installSpecOf,
-  newer, registryPlan, repoSlug, sourceOf,
+  newer, registryPlan, releaseRef, repoSlug, sourceOf,
 } from './update.js'
 
 const PKG = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
@@ -92,7 +92,7 @@ export function install(rt) {
       const release = await fetchJson(`https://api.github.com/repos/${repo}/releases/latest`, { 'user-agent': `${PKG.name}/${PKG.version}` })
       const tag = cleanVersion(release?.tag_name)
       if (!tag) return null
-      const manifest = await fetchJson(`https://raw.githubusercontent.com/${repo}/${release.tag_name}/ds-bot/package.json`, { 'user-agent': `${PKG.name}/${PKG.version}` })
+      const manifest = await fetchJson(`https://raw.githubusercontent.com/${repo}/${releaseRef(release)}/ds-bot/package.json`, { 'user-agent': `${PKG.name}/${PKG.version}` })
       return manifest?.dsBot?.verifiedDsh ? manifest.dsBot : null
     } catch { return null }
   }
@@ -129,7 +129,7 @@ export function install(rt) {
   /** Read current and verified DSH versions; a fresh check ignores the last answer. */
   async function check({ fresh = false } = {}) {
     if (!enabled) return view()
-    if (checking) return checking
+    if (checking) { await checking; return view() }
     if (!fresh && Date.now() - status.checkedAt < CHECK_TTL_MS) return view()
     checking = runCheck().finally(() => { checking = null })
     await checking
@@ -146,7 +146,11 @@ export function install(rt) {
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
     const args = ['install', '-g', `${DSH_PACKAGE}@${chosen.version}`]
     const runner = rt.dshSpawn ?? ((command, argv, options) => spawn(command, argv, options))
-    running = runner(npm, args, { windowsHide: true })
+    try { running = runner(npm, args, { windowsHide: true }) }
+    catch (error) {
+      Object.assign(status, { phase: 'failed', error: String(error?.message ?? error).slice(0, 600) })
+      return view()
+    }
     let output = ''
     running.stdout?.on?.('data', chunk => { output = `${output}${chunk}`.slice(-4000) })
     running.stderr?.on?.('data', chunk => { output = `${output}${chunk}`.slice(-4000) })
