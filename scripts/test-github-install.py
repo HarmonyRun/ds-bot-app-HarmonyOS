@@ -17,6 +17,20 @@ ARCHIVE = Path(os.environ["DSBOT_PLUGIN_ARCHIVE"]).resolve()
 PNPM = shutil.which(os.environ.get("DSBOT_PNPM", "pnpm"))
 
 
+def pnpm_command():
+    if not PNPM:
+        raise RuntimeError("pnpm is required")
+    if Path(PNPM).suffix.lower() in [".cmd", ".bat"]:
+        # Python's Windows batch-file launch lets cmd interpret &path: as a new
+        # command. DSH uses execa argument escaping; exercise the same literal
+        # spec here via Node, without passing it through a command shell.
+        entry = Path(PNPM).parent / "node_modules/pnpm/bin/pnpm.cjs"
+        if not entry.is_file():
+            raise RuntimeError("Install pnpm with npm install --global pnpm@11.7.0 for this test")
+        return [shutil.which("node"), str(entry)]
+    return [PNPM]
+
+
 class GitHubInstallationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -50,7 +64,7 @@ class GitHubInstallationTests(unittest.TestCase):
 
     def pnpm(self, *args, allow_failure=False, env=None):
         result = subprocess.run([
-            PNPM, "--dir", str(self.profile), *args, "--store-dir", str(self.root / "store"),
+            *pnpm_command(), "--dir", str(self.profile), *args, "--store-dir", str(self.root / "store"),
             "--reporter", "append-only", "--config.fetch-retries=0",
         ], env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
         if not allow_failure:
