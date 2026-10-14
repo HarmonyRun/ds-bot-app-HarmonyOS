@@ -645,8 +645,14 @@
   "Enter the full path on your computer": "输入电脑上的完整目录路径",
   "Use this folder": "使用此目录",
   "Browse folders…": "浏览目录…",
+  "Enter folder path": "输入目录路径",
   "Only part of this folder list is shown.": "目录列表过长，仅显示一部分。",
   "Use a host folder path of at most 4096 characters": "主机目录路径不能超过 4096 个字符",
   "Delivered files": "交付文件",
-  "Update your host plugin to choose working folders.": "请更新主机插件后再设置工作目录。"
+  "Update your host plugin to choose working folders.": "请更新主机插件后再设置工作目录。",
+  "Off": "关闭",
+  "Low": "低",
+  "Medium": "中",
+  "High": "高",
+  "Max": "最高"
 }

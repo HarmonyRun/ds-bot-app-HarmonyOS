@@ -8,3 +8,9 @@ export function translate(key: string, catalog: Record<string, string>, locale: 
   const text = locale === "zh" && Object.hasOwn(catalog, key) ? catalog[key] : key;
   return params ? text.replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(params, name) ? String(params[name]) : match) : text;
 }
+
+export function localizedText(value: string | Record<string, string> | undefined, locale: "en" | "zh") {
+  if (typeof value === "string") return value;
+  const languages = locale === "zh" ? ["zh-CN", "zh", "en-US", "en"] : ["en-US", "en", "zh-CN", "zh"];
+  return languages.map(key => value?.[key]).find(text => !!text?.trim()) || Object.values(value || {}).find(text => !!text?.trim()) || "";
+}

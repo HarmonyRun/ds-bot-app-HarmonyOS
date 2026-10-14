@@ -189,5 +189,10 @@
   "Connection interrupted. Refresh plugins to check the original operation; do not reinstall automatically.": "连接中断。刷新插件以查询原任务，避免重复安装。",
   "installing": "下载并安装中",
   "cancelling": "正在取消并恢复文件",
-  "applying": "正在应用插件变更"
+  "applying": "正在应用插件变更",
+  "Pending": "等待启动",
+  "Running": "运行中",
+  "Failed": "启动失败",
+  "Stopping": "正在停止",
+  "DS Bot: a team of long-lived Bots for DeepSeek Harness, with Main Bots, Bot-to-Bot messages and group chats": "为 DeepSeek Harness 提供长期运行的 Bot 团队，支持主 Bot 管理、Bot 间协作和群聊。"
 }

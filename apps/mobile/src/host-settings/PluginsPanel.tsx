@@ -4,6 +4,8 @@ import { View } from "react-native";
 import { Button, Card, Field, Label, Notice } from "../components/UI";
 import { PanelProps, usePanelAction } from "./shared";
 import { PackagePanel, PackageOperation } from "./PackagePanel";
+import { language } from "../i18n";
+import { localizedText } from "../logic/localization";
 
 type Localized = string | Record<string, string>;
 interface Plugin {
@@ -42,10 +44,8 @@ interface Change {
   error?: { code: string; diagnostic?: string };
   warnings?: string[];
 }
-const localized = (value?: Localized) =>
-  typeof value === "string"
-    ? value
-    : value?.["en-US"] || value?.en || Object.values(value || {})[0] || "";
+const localized = (value?: Localized) => localizedText(value, language());
+const phases = { pending: "Pending", loading: "Loading", active: "Running", failed: "Failed", unloading: "Stopping" };
 function readonlyText(reason: string) {
   if (reason === "mobile-required")
     return tr(
@@ -158,17 +158,21 @@ export function PluginsPanel(props: PanelProps) {
         disabled={!props.online || action.busy}
         onPress={() => action.run(load)}
       />
-      <View style={{ gap: 8 }}>
-        <Button
-          title={tr("Bundles")}
-          secondary={kind !== "bundles"}
-          onPress={() => setKind("bundles")}
-        />
-        <Button
-          title={tr("Plugin entries")}
-          secondary={kind !== "plugins"}
-          onPress={() => setKind("plugins")}
-        />
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button
+            title={tr("Bundles")}
+            secondary={kind !== "bundles"}
+            onPress={() => setKind("bundles")}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button
+            title={tr("Plugin entries")}
+            secondary={kind !== "plugins"}
+            onPress={() => setKind("plugins")}
+          />
+        </View>
       </View>
       <Field
         label={tr("Search plugins")}
@@ -214,11 +218,11 @@ export function PluginsPanel(props: PanelProps) {
                 {plugin.moduleName} · {plugin.entryId}
               </Label>
               {localized(plugin.meta?.description) && (
-                <Label muted>{localized(plugin.meta?.description)}</Label>
+                <Label muted>{tr(localized(plugin.meta?.description))}</Label>
               )}
               <Label muted>
                 {plugin.enabled ? tr("Enabled") : tr("Disabled")} ·{" "}
-                {plugin.fiberPhase || tr("Not running")}
+                {tr(plugin.fiberPhase ? phases[plugin.fiberPhase] : "Not running")}
               </Label>
               <Notice error text={plugin.meta?.error} />
               {plugin.readOnlyReason ? (
@@ -246,7 +250,7 @@ export function PluginsPanel(props: PanelProps) {
                 {bundle.name}
                 {bundle.version ? ` · ${bundle.version}` : ""}
               </Label>
-              {bundle.description && <Label muted>{bundle.description}</Label>}
+              {bundle.description && <Label muted>{tr(bundle.description)}</Label>}
               <Label muted>
                 {bundle.enabled ? tr("Enabled") : tr("Disabled")} ·{" "}
                 {bundle.installed

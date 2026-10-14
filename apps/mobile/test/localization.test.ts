@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { resolveLanguage, translate } from "../src/logic/localization.ts";
+import { localizedText, resolveLanguage, translate } from "../src/logic/localization.ts";
 import { contrastText, luminance } from "../src/logic/colors.ts";
 import { notificationTitle, notificationTransportLabel } from "../src/logic/notifications.ts";
 
@@ -15,6 +15,16 @@ function collect(node: ts.Node) {
   ts.forEachChild(node, collect);
 }
 collect(main);
+
+test("plugin metadata follows the selected language with readable fallbacks", () => {
+  const metadata = { "en-US": "Tools", "zh-CN": "工具" };
+  assert.equal(localizedText(metadata, "zh"), "工具");
+  assert.equal(localizedText(metadata, "en"), "Tools");
+  assert.equal(localizedText({ zh: "技能", en: "Skills" }, "zh"), "技能");
+  assert.equal(localizedText({ "zh-CN": "", "en-US": "Tools" }, "zh"), "Tools");
+  assert.equal(localizedText("User plugin", "zh"), "User plugin");
+  assert.equal(localizedText(undefined, "zh"), "");
+});
 
 test("explicit language overrides host and system; host system preference follows the phone", () => {
   assert.equal(resolveLanguage("en", "zh-CN", "zh-CN"), "en");

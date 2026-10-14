@@ -18,7 +18,7 @@ export function ThinkingLevelPicker({client,model,value,disabled,choose}:{client
   return <View style={{gap:10,paddingVertical:10}}>
     <Label>{tr("Thinking level")}</Label>
     {loading ? <Label muted>{tr("Loading…")}</Label> : reasoning?.efforts?.length ? <>
-      <View style={{flexDirection:"row",flexWrap:"wrap",gap:8}}>{[{id:"",name:tr("Default")},...reasoning.efforts].map(effort=><Button key={effort.id} title={effort.name} compact secondary={(value || "")!==effort.id} disabled={disabled || busy} onPress={()=>{setBusy(true);setError("");void choose(effort.id || null).catch(err=>setError(errorText(err))).finally(()=>setBusy(false));}}/>)}</View>
+      <View style={{flexDirection:"row",flexWrap:"wrap",gap:8}}>{[{id:"",name:tr("Default")},...reasoning.efforts].map(effort=><Button key={effort.id} title={tr(effort.name)} compact secondary={(value || "")!==effort.id} disabled={disabled || busy} onPress={()=>{setBusy(true);setError("");void choose(effort.id || null).catch(err=>setError(errorText(err))).finally(()=>setBusy(false));}}/>)}</View>
       <Label muted>{tr("Default uses this model’s own thinking level.")}</Label>
     </> : !error ? <Label muted>{tr("This model does not offer thinking levels.")}</Label> : null}
     <Notice error text={error}/>

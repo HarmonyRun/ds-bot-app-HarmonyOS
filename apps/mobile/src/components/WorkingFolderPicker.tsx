@@ -3,7 +3,7 @@ import { ScrollView, View } from "react-native";
 import type { MobileClient } from "@ds-bot/mobile-sdk";
 import { useI18n } from "../i18n";
 import { errorText } from "../types";
-import { Button, Field, Label, Notice, Section, SettingRow, Sheet } from "./UI";
+import { Button, Field, Icon, Label, Notice, Section, SettingRow, Sheet } from "./UI";
 
 interface FolderInfo { team: string | null; picker: "browse" | null; folders: { path: string; title: string }[] }
 interface FolderListing { path: string; crumbs: { path: string; name: string }[]; entries: { path: string; name: string }[]; truncated?: boolean }
@@ -18,6 +18,7 @@ export function WorkingFolderPicker({ client, value, group = false, disabled, ch
   const request = useRef<AbortController | undefined>(undefined);
   const generation = useRef(0);
   const saving = useRef(false);
+  const crumbs = useRef<ScrollView>(null);
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
   const fallback = tr(group ? "Each Bot's own folder" : "Team workspace");
   async function load(path?: string) {
@@ -58,24 +59,32 @@ export function WorkingFolderPicker({ client, value, group = false, disabled, ch
       }} />
     </Section>
     <Sheet visible={open} title={tr("Working folder")} onClose={close}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 16 }}>
+      <View style={{ gap: 12 }}>
         <Notice error text={error} />
         {busy && <Label muted>{tr("Loading…")}</Label>}
         <Button secondary title={fallback} disabled={!info || busy || disabled} onPress={() => void save("")} />
         {!group && info?.team && <Label muted>{info.team}</Label>}
-        {info?.folders.map(folder => <Button key={folder.path} secondary title={folder.title + " · " + folder.path} disabled={busy || disabled} onPress={() => void save(folder.path)} />)}
+        {!listing && info?.folders.map(folder => <SettingRow key={folder.path} compact last title={folder.title} hint={folder.path} leading={<Icon name="folder" size={20} />} disabled={busy || disabled} onPress={() => void save(folder.path)} />)}
+        {!listing && <>
         <Field label={tr("Host folder path")} placeholder={tr("Enter the full path on your computer")} value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false} maxLength={4096} editable={!!info && !busy && !disabled} />
         <Button title={tr("Use this folder")} disabled={!info || !draft.trim() || busy || disabled} onPress={() => void save(draft.trim())} />
         {info?.picker === "browse" && <Button secondary title={tr("Browse folders…")} disabled={busy || disabled} onPress={() => void load(draft.trim())} />}
+        </>}
         {listing && <View style={{ gap: 8 }}>
-          <Label>{listing.path}</Label>
-          {listing.crumbs.map(crumb => <Button key={crumb.path} secondary compact title={crumb.name} disabled={busy || disabled} onPress={() => void load(crumb.path)} />)}
+          <ScrollView ref={crumbs} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" onContentSizeChange={() => crumbs.current?.scrollToEnd({ animated: false })} contentContainerStyle={{ gap: 6, alignItems: "center" }}>
+            {listing.crumbs.map((crumb, index) => <View key={crumb.path} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {index > 0 && <Icon name="chevron" size={14} />}
+              <Button secondary compact title={crumb.name} disabled={busy || disabled} onPress={() => void load(crumb.path)} />
+            </View>)}
+          </ScrollView>
+          <Label muted>{listing.path}</Label>
           <Button title={tr("Use this folder")} disabled={busy || disabled} onPress={() => void save(listing.path)} />
-          {listing.entries.map(folder => <Button key={folder.path} secondary title={folder.name} disabled={busy || disabled} onPress={() => void load(folder.path)} />)}
+          {listing.entries.map(folder => <SettingRow key={folder.path} compact last title={folder.name} leading={<Icon name="folder" size={20} />} disabled={busy || disabled} onPress={() => void load(folder.path)} />)}
           {listing.truncated && <Label muted>{tr("Only part of this folder list is shown.")}</Label>}
+          <Button secondary title={tr("Enter folder path")} disabled={busy || disabled} onPress={() => { setDraft(listing.path); setListing(undefined); }} />
         </View>}
         {!info && !busy && <Button secondary title={tr("Retry")} onPress={() => void load()} />}
-      </ScrollView>
+      </View>
     </Sheet>
   </>;
 }

@@ -47,6 +47,6 @@ test('folder browsing sends exact paths supplied by the host instead of joining 
  const f=fixture(async(endpoint,payload)=>endpoint==='folders'?{team:'Z:\\team',picker:'browse',folders:[]}:(paths.push(payload.path),{path:'Z:\\projects',crumbs:[],entries:[{name:'Code',path:'Z:\\projects\\code'}]}),async()=>true);
  f.nodes(f.render(),'SettingRow')[0].props.onPress();await tick();
  f.nodes(f.render(),'Button').find(button=>button.props.title==='Browse folders…').props.onPress();await tick();
- f.nodes(f.render(),'Button').find(button=>button.props.title==='Code').props.onPress();await tick();
+ f.nodes(f.render(),'SettingRow').find(row=>row.props.title==='Code').props.onPress();await tick();
  assert.deepEqual(paths,['','Z:\\projects\\code']);
 });
