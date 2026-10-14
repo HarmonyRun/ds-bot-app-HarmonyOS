@@ -33,12 +33,15 @@ export function WorkingFolderPicker({ client, value, group = false, disabled, ch
         const next = await client.action<FolderListing>("folder-list", { path }, { signal: controller.signal });
         if (generation.current === epoch) setListing(next);
       }
-    } catch (failure) { if (generation.current === epoch) setError(errorText(failure)); }
+    } catch (failure) {
+      if (generation.current === epoch) setError(failure && typeof failure === 'object' && 'code' in failure && failure.code === 'mobile/unsupported-action'
+        ? tr("Update your host plugin to choose working folders.") : errorText(failure));
+    }
     finally { if (generation.current === epoch) setBusy(false); }
   }
   function close() { generation.current++; request.current?.abort(); setOpen(false); setBusy(false); }
   async function save(path: string) {
-    if (busy || disabled || saving.current) return;
+    if (!info || busy || disabled || saving.current) return;
     saving.current = true;
     const epoch = ++generation.current;
     setBusy(true); setError("");
@@ -58,11 +61,11 @@ export function WorkingFolderPicker({ client, value, group = false, disabled, ch
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 16 }}>
         <Notice error text={error} />
         {busy && <Label muted>{tr("Loading…")}</Label>}
-        <Button secondary title={fallback} disabled={busy || disabled} onPress={() => void save("")} />
+        <Button secondary title={fallback} disabled={!info || busy || disabled} onPress={() => void save("")} />
         {!group && info?.team && <Label muted>{info.team}</Label>}
         {info?.folders.map(folder => <Button key={folder.path} secondary title={folder.title + " · " + folder.path} disabled={busy || disabled} onPress={() => void save(folder.path)} />)}
-        <Field label={tr("Host folder path")} placeholder={tr("Enter the full path on your computer")} value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false} maxLength={4096} editable={!busy && !disabled} />
-        <Button title={tr("Use this folder")} disabled={!draft.trim() || busy || disabled} onPress={() => void save(draft.trim())} />
+        <Field label={tr("Host folder path")} placeholder={tr("Enter the full path on your computer")} value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false} maxLength={4096} editable={!!info && !busy && !disabled} />
+        <Button title={tr("Use this folder")} disabled={!info || !draft.trim() || busy || disabled} onPress={() => void save(draft.trim())} />
         {info?.picker === "browse" && <Button secondary title={tr("Browse folders…")} disabled={busy || disabled} onPress={() => void load(draft.trim())} />}
         {listing && <View style={{ gap: 8 }}>
           <Label>{listing.path}</Label>

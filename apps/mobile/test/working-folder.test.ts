@@ -34,6 +34,14 @@ test('closing the folder picker aborts a late directory request and cannot reope
  assert.equal(signal.aborted,true);pending.resolve({team:'/late',picker:null,folders:[]});await tick();
  assert.equal(f.nodes(f.render(),'Sheet')[0].props.visible,false);
 });
+test('a host without the folder API cannot silently accept an unsupported folder update',async()=>{
+ const saved:string[]=[];
+ const f=fixture(async()=>{throw Object.assign(new Error('Unsupported'),{code:'mobile/unsupported-action'});},async path=>{saved.push(path);return true;});
+ f.nodes(f.render(),'SettingRow')[0].props.onPress();await tick();
+ f.nodes(f.render(),'Field')[0].props.onChangeText('/srv/project');
+ const button=f.nodes(f.render(),'Button').find(button=>button.props.title==='Use this folder');assert.equal(button.props.disabled,true);button.props.onPress();await tick();
+ assert.deepEqual(saved,[]);assert.equal(f.nodes(f.render(),'Notice')[0].props.text,'Update your host plugin to choose working folders.');
+});
 test('folder browsing sends exact paths supplied by the host instead of joining them on the phone',async()=>{
  const paths:string[]=[];
  const f=fixture(async(endpoint,payload)=>endpoint==='folders'?{team:'Z:\\team',picker:'browse',folders:[]}:(paths.push(payload.path),{path:'Z:\\projects',crumbs:[],entries:[{name:'Code',path:'Z:\\projects\\code'}]}),async()=>true);

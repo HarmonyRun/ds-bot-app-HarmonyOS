@@ -647,5 +647,6 @@
   "Browse folders…": "浏览目录…",
   "Only part of this folder list is shown.": "目录列表过长，仅显示一部分。",
   "Use a host folder path of at most 4096 characters": "主机目录路径不能超过 4096 个字符",
-  "Delivered files": "交付文件"
+  "Delivered files": "交付文件",
+  "Update your host plugin to choose working folders.": "请更新主机插件后再设置工作目录。"
 }
