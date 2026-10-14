@@ -4,8 +4,10 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ## Installation integrity repair — 2026-10-14
 
+- Reproduce pnpm 11.7.0's cached remote-tarball missing-integrity failure with DSH's hoisted linker. Switch recommended installation to verified local archives, including explicit package names for recovery.
+- Add a Windows preparation helper that verifies the unchanged release archive, saves it in a permanent user folder and copies the DSH installation text. Add Windows/Linux cold, cached, failed and frozen-install regression checks.
 - Restore the original `0.1.0` archive at its recorded URL and preserve the republication separately, keeping existing original lockfile checks valid.
-- Document explicit `ds-bot@URL` upgrades so pnpm replaces the dependency before resolving the old archive.
+- Explicit package names replace the old dependency before resolving it; remote URL naming alone does not fix the separate cached-integrity bug.
 - Reject any existing revision asset during publication, including partial uploads; remove release-upload clobbering.
 
 ## Unreleased

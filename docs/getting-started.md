@@ -19,27 +19,29 @@ You can also use matching files from [Releases](https://github.com/QingJ01/DS-Bo
 ## Host installation
 
 1. Install [DSH Desktop](https://github.com/deepseek-ai/deepseek-harness/releases).
-2. In Plugins → Add plugin, enter the downloaded `.tgz`'s absolute path, install and enable it, then fully quit and restart DSH. Existing host data does not need to be removed.
+2. On Windows, download `dsbot-plugin-installer-v0.1.1-r2.zip` from the Release, extract it and run `prepare-plugin.cmd`. Paste the copied text into Plugins → Add plugin, then install, enable and restart DSH. The helper verifies and saves the package; no separate Node.js or pnpm installation is needed. Other systems can use the local-file method below.
 3. In Harness settings, configure your provider and credential. Choose Chief's model and test a message on the computer.
 4. Ask Chief to create Bots/groups, or use the client creation pages to set names, roles, instructions and models.
 
 ### Updating an existing installation
 
-In DSH **Plugins → Add plugin**, use the explicit dependency name:
+Use a local archive for first installs, upgrades and reinstalls. The Windows helper saves it in a permanent location and copies the installation text. For manual installation, save the `.tgz` in a permanent folder and enter `ds-bot@file:` followed by its absolute path in **Plugins → Add plugin**:
 
 ```text
-ds-bot@https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/ds-bot-0.1.1-r2.tgz
+ds-bot@file:C:/Users/you/DSBot/packages/ds-bot-0.1.1-r2.tgz
 ```
 
-Fully restart DSH afterward and update the App. Updating the old package in place still uses its old URL. The explicit name lets pnpm replace the dependency before reading that URL, including lockfiles from either `0.1.0` publication. Do not delete lockfiles or conversation data.
+On macOS/Linux, use a real absolute path such as `ds-bot@file:/Users/you/DSBot/packages/ds-bot-0.1.1-r2.tgz`. Paste the entire line without quotes into the GUI. Restart DSH afterward and update the App. Keep the saved archive for future dependency repairs. Do not delete lockfiles or conversation data.
 
-The original `0.1.0` URL has been restored to the initial archive matching `sha512-8506Zru5…`; failed installations with that lockfile can retry. The later republished archive is preserved separately. For a lock recording `sha512-she1FgmT…`, use the explicit specification above instead of changing checksums. See the [integrity repair](releases/integrity-repair-20261014.md).
+**Direct GitHub tarball URLs are no longer the recommended installation method.** With DSH's hoisted linker, pnpm `11.7.0` can omit `integrity` when reinstalling a cached remote archive, even with an explicit `ds-bot@` name. Local archive installation retains the correct checksum. See the [installer and recovery guide](plugin-install-recovery.md).
+
+The original `0.1.0` URL has been restored to the initial archive matching `sha512-8506Zru5…`; the later republication is preserved separately. See the [legacy integrity repair](releases/integrity-repair-20261014.md). Upgrade either version using the local specification above.
 
 For DSH Web, install Node.js 24 LTS and pnpm, then run in your own workspace:
 
 ```sh
 npm install -g pnpm
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.1-r2.tgz
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add "ds-bot@file:/absolute/path/ds-bot-0.1.1-r2.tgz"
 npx @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -76,6 +78,7 @@ This mode needs no EAS, FCM or APNs. Optional Expo cloud push for suspended/clos
 
 ## Troubleshooting
 
+- If installation reports missing `integrity`, including after uninstalling, use the helper or local package specification above. Cache deletion and disabling verification are unnecessary.
 - Check that HTTPS is enabled, the QR's address is reachable, and Wi-Fi isolation/firewall is not blocking port `8788`.
 - A browser does not trust the automatically generated self-signed certificate. The native App verifies its key from the QR; do not disable TLS validation.
 - Pairing waits until the computer approves; regenerate expired QR codes.

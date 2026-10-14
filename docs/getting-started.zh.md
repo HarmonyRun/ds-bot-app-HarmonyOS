@@ -30,22 +30,24 @@ Artifacts 是 ZIP，先解压。已签名 APK 的文件名为 `dsbot-android-arm
 ## 电脑安装
 
 1. 从 [DSH 官方 Releases](https://github.com/deepseek-ai/deepseek-harness/releases) 安装适合系统的 Desktop。
-2. 打开 DSH 的 **插件 → 添加插件**，填下载的 `.tgz` 完整路径。例如 Windows 的 `C:\Downloads\ds-bot-0.1.1-r2.tgz`。
+2. Windows 推荐下载 Release 中的 `dsbot-plugin-installer-v0.1.1-r2.zip`，解压后双击 `prepare-plugin.cmd`。在 DSH **插件 → 添加插件** 粘贴助手复制的文本。助手会校验并保存插件包，不需要额外安装 Node.js 或 pnpm。其他系统使用下面的本地文件方式。
 3. 安装、启用，完全退出 DSH 再打开；更新插件也需要重启。已有数据不需要删除。
 4. 在 Harness 设置中添加模型提供商，配置凭据，确认提供商能列出模型。为 Chief 选择模型，发送一句话确认能正常回复。
 5. 可以让 Chief 创建 Bot 与群聊，也可以用客户端的新建入口配置名称、角色、指令和模型。
 
 ### 从旧版升级
 
-在 DSH **插件 → 添加插件** 填写完整包规格，显式指定包名：
+首次安装、升级或卸载后重装都推荐使用本地包。Windows 安装助手会保存包并复制完整安装文本；手动安装时，把 `.tgz` 放进长期保留的目录，在 DSH **插件 → 添加插件** 填写 `ds-bot@file:` 加绝对路径，例如：
 
 ```text
-ds-bot@https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/ds-bot-0.1.1-r2.tgz
+ds-bot@file:C:/Users/你的用户名/DSBot/packages/ds-bot-0.1.1-r2.tgz
 ```
 
-安装后完全退出并重启 DSH，同时更新手机 App。直接点旧包的“更新”仍使用旧地址。显式包名让 pnpm 先替换已有依赖，适用于原始和重发的 `0.1.0` 锁文件，不需要删除锁文件或聊天记录。
+macOS/Linux 示例：`ds-bot@file:/Users/you/DSBot/packages/ds-bot-0.1.1-r2.tgz`，改成实际绝对路径。GUI 中粘贴一整行，不加引号。安装后完全退出并重启 DSH，同时更新手机 App；保留本地 `.tgz`，以后修复依赖可能仍需要它。不要删除锁文件或聊天记录。
 
-原 `0.1.0` 下载地址已恢复为最初发布的原包，匹配 `sha512-8506Zru5…`；已有该锁文件的失败安装可以直接重试。后来重发的包单独保留，说明见[安装校验修复](releases/integrity-repair-20261014.md)。如果旧锁记录 `sha512-she1FgmT…`，使用上面的完整包规格升级，不要改写校验值。
+**不要把 GitHub `.tgz` URL 直接当作当前推荐安装入口。** pnpm `11.7.0` 在 DSH 的 `hoisted` 模式下，缓存重装远程包可能漏写 `integrity`；即使加上 `ds-bot@`，也不能避免这个独立问题。本地包方式保留正确校验值。[安装助手与错误说明](plugin-install-recovery.md)。
+
+原 `0.1.0` 下载地址已恢复为最初发布的原包，匹配 `sha512-8506Zru5…`；后来重发的包单独保留，见[旧版校验修复](releases/integrity-repair-20261014.md)。从任一旧版升级都使用上述本地包规格。
 
 ### 使用 DSH Web
 
@@ -53,7 +55,7 @@ ds-bot@https://github.com/QingJ01/DS-Bot-App/releases/download/v0.1.1/ds-bot-0.1
 
 ```sh
 npm install -g pnpm
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add /absolute/path/ds-bot-0.1.1-r2.tgz
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add "ds-bot@file:/absolute/path/ds-bot-0.1.1-r2.tgz"
 npx @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -91,6 +93,7 @@ npx @deepseek-ai/dsh@0.2.0-rc.2 web
 
 ## 排错
 
+- **安装提示缺少 `integrity`，卸载重装仍失败**：使用上述安装助手或本地包规格替换远程依赖；不需要清空缓存或关闭校验。
 - **扫描后连接失败**：确认主机开启入口，两端地址可达；访客 Wi-Fi、AP 隔离、多网卡或防火墙可能阻断 `8788`。
 - **浏览器提示自签证书不可信**：一键本地证书由原生 App 根据二维码验证；不要以浏览器无法信任自签证书判断 App 故障，也不要关闭 TLS 校验。
 - **配对一直等待**：回到电脑批准；过期则重新生成二维码。
