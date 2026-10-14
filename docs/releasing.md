@@ -20,6 +20,10 @@ With the Secret, it signs APKs using the encrypted key and verifies the resultin
 
 The separate Test workflow checks Linux/Windows, Node 22/24 and two DSH versions. These workflows do not compile iOS; iOS needs macOS/Xcode and Apple signing. Android needs no EAS project.
 
+Every PR and main build runs `node scripts/check-release.cjs` to catch plugin/App/Expo/lockfile version drift before tagging. Tag builds additionally require matching release notes. The private mobile SDK has its own version and is not independently published.
+
+Plugin update checks support full-commit GitHub installations. For a newer semantic version, they resolve its highest complete revision (plugin archive plus revision checksums) to a full source commit and retain the package subdirectory. A same-version `rN` repair still requires the new installation text from its release notes; it is not an automatic semantic-version upgrade. Revising an older release preserves GitHub's existing latest-release selection.
+
 ## Download and publish
 
 From the successful run's Artifacts, download and extract `dsbot-plugin` plus `dsbot-android-arm64` for phones or `dsbot-android-x86_64` for emulators. Install matching host/plugin files. Main builds upload artifacts only.

@@ -33,6 +33,10 @@
 
 `.github/workflows/test.yml` 另外执行 Linux/Windows、Node 22/24 和两个 DSH 版本的插件兼容性检查。iOS 不在这两个 Linux 构建工作流中，不需要 EAS 项目；iOS 发行需单独配置 Apple 签名。
 
+每个 PR 和 main 构建都会执行 `node scripts/check-release.cjs`，在打标签前检查插件、App、Expo 和锁文件的版本是否一致；标签构建还要求对应发布说明。私有 mobile SDK 使用独立版本，不单独发布。
+
+插件更新检查支持固定完整提交的 GitHub 安装。发现更高语义版本时，选择该版本最高的完整修订（插件包和修订校验和均存在），解析为完整提交并保留包的子目录。同版本 `rN` 修复仍需使用发布说明中的新安装文本，不当作自动语义版本升级。给旧版本追加修订不会强制将其设为 GitHub 最新版。
+
 ## 下载与标签发布
 
 在成功运行底部的 Artifacts 下载并解压。ARM64 给手机、x86_64 给模拟器，主机安装同一提交的 `dsbot-plugin`。普通 main 构建只上传 Actions artifacts，不创建 Release。

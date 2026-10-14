@@ -69,6 +69,8 @@ elif args[:2] not in [['release','upload'],['release','edit'],['release','create
         for original in ["ds-bot-0.1.1.tgz", "SHA256SUMS", "DeepSeekBot.cer"]:
             self.assertNotIn(original, upload)
         self.assertTrue(any(call[:3] == ["release", "edit", "v0.1.1"] for call in calls))
+        edit = next(call for call in calls if call[:2] == ["release", "edit"])
+        self.assertNotIn("--latest", edit, "Revising an older release must not promote it over newer versions")
 
     def test_original_release_still_creates_a_verified_tag_release(self):
         code, calls, error = self.run_publication("v0.1.1")

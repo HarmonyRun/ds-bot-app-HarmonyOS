@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
-import { cleanVersion, install, newer, sourceOf } from '../src/host/update.js'
+import { cleanVersion, install, newer, releaseRef, sourceOf } from '../src/host/update.js'
 
 const PKG = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const flush = async () => { for (let index = 0; index < 8; index += 1) await Promise.resolve() }
@@ -11,7 +11,7 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 // The update module alone, on a stub plugin manager and a scripted fetch.
-function start({ source, registries, answers = {}, result = { application: 'restart-required' }, config = {}, profileDir }) {
+function start({ source, registries, answers = {}, result = { application: 'restart-required' }, config = {}, profileDir, installBundle }) {
   const fetched = []
   const installs = []
   const warnings = []
@@ -25,7 +25,7 @@ function start({ source, registries, answers = {}, result = { application: 'rest
   const pluginManager = {
     listBundles: async () => [{ name: 'other', source: 'other@^1.0.0' }, ...(source === undefined ? [] : [{ name: PKG.name, source }])],
     registries: async () => registries ?? { registry: null, fallbackRegistries: ['https://registry.npmmirror.com/'], resolved: 'https://registry.npmjs.org/' },
-    installBundle: async (spec, options) => { installs.push([spec, options]); return typeof result === 'function' ? result() : result },
+    installBundle: installBundle ?? (async (spec, options) => { installs.push([spec, options]); return typeof result === 'function' ? result() : result }),
   }
   const rt = {
     ctx: { get: name => (name === 'pluginManager' ? pluginManager : name === 'profileContext' && profileDir ? { dir: profileDir } : undefined), effect() {} },
@@ -222,4 +222,66 @@ test('a failed install reports why and can be tried again', async () => {
   assert.equal((await rt.updateCheck()).phase, 'installed')
   assert.equal(installs.length, 2)
   assert.deepEqual(installs[0][1], { registry: 'https://registry.example/' })
+})
+
+test('concurrent update checks all receive a status, sharing one lookup', async () => {
+  const { rt, fetched } = start({ source: `ds-bot@${PKG.version}`, answers: {
+    'https://registry.npmjs.org/ds-bot/latest': { version: '9.0.0' },
+  } })
+  const views = await Promise.all([rt.updateCheck(), rt.updateCheck(), rt.updateCheck({ fresh: true })])
+  for (const view of views) { assert.equal(view.latest, '9.0.0'); assert.equal(view.available, true) }
+  assert.equal(fetched.length, 1)
+})
+
+test('a synchronous plugin manager failure leaves the install retryable', async () => {
+  const { rt } = start({ source: `ds-bot@${PKG.version}`, answers: {
+    'https://registry.npmjs.org/ds-bot/latest': { version: '9.0.0' },
+  }, installBundle: () => { throw new Error('manager stopped') } })
+  await rt.updateCheck()
+  assert.equal(rt.updateStart().phase, 'installing')
+  await flush()
+  assert.equal(rt.updateView().phase, 'failed')
+  assert.equal(rt.updateView().error, 'manager stopped')
+  assert.equal(rt.updateStart().phase, 'installing')
+  await flush()
+})
+
+test('release source follows the highest complete revision, not the base tag', () => {
+  assert.equal(releaseRef({ tag_name: 'v9.0.0', assets: [
+    'ds-bot-9.0.0-r2.tgz', 'SHA256SUMS-r2', 'ds-bot-9.0.0-r10.tgz', 'SHA256SUMS-r10',
+    'ds-bot-9.0.0-r11.tgz', 'ds-bot-8.0.0-r12.tgz', 'SHA256SUMS-r12',
+  ].map(name => ({ name })) }), 'v9.0.0-r10')
+})
+
+test('a pinned GitHub install upgrades to the immutable source of the released revision', async () => {
+  const source = 'github:QingJ01/DS-Bot-App#' + 'a'.repeat(40) + '&path:ds-bot'
+  assert.equal(sourceOf(source).ref, 'a'.repeat(40))
+  const { rt, installs } = start({ source, answers: {
+    'https://api.github.com/repos/QingJ01/DS-Bot-App/releases/latest': { tag_name: 'v9.0.0', assets: [{ name: 'ds-bot-9.0.0-r2.tgz' }, { name: 'SHA256SUMS-r2' }] },
+    'https://api.github.com/repos/QingJ01/DS-Bot-App/commits/v9.0.0-r2': { sha: 'b'.repeat(40) },
+  } })
+  assert.equal((await rt.updateCheck()).available, true)
+  rt.updateStart()
+  await flush()
+  assert.deepEqual(installs, [[`github:QingJ01/DS-Bot-App#${'b'.repeat(40)}&path:ds-bot`, {}]])
+})
+
+test('a pinned GitHub install on the current release reports it without resolving a commit', async () => {
+  const releaseUrl = 'https://api.github.com/repos/QingJ01/DS-Bot-App/releases/latest'
+  const { rt, fetched } = start({ source: `github:QingJ01/DS-Bot-App#${'a'.repeat(40)}&path:ds-bot`, answers: {
+    [releaseUrl]: { tag_name: `v${PKG.version}` },
+  } })
+  const view = await rt.updateCheck()
+  assert.equal(view.latest, PKG.version)
+  assert.equal(view.available, false)
+  assert.deepEqual(fetched, [releaseUrl])
+})
+
+test('a missing immutable commit cannot fall back to a moving ref or tarball', async () => {
+  const { rt } = start({ source: `github:QingJ01/DS-Bot-App#${'a'.repeat(40)}&path:ds-bot`, answers: {
+    'https://api.github.com/repos/QingJ01/DS-Bot-App/releases/latest': { tag_name: 'v9.0.0' },
+    'https://api.github.com/repos/QingJ01/DS-Bot-App/commits/v9.0.0': { sha: 'main' },
+  } })
+  assert.equal((await rt.updateCheck()).available, false)
+  assert.throws(() => rt.updateStart(), /No DS Bot update/)
 })

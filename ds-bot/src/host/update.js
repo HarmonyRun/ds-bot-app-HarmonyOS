@@ -50,7 +50,7 @@ export function sourceOf(spec) {
     const ref = parts.find(part => !part.includes(':')) ?? ''
     return {
       kind: 'git', owner: github[1], repo: github[2],
-      ...(cleanVersion(ref) ? { ref } : {}),
+      ...(cleanVersion(ref) || /^[a-f0-9]{40}$/i.test(ref) ? { ref } : {}),
       rest: parts.filter(part => part !== ref),
     }
   }
@@ -106,6 +106,20 @@ const repoUrl = () => {
 const releasesUrl = () => {
   const repo = repoUrl()
   return repo ? `${repo}/releases` : (PKG.homepage ?? null)
+}
+
+// Revision archives live on the base release, but their source has its own tag.
+export function releaseRef(release) {
+  const version = cleanVersion(release?.tag_name)
+  if (!version) return null
+  const names = new Set((release.assets ?? []).map(asset => asset.name))
+  let revision = 0
+  for (const name of names) {
+    const match = /^ds-bot-(\d+\.\d+\.\d+)-r([1-9]\d*)\.tgz$/.exec(name)
+    const value = Number(match?.[2])
+    if (match?.[1] === version && Number.isSafeInteger(value) && value > revision && names.has(`SHA256SUMS-r${value}`)) revision = value
+  }
+  return revision ? `v${version}-r${revision}` : release.tag_name
 }
 
 export const STARS_TTL_MS = 60 * 60_000
@@ -165,7 +179,15 @@ export function install(rt) {
     // repository's current address; the install moves to it.
     const current = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/releases\//.exec(release.html_url ?? '')
     const [owner, repo] = current ? [current[1], current[2]] : [source.owner, source.repo]
-    const fragment = [release.tag_name, ...source.rest].join('&')
+    let ref = releaseRef(release)
+    if (/^[a-f0-9]{40}$/i.test(source.ref)) {
+      if (newer(version, status.current)) {
+        const commit = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`, { 'user-agent': `${PKG.name}/${PKG.version}` })
+        if (!/^[a-f0-9]{40}$/i.test(commit?.sha ?? '')) throw new Error('The release has no immutable source commit')
+        ref = commit.sha
+      } else ref = source.ref
+    }
+    const fragment = [ref, ...source.rest].join('&')
     return { version, spec: `github:${owner}/${repo}#${fragment}` }
   }
 
@@ -195,7 +217,7 @@ export function install(rt) {
   /** Ask where the package came from for its newest version; a fresh check ignores the last answer. */
   async function check({ fresh = false } = {}) {
     if (!enabled) return view()
-    if (checking) return checking
+    if (checking) { await checking; return view() }
     if (!fresh && Date.now() - status.checkedAt < CHECK_TTL_MS) return view()
     checking = runCheck().finally(() => { checking = null })
     await checking
@@ -210,7 +232,7 @@ export function install(rt) {
     if (typeof service?.installBundle !== 'function') throw new Error('The DSH plugin manager is not available in this profile')
     const chosen = target
     Object.assign(status, { phase: 'installing', error: null })
-    void Promise.resolve(service.installBundle(chosen.spec, chosen.registry ? { registry: chosen.registry } : {}))
+    void Promise.resolve().then(() => service.installBundle(chosen.spec, chosen.registry ? { registry: chosen.registry } : {}))
       .then((result) => {
         if (result?.error || !['applied', 'restart-required'].includes(result?.application)) {
           throw new Error(result?.error?.diagnostic ?? result?.error?.code ?? `install ${result?.application ?? 'failed'}`)
