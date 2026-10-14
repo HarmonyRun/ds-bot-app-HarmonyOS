@@ -1,4 +1,4 @@
-import { tr } from "../i18n";
+import { language, tr } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, Platform, Text, View } from "react-native";
 import type { Message, MobileClient } from "@ds-bot/mobile-sdk";
@@ -80,7 +80,7 @@ export function ApprovalCards({ client, conversationId, online, messages }: {
       return <View key={request.id} accessibilityRole="alert" style={{ backgroundColor: t.surface, borderWidth: 1, borderColor: t.lineStrong, borderRadius: 16, padding: 14, gap: 10 }}>
         <Text style={{ color: t.ink, fontSize: 15, fontWeight: "600" }}>{tr("Approval required")}</Text>
         <Text style={{ color: t.muted, fontSize: 13 }}>{request.toolName}</Text>
-        <Text selectable style={{ color: t.ink, fontSize: 14, lineHeight: 22 }}>{request.displayReason?.en || request.reason || tr("This tool needs your permission before it can continue.")}</Text>
+        <Text selectable style={{ color: t.ink, fontSize: 14, lineHeight: 22 }}>{request.displayReason?.[language()] || request.displayReason?.en || request.reason || tr("This tool needs your permission before it can continue.")}</Text>
         {tool?.input ? <Text selectable style={{ color: t.ink, backgroundColor: t.bubble, padding: 10, borderRadius: 8, fontSize: 12, lineHeight: 19, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" }}>{tool.input}</Text> : null}
         <View style={[styles.row, { justifyContent: "flex-end" }]}>
           <Button secondary danger title={tr("Reject")} disabled={!online || !!busy} onPress={() => void decide(request.id, "rejected")} />

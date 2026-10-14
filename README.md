@@ -24,6 +24,7 @@ DS Bot App connects your phone to the Bots running on your own [DeepSeek Harness
 | Tools and host management | Open tool-result cards, approve or reject pending actions, manage supported Skills/plugins/connectors, and opt into desktop browser control. |
 | Shared capabilities | Choose each Bot’s MCP servers, skills and capability packs configured on your DSH computer; check connection and approval status. |
 | Tasks and memory | Manage scheduled tasks and Bot memory, search earlier conversations, and inspect usage from settings or details. |
+| Working folders | Choose a host project or folder for a Bot, or one folder for a group. Chats continue in fresh parts while keeping their history. Available in new source builds. |
 | Notifications | Task and approval reminders with Android background reception and optional cloud push. |
 | Appearance and language | Chinese/English and light/dark/system appearance. Cached conversations and drafts remain available offline. |
 

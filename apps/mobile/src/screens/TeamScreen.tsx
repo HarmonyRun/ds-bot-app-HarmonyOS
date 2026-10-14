@@ -1,4 +1,5 @@
 import { BotCapabilities } from "../host-settings/CapabilitiesPanel";
+import { WorkingFolderPicker } from "../components/WorkingFolderPicker";
 import { useI18n } from "../i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -573,6 +574,7 @@ export function TeamScreen({
               <View style={{paddingHorizontal:12}}><ThinkingLevelPicker client={client} model={team.models.find(model=>model.ref===bot.model)} value={bot.effort} disabled={locked} choose={effort=>saveBot({effort})}/></View>
             </Section>
             {botId && <Section title={tr("Capabilities")}><BotCapabilities client={client} bot={team.bots.find(item => item.id === botId) || bot} team={team} online={online} refresh={refresh}/></Section>}
+            {botId && <WorkingFolderPicker key={botId} client={client} value={bot.workDir} disabled={locked} choose={async workDir => (await action("update-bot", { id: botId, workDir })) !== undefined} />}
             {botId && !!team.permissions?.options.length && <Section title={tr("Permissions")} footer={tr("Applies to this Bot’s own chat, group chats and new conversation parts.")}>
               <View style={{flexDirection:"row",flexWrap:"wrap",gap:8,padding:12}}>{team.permissions.options.filter(option=>option.value!=="auto").map(option=><Button key={option.value} title={tr(({"read-only":"Read only","workspace-write":"Workspace","danger-full-access":"Full access"} as Record<string,string>)[option.value] || option.name || option.value)} compact danger={option.value==="danger-full-access" && bot.permission===option.value} secondary={(bot.permission || team.permissions?.defaultPreset)!==option.value} disabled={locked} onPress={()=>void saveBot({permission:option.value})}/>)}</View>
             </Section>}
@@ -865,6 +867,7 @@ export function TeamScreen({
                 />
               </View>
             </Section>
+            {roomId && <WorkingFolderPicker key={roomId} client={client} value={room.workDir} group disabled={locked} choose={async workDir => (await action("update-room", { id: roomId, workDir })) !== undefined} />}
             <Section
               title={tr("Who responds")}
               footer={tr("@mentions always pick who answers.")}

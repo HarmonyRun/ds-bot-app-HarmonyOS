@@ -897,6 +897,21 @@ const ZH = {
   'Repeat every 1 minute to 7 days': '重复间隔要在 1 分钟到 7 天之间',
   'Pick when it runs': '选择什么时候运行',
   'No such task': '没有这个任务',
+  'Working folder': '工作文件夹',
+  'Working folder: {folder}': '工作文件夹：{folder}',
+  Folder: '文件夹',
+  Folders: '文件夹',
+  'Team workspace': '团队工作区',
+  "Each Bot's own folder": '各 Bot 自己的文件夹',
+  'Choose a folder…': '选择文件夹…',
+  'Browse folders…': '浏览文件夹…',
+  'Enter a path…': '输入路径…',
+  'Folder path': '文件夹路径',
+  'Full path of a folder': '文件夹的完整路径',
+  'Use this folder': '使用这个文件夹',
+  'Up one level': '上一级',
+  'No folders inside.': '里面没有文件夹。',
+  'Some folders are not shown.': '还有一些文件夹没有显示。',
 }
 
 // Host errors stay English, since Bots read them too; they are translated where the
@@ -917,6 +932,10 @@ const HOST_ERRORS = [
   [/^HTTP (\d+)$/, '请求失败（HTTP $1）'],
   [/^GitHub answered (\d+)$/, 'GitHub 返回了 $1'],
   [/^Keep the name under (\d+) characters$/, '名字不能超过 $1 个字'],
+  [/^Give the full path of the folder, not (.+)$/, '请填写文件夹的完整路径，而不是 $1'],
+  [/^There is no folder at (.+)$/, '找不到文件夹 $1'],
+  [/^(.+) is a file, not a folder$/, '$1 是文件，不是文件夹'],
+  [/^(.+) holds DeepSeek Harness data, so Bots cannot work there$/, '$1 里有 DeepSeek Harness 的数据，Bot 不能在这里工作'],
   // Memory changes the memory panel asked for; the whole message is matched.
   [/^This looks like a key, token, or password[\s\S]*$/, '看起来像密钥、令牌或密码，记忆不会保存这类内容'],
   [/^An entry holds at most (\d+) characters; this one has (\d+)\.[\s\S]*$/, '一条记忆最多 $1 个字符，这条有 $2 个'],
@@ -958,6 +977,8 @@ const HOST_ZH = {
   'Memory is turned off on this host': '这台主机关闭了记忆功能',
   'The model wrote nothing': '模型没有输出内容',
   'Write the entry to save.': '请写下要保存的内容。',
+  'This DeepSeek Harness has no folder chooser': '这个 DeepSeek Harness 没有文件夹选择窗口',
+  'This DeepSeek Harness cannot list folders': '这个 DeepSeek Harness 不能列出文件夹',
 }
 Object.assign(ZH, HOST_ZH)
 

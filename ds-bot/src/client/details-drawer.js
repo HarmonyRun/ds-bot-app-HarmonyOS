@@ -8,6 +8,7 @@ import { useEscape } from './overlay-hooks.js'
 import { BotSettingsForm } from './bot-settings.js'
 import { GroupSettingsForm, ROOM_MODES, roomSubtitle, shownMode } from './group-settings.js'
 import { ModelMenu, modelOf } from './model-menu.js'
+import { FolderMenu } from './folder-menu.js'
 import { MemoryRow } from './memory-panel.js'
 import { ScheduleSummary } from './schedules.js'
 import { Segmented, useGlide, useMorph } from './motion.js'
@@ -233,6 +234,9 @@ export function DetailsDrawer({ sessionId, startRenaming, startTab, hasStrip, ro
           h(ModelMenu, { bot, roster, actions, run, wide: true }),
           modelOf(bot, roster) ? null : h('div', { className: 'bt-note' }, t('Pick a model and {name} can start.', { name: bot.name }))),
         h(PermissionRow, { key: 'permission', bot, roster, actions, run }),
+        h('div', { key: 'folder', className: 'bt-drawer-model' },
+          h('div', { className: 'bt-section-title' }, t('Working folder')),
+          h(FolderMenu, { value: bot.workDir, actions, run, wide: true, onPick: workDir => run(actions.updateBot(bot.id, { workDir })) })),
         bot.instructions
           ? h(About, { key: 'about', text: bot.instructions })
           : h('button', { key: 'about', type: 'button', className: 'bt-more', onClick: () => setView('settings') }, t('Add instructions in Bot settings')),

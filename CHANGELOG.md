@@ -6,10 +6,15 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ### Added
 
+- Sync upstream [v0.1.5](https://github.com/Fei2411/DeepSeek-Bot/releases/tag/v0.1.5), source `20ebc9213cbbde7249d71786765f86be00dc6663`, while retaining this fork's mobile bridge and IPv6 access.
+- Per-Bot and per-group working folders, with mobile host-project selection, typed paths and browsing where the host offers it. Folder changes retain history in new conversation parts; Bot-initiated changes preserve upstream approval and data-directory guards.
+- Mobile PTC sub-tool status/result cards, durable delivered-file cards and available host file-change summaries; native desktop file cards and inline file links follow the official DSH UI.
 - Direct mobile access over private or public IPv6 with automatic IP certificates, bracketed pairing URLs, persisted address selection and bilingual setup guidance. Public IPv6 requires an IPv6-capable phone network and incoming firewall access; no hosted coordination or relay service is used.
 
 ### Fixed
 
+- Upstream question blocking and greeting behavior, unread Bot-message backpressure, provider conversation identity and memory default-model retries, PTC group activity and tool cards, Bot/Agent surface cleanup, work-details preferences, dark-skin user bubbles and DSH home resolution.
+- Keep mobile approval text in the selected language and remove host-skin fallbacks and shadows from mobile approval notices.
 - Keep IPv4 as the default while excluding IPv6 link-local, multicast and unspecified addresses from automatic setup. Bind IPv6 HTTPS to the selected address and retain host public-key identity when renewing certificates.
 - Normalize IPv6 brackets for iOS certificate hostname checks and allow IPv6 loopback HTTP only in explicit SDK development mode.
 

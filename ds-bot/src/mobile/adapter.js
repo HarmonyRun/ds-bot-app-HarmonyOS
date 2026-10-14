@@ -15,11 +15,12 @@ const MAX_AUDIO = 10 * 1024 * 1024
 const MAX_PCM = 60 * 16000 * 2
 const RECEIPT_TTL = 15 * 60 * 1000
 const ACTIONS = {
-  'create-bot': ['name', 'role', 'instructions', 'brief', 'color', 'avatar', 'model', 'effort'],
-  'update-bot': ['id', 'name', 'role', 'instructions', 'brief', 'color', 'avatar', 'model', 'effort', 'permission'],
+  'create-bot': ['name', 'role', 'instructions', 'brief', 'color', 'avatar', 'model', 'effort', 'workDir'],
+  'update-bot': ['id', 'name', 'role', 'instructions', 'brief', 'color', 'avatar', 'model', 'effort', 'permission', 'workDir'],
   'duplicate-bot': ['id'], 'delete-bot': ['id'], 'set-main': ['id', 'main', 'primary', 'replace'],
   'create-room': ['name', 'members', 'admin', 'greet'],
-  'update-room': ['id', 'name', 'notice', 'mode', 'admin', 'members', 'add', 'remove'], 'delete-room': ['id'],
+  'update-room': ['id', 'name', 'notice', 'mode', 'admin', 'members', 'add', 'remove', 'workDir'], 'delete-room': ['id'],
+  folders: [], 'folder-list': ['path'],
   'memory-view': ['botId', 'summarize', 'regenerate'], 'memory-forget': ['botId', 'scope', 'topic', 'text'], 'memory-ask': ['botId', 'text'],
   'answer-question': ['sessionId', 'questionId', 'answer'], 'dismiss-question': ['sessionId'],
   'room-progress': ['roomId'], usage: ['timeZone'], models: [], efforts: ['ref'],
@@ -187,8 +188,8 @@ export function createAdapter(rt) {
   const agentView = value => (Array.isArray(value) ? value : []).filter(item => item && typeof item.id === 'string' && Array.isArray(item.sessions))
     .map(({ id, name, sessions, createdAt, pinned, hidden }) => ({ id, name, sessions: sessions.filter(validId), createdAt, pinned, hidden }))
   const secretView = value => value && typeof value.name === 'string' ? Object.fromEntries(['name', 'purpose', 'scope', 'requestedBy', 'createdAt', 'updatedAt', 'lastUsedAt'].filter(key => value[key] !== undefined).map(key => [key, value[key]])) : undefined
-  async function team(endpoint, payload = {}) {
-    const result = await rt.teamCall(endpoint, payload)
+  async function team(endpoint, payload = {}, signal) {
+    const result = await rt.teamCall(endpoint, payload, signal)
     if (result?.ok === false) {
       const code = result.error?.code ?? 'bot/refused'
       throw error(code === 'bot/not-found' ? 404 : code === 'bot/read-only' ? 409 : 400, code, result.error?.message ?? 'The team refused this request')
@@ -362,6 +363,14 @@ export function createAdapter(rt) {
     if (!fields) throw error(404, 'mobile/unsupported-action', 'This action is not available on mobile')
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw error(400, 'mobile/invalid', 'Invalid action payload')
     const body = Object.fromEntries(fields.filter(key => Object.hasOwn(payload, key)).map(key => [key, payload[key]]))
+    for (const key of ['workDir', ...(endpoint === 'folder-list' ? ['path'] : [])]) {
+      if (body[key] !== undefined && (typeof body[key] !== 'string' || body[key].length > 4096)) throw error(400, 'mobile/invalid', 'Use a host folder path of at most 4096 characters')
+    }
+    if (endpoint === 'folders' || endpoint === 'folder-list') {
+      const result = await team(endpoint, body, scoped)
+      scoped.throwIfAborted()
+      return endpoint === 'folders' ? { ...result, picker: result.picker === 'browse' ? 'browse' : null } : result
+    }
     if (Object.hasOwn(MANAGEMENT_ACTIONS, endpoint)) return management(endpoint, body, scoped, caller)
     if (endpoint === 'approvals') return approvalRequests()
     if (endpoint === 'approval-resolve') {
@@ -487,7 +496,8 @@ export function createAdapter(rt) {
     return result
   }
   function options(item, sessionId) {
-    return { sessionId, kind: item.kind, hiddenTurns: rt.state?.exchangeTurns?.[sessionId] ?? [], redact }
+    return { sessionId, kind: item.kind, hiddenTurns: rt.state?.exchangeTurns?.[sessionId] ?? [], redact,
+      changesSummary: (id, seq) => optional('workspaceChanges')?.summary?.(id, seq) }
   }
   async function settings(endpoint, body, signal) {
     const service = optional('settingsController')
@@ -811,7 +821,7 @@ export function createAdapter(rt) {
             lastEventSeq = frame.cursor
             for (const record of frame.records ?? []) if (record.event?.type === 'tool/call') calls.set(record.event.data.callId, record.event)
             yield { type: 'reset', conversationId: id, sessionId, eventSeq: frame.cursor, running, phase: running ? 'running' : 'idle',
-              messages: projectRecords(frame.records, options(item, sessionId)), cursor: pageCursor(item, sessionId, frame, frame.cursor) }
+              messages: projectRecords(frame.records, { ...options(item, sessionId), calls }), cursor: pageCursor(item, sessionId, frame, frame.cursor) }
             if (frame.projections?.values?.inbox) {
               inbox = { 'next-turn': [...(frame.projections.values.inbox['next-turn'] ?? [])], 'next-step': [...(frame.projections.values.inbox['next-step'] ?? [])] }
               yield { type: 'status', conversationId: id, sessionId, queue: projectQueue(inbox, { redact }) }

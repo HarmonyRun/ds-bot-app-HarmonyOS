@@ -124,7 +124,7 @@ export function install(rt) {
       await rt.ensureCapabilities(known)
       return { id: known, brief: undefined }
     }
-    const id = await rt.createSession(`${member.name} · ${room.name}`)
+    const id = await rt.createSession(`${member.name} · ${room.name}`, { dir: rt.workDirOf({ botId: member.id, roomId: room.id }) })
     room.sessions[member.id] = id
     rt.groupOwners.set(id, { botId: member.id, roomId: room.id })
     delete room.seen[member.id]
@@ -651,9 +651,10 @@ export function install(rt) {
 
   // A group chat's own Session never consults the model: models drift from "only call
   // group_relay" (they message one member directly when the user names it), so the
-  // relay step is synthesized here. Auxiliary calls such as titles still reach the model.
+  // relay step is synthesized here. Auxiliary calls such as titles, and DS Bot's own
+  // calls for the room such as image readings, still reach the model.
   ctx.on('llm/stream', (options, next) => {
-    if (options.sessionId === undefined || options.purpose !== undefined) return next()
+    if (options.sessionId === undefined || options.purpose !== undefined || rt.ownRequest(options)) return next()
     return (async function* relayOrPass() {
       await rt.load()
       if (rt.roomOf(options.sessionId) === undefined) {

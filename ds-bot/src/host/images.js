@@ -91,10 +91,10 @@ export function install(rt) {
     const route = await ocrRoute()
     if (route === undefined) throw new Error('no vision model is available')
     const assembler = new BlockAssembler()
-    // No sessionId: this call is not a Session request, so the hook below lets it through.
     for await (const chunk of ctx.llm.stream({
       provider: route.provider,
       model: route.model,
+      sessionId,
       messages: rt.tagUsage([{ role: 'user', content: [{ type: 'image', attachment }, { type: 'text', text: OCR_PROMPT }] }], { sessionId, kind: 'image' }),
       maxTokens: 8192,
       signal: AbortSignal.timeout(OCR_TIMEOUT_MS),
@@ -176,7 +176,7 @@ export function install(rt) {
   }
 
   ctx.on('llm/stream', (options, next) => {
-    if (options.sessionId === undefined || !(options.messages ?? []).some(liveImages)) return next()
+    if (options.sessionId === undefined || rt.ownRequest(options) || !(options.messages ?? []).some(liveImages)) return next()
     return (async function* imagesAsTextOrPass() {
       await rt.load()
       if (rt.roomOf(options.sessionId) !== undefined || await readsImages(options.provider, options.model)) {

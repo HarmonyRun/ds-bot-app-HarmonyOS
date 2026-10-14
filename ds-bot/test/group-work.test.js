@@ -173,6 +173,47 @@ test('a quick team tool does not let the round go on', async (t) => {
   assert.deepEqual(kinds(result()), [['message', 'Writer']])
 })
 
+// Under PTC the model calls run_code, and the program dispatches the real tools.
+const dispatch = (emit, sessionId, parentCallId, n, name) => {
+  const subCallId = `${parentCallId}:ptc:${n}`
+  emit(sessionId, 'tool/ptc-dispatch-start', { rootCallId: parentCallId, parentCallId, subCallId, name, arguments: {} })
+  return () => emit(sessionId, 'tool/ptc-dispatch', { rootCallId: parentCallId, parentCallId, subCallId, name, arguments: {}, isError: false, content: [] })
+}
+
+test('a PTC program that runs only team tools does not let the round go on', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const host = await start(t)
+  const result = host.round('c1', host.say('@Writer 群里刚才说了什么？'))
+  await settle(() => host.agentOf('gb').calls.length === 1)
+  host.begin('gb')
+  host.emit('gb', 'tool/call', { callId: 'k1', name: 'run_code', arguments: '{"code":"await read_group_chat({})"}' })
+  dispatch(host.emit, 'gb', 'k1', 1, 'read_group_chat')()
+  dispatch(host.emit, 'gb', 'k1', 2, 'list_bots')()
+  host.emit('gb', 'tool/result', { callId: 'k1' })
+  t.mock.timers.tick(ROOM_WORK_GRACE_MS * 2)
+  await settle(() => true)
+  assert.equal(result(), undefined)
+  host.finish('gb', '在讨论文档的结构。')
+  await settle(() => result() !== undefined)
+  assert.deepEqual(kinds(result()), [['message', 'Writer']])
+})
+
+test('work inside a PTC program lets the round go on after the grace', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const host = await start(t)
+  const result = host.round('c1', host.say('@Writer 整理文档'))
+  await settle(() => host.agentOf('gb').calls.length === 1)
+  host.begin('gb')
+  host.emit('gb', 'tool/call', { callId: 'k1', name: 'run_code', arguments: '{}' })
+  dispatch(host.emit, 'gb', 'k1', 1, 'read_group_chat')()
+  dispatch(host.emit, 'gb', 'k1', 2, 'write')
+  const { value } = await host.call('state', {})
+  assert.deepEqual(value.work.rooms.r1.map(entry => [entry.botId, entry.tool]), [['b', 'write']])
+  t.mock.timers.tick(ROOM_WORK_GRACE_MS)
+  await settle(() => result() !== undefined)
+  assert.deepEqual(kinds(result()), [['working', 'Writer']])
+})
+
 test('work the user asked for is left for the user to read, and the user\'s message resets the late limit', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const host = await start(t, { lateRounds: ROOM_LATE_ROUNDS - 1 })

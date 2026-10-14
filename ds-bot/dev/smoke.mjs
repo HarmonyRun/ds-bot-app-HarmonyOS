@@ -8,8 +8,9 @@
 //
 // `--out <file>` writes a normalized transcript (names instead of ids, sorted where the
 // order depends on timing), so two runs, before and after a refactor, can be diffed.
-import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const [name, port, ...rest] = process.argv.slice(2)
@@ -174,11 +175,12 @@ await step('bootstrap: Chief waits for a model', () => api('state'), (value, cal
     ?? expect(models.length > 0, 'no models listed for the model card')
 })
 
-await step('user picks a model; Chief greets and asks', () => api('update-bot', { id: chief().id, model: models.at(-1).ref }), () => {
+await step('user picks a model; Chief greets and asks in its reply', () => api('update-bot', { id: chief().id, model: models.at(-1).ref }), (_value, calls) => {
   const current = state()
   return expect(chief().model === models.at(-1).ref, `Chief runs on ${chief().model}`)
     ?? expect(chief().kickoff === undefined, 'the greeting is still held')
-    ?? expect(current.questions?.[chief().sessionId ?? chief().id], 'expected Chief to leave a question card')
+    ?? expect(!current.questions?.[chief().sessionId ?? chief().id], 'the greeting should not leave a question card')
+    ?? expect(saidText(calls, /先让团队帮你做哪块/), 'expected Chief to ask in its reply')
 })
 
 await step('Chief creates Writer, who replies', () => send(chief().id, '创建一个叫Writer的bot'), () => {
@@ -187,6 +189,13 @@ await step('Chief creates Writer, who replies', () => send(chief().id, '创建�
   const kinds = state().exchanges.filter(entry => [entry.from, entry.to].includes(writer.id)).map(entry => entry.role)
   return expect(writer.createdBy === chief().id, 'Writer should be created by Chief')
     ?? expect(kinds.includes('request') && kinds.includes('reply'), `expected a request and a reply, got ${kinds}`)
+})
+
+// The mock calls dsh's ask_user_question for 阻塞提问 whenever the request offers it.
+await step('a Bot is not offered dsh\'s blocking question tool', () => send(botNamed('Writer').id, '阻塞提问'), (_value, calls) => {
+  const asked = calls.some(call => (call.out ?? []).some(block => block.type === 'tool_use' && block.name === 'ask_user_question'))
+  return expect(!asked, 'Writer called ask_user_question')
+    ?? expect(saidText(calls, /^收到：阻塞提问/), 'expected Writer to answer in its reply')
 })
 
 await step('user creates Coder, who keeps the default model', () => api('create-bot', { name: 'Coder', role: 'Engineer', instructions: 'Write code.' }), (bot) => {
@@ -269,6 +278,26 @@ await step('update Writer', () => api('update-bot', { id: botNamed('Writer').id,
   const writer = botNamed('Writer')
   return expect(writer.role === 'Copywriter' && writer.instructions === 'Write the copy.', 'update not saved')
 })
+
+// dsh keeps each Session under a folder named after its cwd. A change of working folder
+// moves the Bot's own chat on to a fresh part made there; the fresh part then stays put.
+const project = realpathSync(mkdtempSync(join(tmpdir(), 'ds-bot-smoke-folder-')))
+const folderOf = sessionId => readdirSync(join(HOME, 'sessions')).find(dir => existsSync(join(HOME, 'sessions', dir, sessionId)))
+const coderParts = () => (botNamed('Coder').segments ?? []).length
+const partsBeforeFolder = coderParts()
+await step('Coder works in a folder of its own', () => api('update-bot', { id: botNamed('Coder').id, workDir: project }), () => {
+  const coder = botNamed('Coder')
+  return expect(coder.workDir === project, `folder not saved (${coder.workDir})`)
+    ?? expect(coderParts() === partsBeforeFolder + 1, `Coder has ${coderParts()} earlier parts, not ${partsBeforeFolder + 1}`)
+    ?? expect(folderOf(coder.sessionId)?.includes(basename(project)), `Coder's chat is under ${folderOf(coder.sessionId)}`)
+})
+await step('Coder answers from its folder', () => send(botNamed('Coder').id, '你好'), () => expect(coderParts() === partsBeforeFolder + 1, 'Coder moved on again'))
+await step('Coder goes back to the team workspace', () => api('update-bot', { id: botNamed('Coder').id, workDir: '' }), () => {
+  const coder = botNamed('Coder')
+  return expect(coder.workDir === undefined, 'folder not cleared')
+    ?? expect(folderOf(coder.sessionId)?.endsWith('-bot-workspace--'), `Coder's chat is under ${folderOf(coder.sessionId)}`)
+})
+rmSync(project, { recursive: true, force: true })
 
 await step('pin Coder', () => api('set-flags', { id: botNamed('Coder').id, pinned: true }), () => expect(botNamed('Coder').pinned === true, 'not pinned'))
 

@@ -48,6 +48,31 @@ function fixture() {
   return { rt, view, calls, pages, extra, adapter: createAdapter(rt) }
 }
 
+test('mobile working folders forward only reviewed fields and validate team ownership', async () => {
+  const { adapter, calls } = fixture()
+  await adapter.action('update-bot', { id: 'b1', workDir: '/srv/project', ignored: 'private' })
+  assert.deepEqual(calls.at(-1), ['team', 'update-bot', { id: 'b1', workDir: '/srv/project' }])
+  await adapter.action('update-room', { id: 'room', workDir: '' })
+  assert.deepEqual(calls.at(-1), ['team', 'update-room', { id: 'room', workDir: '' }])
+  await assert.rejects(adapter.action('update-bot', { id: 'other', workDir: '/srv/project' }), { status: 404 })
+  for (const workDir of [null, [], 12, 'a'.repeat(4097)]) await assert.rejects(adapter.action('update-bot', { id: 'b1', workDir }), { status: 400 })
+  await assert.rejects(adapter.action('folder-pick'), { status: 404 })
+})
+
+test('mobile folder browsing passes cancellation and never offers a host-native chooser', async () => {
+  const { rt, adapter } = fixture()
+  rt.teamCall = async (endpoint, payload, signal) => {
+    assert.ok(signal instanceof AbortSignal)
+    if (endpoint === 'folders') return { ok: true, value: { team: '/srv/team', picker: 'native', folders: [] } }
+    assert.equal(endpoint, 'folder-list'); assert.deepEqual(payload, { path: '/srv/project' })
+    return { ok: true, value: { path: payload.path, entries: [], crumbs: [] } }
+  }
+  assert.equal((await adapter.action('folders')).picker, null)
+  assert.equal((await adapter.action('folder-list', { path: '/srv/project' })).path, '/srv/project')
+  const controller = new AbortController(); controller.abort()
+  await assert.rejects(adapter.action('folder-list', {}, controller.signal), { name: 'AbortError' })
+})
+
 function fileFixture({ bytes = 4, records, chunks = [Buffer.from('test')] } = {}) {
   const value = fixture()
   const ref = { attachmentId: 'owned-file', name: '资料.txt', bytes }

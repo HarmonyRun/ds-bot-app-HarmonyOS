@@ -100,7 +100,7 @@ export function install(rt) {
     return rt.save()
   }
 
-  const handle = async (endpoint, payload) => {
+  const handle = async (endpoint, payload, signal) => {
     try {
       const body = payload ?? {}
       await rt.refresh()
@@ -143,7 +143,7 @@ export function install(rt) {
           return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => ({ callId, replies: entry.replies, speaking: entry.speaking ?? null })))
         case 'create-bot': {
           await rt.bootstrap()
-          const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort })
+          const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort, workDir: body.workDir })
           return ok(bot)
         }
         case 'update-bot':
@@ -176,9 +176,15 @@ export function install(rt) {
             members: Array.isArray(body.members) ? body.members : undefined,
             add: Array.isArray(body.add) ? body.add : undefined,
             remove: Array.isArray(body.remove) ? body.remove : undefined,
+            workDir: body.workDir,
           })
           return ok({ room: view().rooms.find(entry => entry.id === room.id), changes })
         }
+        case 'folders':
+        case 'folder-pick':
+        case 'folder-list':
+          await rt.load()
+          return ok(await rt.folderEndpoint(endpoint, body, signal))
         case 'add-agent':
           await rt.load()
           return ok(await rt.addAgent())
@@ -336,7 +342,7 @@ export function install(rt) {
     fetch: async (request) => {
       let body
       try { body = await request.json() } catch { body = {} }
-      const result = await handle(String(body?.endpoint ?? ''), body?.payload)
+      const result = await handle(String(body?.endpoint ?? ''), body?.payload, request.signal)
       return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } })
     },
   }), 'ds-bot: api route')

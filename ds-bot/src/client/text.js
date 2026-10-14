@@ -102,6 +102,10 @@ export function isHiddenTurn(roster, sessionId, turn) {
 
 export const toolName = root => root.name || root.call?.name
 
+// While a Session's history loads, a card asked in it may yet be drawn at its call,
+// so the docks hold it back until then.
+export const historyLoading = snapshot => snapshot?.openState === 'cold' || snapshot?.openState === 'loading'
+
 export function toolArgs(root) {
   if (typeof root.args?.text === 'function') {
     return { text: key => root.args.text(key) ?? undefined, value: key => (typeof root.args.value === 'function' ? root.args.value(key) : undefined) }

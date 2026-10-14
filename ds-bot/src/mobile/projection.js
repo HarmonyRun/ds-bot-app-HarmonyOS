@@ -43,16 +43,41 @@ const attachmentsOf = (content, redact = text => text) => (Array.isArray(content
 
 // The mobile transcript retains append-origin conversation messages. Compaction
 // replacements are model context, not new messages from the user or the Bot.
-export function projectEvent(event, { sessionId, kind = 'bot', hiddenTurns = [], calls = new Map(), redact } = {}) {
+export function projectEvent(event, { sessionId, kind = 'bot', hiddenTurns = [], calls = new Map(), redact, changesSummary } = {}) {
   if (!event || !Number.isSafeInteger(event.seq)) return []
   const data = event.data ?? {}
   const visible = value => typeof redact === 'function' ? String(redact(value)) : value
+  if (event.type === 'tool/ptc-dispatch-start' || event.type === 'tool/ptc-dispatch') {
+    const parent = storedCall(calls.get(data.rootCallId))
+    if (!parent || parent.hidden || hiddenTurns.includes(parent.turn) || typeof data.subCallId !== 'string') return []
+    const started = event.type === 'tool/ptc-dispatch-start'
+    const callData = { turn: parent.turn, step: parent.step, callId: data.subCallId, name: data.name, arguments: JSON.stringify(data.arguments ?? {}) }
+    if (!started && !calls.has(data.subCallId)) calls.set(data.subCallId, { ...event, data: callData })
+    return projectEvent({ ...event, type: started ? 'tool/call' : 'tool/result', data: started ? callData : {
+      turn: parent.turn, step: parent.step, message: { source: { callId: data.subCallId }, content: data.content, isError: data.isError },
+    } }, { sessionId, kind, hiddenTurns, calls, redact })
+  }
   if (event.type === 'tool/call') {
     calls.set(data.callId, { ...event, hidden: hiddenTurns.includes(data.turn) })
   }
   if (typeof event.surfaceOp === 'object' && event.surfaceOp?.op === 'replace') return []
   if (hiddenTurns.includes(data.turn)) return []
   const base = { id: `${sessionId}:${event.seq}`, sessionId, seq: event.seq, createdAt: event.time ?? 0 }
+  if (kind !== 'room' && event.type === 'deliverables/presented') {
+    const files = (Array.isArray(data.files) ? data.files : []).filter(file => typeof file?.path === 'string').slice(0, 100)
+      .map(file => ({ path: visible(file.path.slice(0, 4096)), ...(typeof file.description === 'string' ? { description: visible(file.description.slice(0, 2000)) } : {}) }))
+    if (!files.length) return []
+    const output = detail({ files }, 12000, redact)
+    return [{ ...base, role: 'tool', text: 'present', turn: data.turn, tool: { callId: `delivery:${event.seq}`, name: 'present', state: 'completed', output: output.text, truncated: output.truncated } }]
+  }
+  if (kind !== 'room' && event.type === 'workspace/changes') {
+    const summary = changesSummary?.(sessionId, event.seq)
+    if (!summary || !Array.isArray(summary.files)) return []
+    const files = summary.files.slice(0, 100).map(file => ({ path: visible(String(file.display ?? file.path).slice(0, 4096)),
+      ...(Number.isSafeInteger(file.added) ? { added: file.added } : {}), ...(Number.isSafeInteger(file.deleted) ? { deleted: file.deleted } : {}) }))
+    const output = detail({ files, total: summary.total }, 12000, redact)
+    return [{ ...base, role: 'tool', text: 'workspace_changes', turn: data.turn, tool: { callId: `changes:${event.seq}`, name: 'workspace_changes', state: 'completed', output: output.text, truncated: output.truncated } }]
+  }
   if (event.type === 'tool/result' && kind === 'room') {
     const callId = data.message?.source?.callId ?? data.message?.toolCallId
     const call = storedCall(calls.get(callId))
@@ -124,8 +149,8 @@ export function projectEvent(event, { sessionId, kind = 'bot', hiddenTurns = [],
     ...(attachments.length ? { attachments } : {}) }]
 }
 
-export function projectRecords(records, options) {
-  const calls = new Map()
+export function projectRecords(records, options = {}) {
+  const calls = options.calls ?? new Map()
   const messages = new Map()
   for (const record of records ?? []) for (const message of projectEvent(record.event, { ...options, calls })) {
     messages.set(message.id, message)

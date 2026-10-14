@@ -139,8 +139,8 @@ export function MobileApprovalNotice({ useMobileApprovals, useSessions, useRoste
 }
 
 export const MOBILE_APPROVAL_CSS = `
-.bt-mobile-approvals{box-sizing:border-box;width:100%;max-width:var(--dsh-chat-content-width,748px);margin:0 auto 8px;max-height:50vh;overflow:auto;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--bt-ink,var(--dsw-alias-label-primary,#181818))}
-.bt-mobile-approval{margin-bottom:8px;border:1px solid var(--dsw-alias-state-warn-secondary,#d0b26d);border-radius:16px;overflow:hidden;background:var(--bt-card,var(--dsw-specific-input-major,#fff));box-shadow:0 3px 15px #0000000c}
+.bt-mobile-approvals{box-sizing:border-box;width:100%;max-width:var(--dsh-chat-content-width,748px);margin:0 auto 8px;max-height:50vh;overflow:auto;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--bt-ink,#181818)}
+.bt-mobile-approval{margin-bottom:8px;border:1px solid var(--dsw-alias-state-warn-secondary,#d0b26d);border-radius:16px;overflow:hidden;background:var(--bt-card,#fff)}
 .bt-mobile-approval-strip{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--dsw-alias-state-warn-tertiary,#fff8df);color:var(--dsw-alias-state-warn-primary,#765d12);font-weight:600}
 .bt-mobile-approval-strip code{margin-left:auto;font-size:12px;font-weight:400;overflow-wrap:anywhere}
 .bt-mobile-approval-body{padding:12px 14px 0;max-height:260px;overflow:auto}
@@ -154,6 +154,6 @@ export const MOBILE_APPROVAL_CSS = `
 .bt-mobile-approval button.bt-mobile-approval-allow{background:var(--bt-accent,#4d6bfe);color:var(--bt-accent-ink,#fff);border-color:transparent}
 .bt-mobile-approval-error{margin:8px 14px;color:var(--dsw-alias-state-error-primary,#b42318)}
 .bt-mobile-approval-notices{position:fixed;right:20px;top:72px;z-index:160;display:flex;flex-direction:column;gap:8px;max-width:min(360px,calc(100vw - 40px));font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
-.bt-mobile-approval-notice{display:flex;flex-direction:column;text-align:left;background:var(--bt-card,var(--dsw-specific-input-major,#fff));color:var(--bt-ink,var(--dsw-alias-label-primary,#181818));box-shadow:0 4px 22px #0002}
+.bt-mobile-approval-notice{display:flex;flex-direction:column;text-align:left;background:var(--bt-card,#fff);color:var(--bt-ink,#181818)}
 .bt-mobile-approval button:focus-visible,.bt-mobile-approval-body:focus-visible,.bt-mobile-approval-notice:focus-visible{outline:2px solid var(--bt-accent,#4d6bfe);outline-offset:2px}
 `

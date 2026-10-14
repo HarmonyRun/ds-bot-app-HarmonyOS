@@ -7,6 +7,11 @@ export function toolDisplay(tool: {name:string;input?:string;output?:string;stat
   const path=text(input.path || input.file_path || input.file || output.path,500);
   const body=text(tool.output).replace(/\u001b\[[0-?]*[ -/]*[@-~]/g,'');
   const base={title:tool.name,body};
+  if (name === 'present' || name === 'workspace_changes') {
+    if (!Array.isArray(output.files)) return { ...base, kind: name === 'present' ? 'file' : 'diff', title: name === 'present' ? 'Delivered files' : 'File changes' };
+    return { ...base, kind: name === 'present' ? 'file' : 'diff', body: '', title: name === 'present' ? 'Delivered files' : 'File changes',
+      rows: Array.isArray(output.files) ? output.files.filter((file:any)=>typeof file?.path === 'string').slice(0,100).map((file:any)=>({title:text(file.path,4096),detail:name==='present'?text(file.description,2000):[Number.isSafeInteger(file.added)?`+${file.added}`:'',Number.isSafeInteger(file.deleted)?`−${file.deleted}`:''].filter(Boolean).join(' · ')})) : undefined };
+  }
   if (/terminal|^bash$|^shell$|^exec_command$/.test(name)) return {...base,kind:'terminal',body:stripAnsi(text(output.text || output.viewport)) || body,metadata:[output.waitReason,output.sessionStatus,output.lineBegin !== undefined ? `${output.lineBegin}–${output.lineEnd} / ${output.totalLines}` : '', typeof output.exitCode==='number' ? `exit ${output.exitCode}`:''].filter(value=>typeof value==='string').join(' · ')};
   if (/^(edit|write|apply_patch)|file.*(edit|write)/.test(name)) {
     const before=text(input.old_string || input.oldText || input.old), after=text(input.new_string || input.newText || input.new || input.content);
@@ -36,6 +41,7 @@ export function hideQuestionReceipt(tool: {name:string;state:string;isError?:boo
   return isQuestionTool(tool.name) && tool.state === 'completed' && !tool.isError;
 }
 export function toolLabel(tool: {name:string;input?:string;output?:string;state:string}): string {
+  if (tool.name === 'present') return 'Delivered files';
   if (isQuestionTool(tool.name)) return 'Question request';
   return {terminal:'Terminal',file:'File',diff:'File changes',search:'Search',web:'Web page',skill:'Skill',tasks:'Tasks',generic:'Tool result'}[toolDisplay(tool).kind];
 }

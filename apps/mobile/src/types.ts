@@ -11,6 +11,7 @@ export interface Bot {
   appliedModel?: string;
   effort?: string;
   permission?: string;
+  workDir?: string;
   pinned?: boolean;
   hidden?: boolean;
   capabilities?: string[];
@@ -25,6 +26,7 @@ export interface Room {
   named?: boolean;
   pinned?: boolean;
   hidden?: boolean;
+  workDir?: string;
 }
 export interface Model {
   ref: string;

@@ -21,6 +21,9 @@ export const OCR_CACHE_MAX = 500
 export const MAX_AVATAR_IMAGE = 160_000
 export const ROUTE = '/api/bot'
 export const MAX_HOPS = 6
+// Bot requests a Bot's own chat may hold unread; past this the Bot is most likely
+// stuck, and more messages only pile up behind it.
+export const MAX_UNREAD_REQUESTS = 10
 export const MAX_EXCHANGES = 600
 export const ROOM_REPLY_TIMEOUT_MS = 240_000
 export const SOURCE_KIND = 'bot'

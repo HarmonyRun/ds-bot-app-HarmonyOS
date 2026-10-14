@@ -187,6 +187,32 @@ test('a request steered into a running turn is recorded once and answered in a t
   assert.deepEqual((await exchanges()).map(entry => entry.role), ['request', 'reply'])
 })
 
+test('message_bot names the messages a Bot has not read yet, and stops sending to a stuck Bot', async (t) => {
+  const { ctx, agentOf, emit, tool, exchanges, stop } = await start(team())
+  t.after(stop)
+  // Writer's turn waits on something and never reaches its next step.
+  const writer = agentOf('b')
+  writer.steer = (message) => { writer.calls.push(['steer', message]); writer.inbox.nextStep.push(message) }
+  emit('b', 'turn/start', { turn: 1 })
+
+  const first = await tool('message_bot', { to: 'Writer', message: 'task 1' }, 'a')
+  assert.equal(first, 'Delivered to Writer while it is working: it reads your message at its next step and answers once that work is done. Its reply will arrive later as a new message; do not wait for it.')
+  assert.match(await tool('message_bot', { to: 'Writer', message: 'task 2' }, 'a'), /Writer has not read an earlier message from Bots yet\.$/)
+  for (let index = 3; index <= 10; index += 1) await tool('message_bot', { to: 'Writer', message: `task ${index}` }, 'a')
+  assert.match(await tool('message_bot', { to: 'Writer', message: 'task 10b' }, 'a').catch(error => error.message), /^Not sent: Writer has not read the last 10 messages from Bots yet/)
+  assert.equal(writer.calls.length, 10)
+  assert.equal((await exchanges()).length, 10)
+
+  // Once a step takes them up, messages go through again.
+  writer.inbox.nextStep.length = 0
+  assert.match(await tool('message_bot', { to: 'Writer', message: 'task 11' }, 'a'), /^Delivered to Writer while it is working/)
+
+  // An approval the Bot waits for holds its messages too.
+  writer.inbox.nextStep.length = 0
+  for (const listener of ctx.listeners.get('approval/request')) void listener({ agent: { session: { id: 'b' } }, toolName: 'bash', reason: 'rm' }, () => new Promise(() => {}))
+  assert.match(await tool('message_bot', { to: 'Writer', message: 'task 12' }, 'a'), /Writer is waiting for the user's approval, so it reads your message only after the user answers\.$/)
+})
+
 test('a non-Main Bot can steer a message to a Main Bot', async (t) => {
   const { agents, tool, stop } = await start(team())
   t.after(stop)

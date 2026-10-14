@@ -16,7 +16,7 @@ export function ToolResultView({tool}: {tool:ToolActivity}) {
   return <View style={{gap:10,padding:12,borderRadius:12,borderWidth:1,borderColor:tool.isError?t.error:t.line}}>
     <View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}><Tag>{kinds[display.kind]}</Tag><Label>{tool.state==='running'?tr("Running"):tool.state==='error'?tr("Failed"):tr("Completed")}</Label></View>
     {tool.durationMs !== undefined && <Label muted>{tr("{seconds}s",{seconds:(tool.durationMs / 1000).toFixed(1)})}</Label>}
-    <Label>{display.title}</Label>{display.metadata ? <Label muted>{tr(display.metadata)}</Label>:null}
+    <Label>{tool.name === 'present' || tool.name === 'workspace_changes' ? tr(display.title) : display.title}</Label>{display.metadata ? <Label muted>{tr(display.metadata)}</Label>:null}
     {display.rows?.map((row,index)=><View key={index} style={{gap:4,backgroundColor:row.change==='add'?t.hover:undefined,borderLeftWidth:row.change?3:0,borderColor:row.change==='remove'?t.error:t.accent,padding:row.change?6:0}}>
       <Text selectable style={display.kind==='diff'?code:{color:t.ink,fontSize:14,lineHeight:21}}>{display.kind==='tasks'?(row.done?'☑ ':'☐ '):''}{row.title}</Text>{row.detail?<Label muted>{row.detail}</Label>:null}
       {row.url && /^https?:\/\//i.test(row.url) && <Button compact secondary title={tr("Open source")} onPress={()=>{try{const url=new URL(row.url!);if(url.username || url.password)throw new Error("URLs containing credentials cannot be opened.");void Linking.openURL(url.toString()).catch(err=>setError(errorText(err)));}catch(err){setError(errorText(err));}}}/>}

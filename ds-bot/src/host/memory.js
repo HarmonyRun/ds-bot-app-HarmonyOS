@@ -919,6 +919,7 @@ export function install(rt) {
       for await (const chunk of ctx.llm.stream({
         provider: route.provider,
         model: route.model,
+        ...(tag?.sessionId === undefined ? {} : { sessionId: tag.sessionId }),
         ...(effort === undefined ? {} : { reasoningEffort: effort }),
         system,
         messages,
@@ -934,6 +935,25 @@ export function install(rt) {
       if (finish.kind !== 'max-tokens' && maxTokens === SUMMARY_MAX_TOKENS) throw new Error('The model wrote nothing')
     }
     throw new Error(`The model's reasoning used up the output budget (${SUMMARY_MAX_TOKENS} and ${SUMMARY_RETRY_MAX_TOKENS} tokens); no complete answer was written`)
+  }
+
+  // A served model can still refuse the call (a key without access, say), and
+  // desiredModel only falls back for models that are not served; so a failed call
+  // is tried once more on the profile default.
+  async function botShot(bot, system, text, tag) {
+    const own = await modelFor(bot)
+    try {
+      return await oneShot(own, system, text, tag)
+    } catch (error) {
+      const fallback = splitRef(await rt.defaultModel())
+      if (fallback === undefined || (fallback.provider === own.provider && fallback.model === own.model)) throw error
+      try {
+        return await oneShot(fallback, system, text, tag)
+      } catch (again) {
+        const said = failure => failure?.message ?? String(failure)
+        throw new Error(`${own.provider}/${own.model}: ${said(error)}; ${fallback.provider}/${fallback.model}: ${said(again)}`)
+      }
+    }
   }
 
   /** @type {Map<string, {hash:string, text:string, at:number}>} */
@@ -955,21 +975,23 @@ export function install(rt) {
   const linesFor = files => allEntries(files).map(entry => `- ${entry.file.topic ? `[[${entry.file.topic}]] ` : ''}${entry.text}`)
 
   function startSummary(bot, own, team, language, hash) {
+    const model = bot.model
     const job = (async () => {
-      const text = await oneShot(await modelFor(bot), SUMMARY_SYSTEM, summaryRequest({ name: bot.name, own: linesFor(own), team: linesFor(team), language }), { sessionId: rt.chatOf(bot.id), kind: 'memory' })
+      const text = await botShot(bot, SUMMARY_SYSTEM, summaryRequest({ name: bot.name, own: linesFor(own), team: linesFor(team), language }), { sessionId: rt.chatOf(bot.id), kind: 'memory' })
       const value = { hash, text: text.slice(0, SUMMARY_TEXT_MAX), at: Date.now() }
       summaries.set(bot.id, value)
       summaryFailures.delete(bot.id)
       if (rt.readOnly() === undefined) await writeText(summaryPath(bot.id), JSON.stringify(value, null, 2))
     })().catch((error) => {
-      summaryFailures.set(bot.id, { hash, message: error?.message ?? String(error) })
+      summaryFailures.set(bot.id, { hash, model, message: error?.message ?? String(error) })
       rt.warn('ds-bot: memory summary for %s failed: %s', bot.name, error)
     }).finally(() => summarizing.delete(bot.id))
     summarizing.set(bot.id, job)
   }
 
   // The summary is written again when the entries or the interface language change;
-  // a failed one waits for `regenerate` instead of retrying on every poll.
+  // a failed one waits for `regenerate`, or a new model for the Bot, instead of
+  // retrying on every poll.
   function memoryView(body) {
     const bot = rt.botOf(String(body.botId ?? ''))
     if (bot === undefined) throw new Error('Unknown Bot')
@@ -979,8 +1001,9 @@ export function install(rt) {
     const language = languageNow()
     const hash = createHash('sha256').update(JSON.stringify([language, linesFor(own), linesFor(team)])).digest('hex')
     const saved = savedSummary(bot.id)
-    const failed = summaryFailures.get(bot.id)
-    const wanted = body.regenerate === true || (body.summarize === true && saved?.hash !== hash && failed?.hash !== hash)
+    const prior = summaryFailures.get(bot.id)
+    const failed = prior?.hash === hash && prior.model === bot.model ? prior : undefined
+    const wanted = body.regenerate === true || (body.summarize === true && saved?.hash !== hash && failed === undefined)
     if (wanted && entries.length > 0 && !summarizing.has(bot.id)) startSummary(bot, own, team, language, hash)
     return {
       botId: bot.id,
@@ -990,7 +1013,7 @@ export function install(rt) {
       summary: entries.length > 0 && saved !== undefined ? { text: saved.text, at: saved.at } : null,
       fresh: entries.length === 0 || saved?.hash === hash,
       summarizing: summarizing.has(bot.id),
-      error: failed?.hash === hash && !summarizing.has(bot.id) ? failed.message : null,
+      error: failed !== undefined && !summarizing.has(bot.id) ? failed.message : null,
     }
   }
 
@@ -1003,7 +1026,7 @@ export function install(rt) {
       ...allEntries(loadScope(ownScope(bot.id))).map(entry => ({ ...entry, scope: 'own' })),
       ...allEntries(loadScope(TEAM)).map(entry => ({ ...entry, scope: 'team' })),
     ]
-    const answer = parseAsk(await oneShot(await modelFor(bot), ASK_SYSTEM, askRequest({ name: bot.name, numbered, language: languageNow(), text }), { sessionId: rt.chatOf(bot.id), kind: 'memory' }))
+    const answer = parseAsk(await botShot(bot, ASK_SYSTEM, askRequest({ name: bot.name, numbered, language: languageNow(), text }), { sessionId: rt.chatOf(bot.id), kind: 'memory' }))
     const meta = { source: 'memory panel', by: 'user', added: today() }
     const changes = []
     for (const change of answer.changes.slice(0, ASK_CHANGES_MAX)) {
@@ -1236,7 +1259,7 @@ export function install(rt) {
       const sizes = { own: ownFiles[0].content.length, team: teamFiles[0].content.length }
       const earlier = batch.earlier.map(line => reviewLine(line.who, line.text, bot))
       const language = writtenIn(read.filter(line => line.who === 'user').map(line => line.text.replace(/^User: /, '')), languageNow())
-      const reply = await oneShot(await modelFor(bot), reviewSystem(writesTeam(bot.id)), reviewRequest({ bot, numbered, left, sizes, where: batch.where, earlier, fresh: fresh.texts, more, language }), { sessionId: rt.chatOf(bot.id), kind: 'memory' })
+      const reply = await botShot(bot, reviewSystem(writesTeam(bot.id)), reviewRequest({ bot, numbered, left, sizes, where: batch.where, earlier, fresh: fresh.texts, more, language }), { sessionId: rt.chatOf(bot.id), kind: 'memory' })
       const changes = parseReview(reply)
       if (changes === undefined) throw new Error(`the model's answer is not a list of changes: ${clip(reply.replace(/\s+/g, ' '), 120)}`)
       const unknown = changes.find(change => change.op !== 'add' && numbered[Number(change.entry) - 1] === undefined)

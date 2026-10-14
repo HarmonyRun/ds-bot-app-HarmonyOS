@@ -5,11 +5,12 @@
 import { createElement as h, useEffect, useId, useState } from 'react'
 import { CheckIcon, CloseIcon, TrashIcon } from './icons.js'
 import { BotAvatar, BotMark } from './mark.js'
-import { contentText, currentPart } from './text.js'
+import { contentText, currentPart, historyLoading } from './text.js'
 import { dateLocale, t } from './i18n.js'
 import { SPRING_POP, SPRING_SHAPE, spring } from './motion.js'
 
 const MIN_VALUE = 4
+const NONE = {}
 
 export const KeyIcon = () => h('svg', { width: 15, height: 15, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
   h('path', { d: 'M7 9.5a3.5 3.5 0 1 1 0 .01z' }), h('path', { d: 'M10.4 10.6L17 10.6M14.5 10.6v2.4M16.6 10.6v1.8' }))
@@ -143,7 +144,8 @@ function RequestView({ bot, request, roster, actions }) {
 export function SecretToolCell({ sessionId, callId, name, done, content, roster, actions }) {
   const bot = roster.byId[sessionId]
   if (!bot) return null
-  const request = (roster.secretRequests?.[bot.id] ?? []).find(entry => entry.callId === callId)
+  // Call ids repeat across a Bot's chat parts.
+  const request = (roster.secretRequests?.[bot.id] ?? []).find(entry => entry.callId === callId && (entry.sessionId ?? sessionId) === sessionId)
   if (request) return h('div', { className: 'bt-q-inline' }, h(RequestView, { bot, request, roster, actions }))
   if (done && /already saved/.test(contentText(content))) {
     return h('div', { className: 'bt-event' }, h('span', { className: 'bt-secret-event' }, h(KeyIcon), t('{bot} is using {name}', { bot: bot.name, name: name ?? t('a saved key') })))
@@ -151,13 +153,16 @@ export function SecretToolCell({ sessionId, callId, name, done, content, roster,
   return null
 }
 
-// A card asked in an earlier part of the chat has no call in the part shown now, so
-// it waits above the composer instead.
-export function SecretDock({ sessionId, useRoster, actions }) {
+// A card whose call the transcript does not draw (an earlier part of the chat, a
+// hidden turn, a call outside the loaded history) waits above the composer instead.
+export function SecretDock({ sessionId, useRoster, useCards, useSession, actions }) {
   const roster = useRoster(value => value)
+  const shown = useCards?.(state => state[sessionId]) ?? NONE
+  const loading = useSession?.(historyLoading) === true
   const bot = roster.byId[sessionId]
   if (!bot || currentPart(bot) !== sessionId) return null
-  const waiting = (roster.secretRequests?.[bot.id] ?? []).filter(entry => entry.status === 'pending' && (!entry.callId || entry.sessionId !== sessionId))
+  const drawn = entry => entry.callId && entry.sessionId === sessionId && (loading || shown[entry.callId] > 0)
+  const waiting = (roster.secretRequests?.[bot.id] ?? []).filter(entry => entry.status === 'pending' && !drawn(entry))
   if (waiting.length === 0) return null
   return h('div', { className: 'bt-q-dock bt-secret-dock' }, waiting.map(request => h(SecretCard, { key: `${request.id}:${request.kind}`, bot, request, roster, actions })))
 }

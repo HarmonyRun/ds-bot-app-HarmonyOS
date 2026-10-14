@@ -523,6 +523,9 @@ export function install(rt) {
     const tag = from !== null && typeof from === 'object' ? tags.get(from) : undefined
     if (tag !== undefined) tagUsage(to, tag)
   }
+  // DS Bot's own requests name the Session they serve, as some routes require, so
+  // `sessionId` alone does not make a request that Session's own round; the tag does.
+  const ownRequest = options => tags.has(options?.messages)
   // Owner and group use are journaled with the call itself: a Bot or room that
   // is deleted before the first scan still leaves its calls under its own name.
   const journaled = new Map()
@@ -590,5 +593,5 @@ export function install(rt) {
     })()
   })
 
-  Object.assign(rt, { usageView, tagUsage, carryUsageTag })
+  Object.assign(rt, { usageView, tagUsage, carryUsageTag, ownRequest })
 }

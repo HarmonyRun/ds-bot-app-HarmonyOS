@@ -55,11 +55,6 @@ export const shellTokens = ({ light, dark }) => ({
   '--dsw-alias-label-secondary': { light: rgba(light.text, 0.74), dark: rgba(dark.text, 0.74) },
   '--dsw-alias-label-tertiary': { light: rgba(light.text, 0.6), dark: rgba(dark.text, 0.6) },
 })
-// The user bubble belongs to the conversation group: on a plain Session the shell
-// stays mounted but dsh's own colors paint the bubbles.
-export const conversationTokens = ({ light, dark }) => ({
-  '--dsw-specific-bubble': { light: light.user, dark: dark.user },
-})
 
 // Other plugins add character shapes and themes through `window.dshBot`, or queue
 // calls on `window.dshBotQueue` before this plugin loads. A shape draws only its

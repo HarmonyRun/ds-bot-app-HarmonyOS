@@ -6,7 +6,9 @@
 // wrong if the round and older messages are not kept apart. Usage is estimated from the
 // request size (about 3 characters per token, 90% cached), so context tables and the
 // switch lines see real growth. The log records hashes of the system prompt and tools, to
-// confirm that group Sessions share the private chat's prefix.
+// confirm that group Sessions share the private chat's prefix, and the Session each
+// request names (`session`, from the adapter's session header), since some routes
+// require one.
 //
 // Environment: MOCK_PORT, MOCK_LOG, MOCK_DELAY_MS, MOCK_JITTER_MS (random extra latency),
 // MOCK_LOG_CHARS (prompt length kept per log entry), MOCK_SUMMARY_DELAY_MS (handoff notes
@@ -290,14 +292,10 @@ function decide(body) {
     if (isMain) {
       return [
         text(`嘿，我是 ${me}。从今天起我来管你的 Bot 团队，需要拍板的事找我就行。`),
-        text('现在还只有我一个。我先摸清你每天用的工具，再决定先上谁。'),
-        tool('ask_user', { question: '先让团队帮你做哪块？', options: ['整理日常事务', '做一次调研', '规划这一周', '先看看再说'] }),
+        text('现在还只有我一个。我先摸清你每天用的工具，再决定先上谁。先让团队帮你做哪块？'),
       ]
     }
-    return [
-      text(`Hi, I'm ${me}. Where should I start?`),
-      tool('ask_user', { question: 'Where should we start?', options: ['Review what exists', 'Plan this week', 'Start a first draft', 'Something else'], allowCustom: true }),
-    ]
+    return [text(`Hi, I'm ${me}. Where should I start?`)]
   }
   if (/^\[Group chat "[^"]*" · replies to your post\]/.test(userText)) {
     const replies = userText.split('\n').filter(line => /^[^:\n]{1,40}: /.test(line)).length
@@ -604,7 +602,7 @@ const server = createServer((req, res) => {
     // Hashes of the system prompt and tools show whether two Sessions share a cacheable prefix.
     const digest = value => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex').slice(0, 12)
     const watch = WATCH ? { watchHit: JSON.stringify([body.system, body.tools, body.messages]).includes(WATCH) } : {}
-    appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), id, tokens, images, ...watch, ...LOG_TOOLS ? { toolNames: (body.tools ?? []).map(entry => entry.name ?? entry.type) } : {}, ...search ? { nativeSearch: { model: body.model, tools: body.tools, auth: [req.headers['x-api-key'] ? 'x-api-key' : '', req.headers.authorization ? 'bearer' : ''].filter(Boolean) } } : {}, system: digest(body.system), tools: digest(body.tools), messages: body.messages?.length ?? 0, first: textOf(body.messages?.[0]?.content).slice(0, 60), last: textOf(body.messages?.at(-1)?.content).slice(0, LOG_CHARS), out: out.map(block => (block.type === 'text' && block.text.length > 200 ? { ...block, text: `${block.text.slice(0, 200)}…(${block.text.length})` } : block)) }) + '\n')
+    appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), id, tokens, images, session: req.headers['x-deepseek-harness-session-id'] ?? null, ...watch, ...LOG_TOOLS ? { toolNames: (body.tools ?? []).map(entry => entry.name ?? entry.type) } : {}, ...search ? { nativeSearch: { model: body.model, tools: body.tools, auth: [req.headers['x-api-key'] ? 'x-api-key' : '', req.headers.authorization ? 'bearer' : ''].filter(Boolean) } } : {}, system: digest(body.system), tools: digest(body.tools), messages: body.messages?.length ?? 0, first: textOf(body.messages?.[0]?.content).slice(0, 60), last: textOf(body.messages?.at(-1)?.content).slice(0, LOG_CHARS), out: out.map(block => (block.type === 'text' && block.text.length > 200 ? { ...block, text: `${block.text.slice(0, 200)}…(${block.text.length})` } : block)) }) + '\n')
     if (search) {
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/json' })

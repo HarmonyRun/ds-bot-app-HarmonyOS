@@ -21,13 +21,16 @@ export function install(rt) {
     return workspace.id
   }
 
-  async function createSession(title) {
+  // `dir` is a working folder outside the team workspace. Such a Session is made by cwd
+  // alone, so it joins no DSH workspace and the user's own project lists stay as they are.
+  async function createSession(title, { dir } = {}) {
     // A Bot's tools run here too; while another dsh holds the team, a new Session would
     // belong to no saved Bot.
     const readOnly = rt.readOnly()
     if (readOnly !== undefined) throw new Error(readOnly)
-    const workspaceId = await ensureWorkspace()
-    const { sessionId } = await ctx.sessionController.create({ workspaceId })
+    const usable = dir !== undefined && await rt.isFolder(dir)
+    if (dir !== undefined && !usable) rt.warn('ds-bot: the working folder %s is gone; %s starts in the team workspace', dir, title)
+    const { sessionId } = await ctx.sessionController.create(usable ? { cwd: dir } : { workspaceId: await ensureWorkspace() })
     const agent = await rt.resolveAgent(sessionId)
     await ctx.sessionTitle.rename(agent.session, title)
     return sessionId
@@ -55,7 +58,7 @@ export function install(rt) {
 
   // `pickModel` leaves the model to the user: the chat opens on a model card, and the
   // greeting waits until a model is chosen. So does a Bot made when no model is served.
-  async function createBot({ name: botName, role = '', instructions = '', color, brief = '', createdBy, main = false, avatar, model, effort, copyOf, pickModel = false }) {
+  async function createBot({ name: botName, role = '', instructions = '', color, brief = '', createdBy, main = false, avatar, model, effort, workDir, copyOf, pickModel = false }) {
     const cleanName = String(botName ?? '').trim().slice(0, 40)
     const problem = nameProblem(cleanName)
     if (problem !== undefined) throw new Error(problem)
@@ -64,7 +67,8 @@ export function install(rt) {
     // The model is fixed at creation, so a later change of the DSH default leaves it alone.
     const modelRef = model ? await rt.resolveModel(model) : pickModel ? undefined : await rt.defaultModel()
     const effortId = modelRef !== undefined && effort !== undefined ? await rt.resolveEffort(modelRef, effort) : undefined
-    const id = await createSession(cleanName)
+    const dir = workDir === undefined || workDir === null ? undefined : await rt.cleanWorkDir(workDir)
+    const id = await createSession(cleanName, { dir })
     try {
       state.bots[id] = {
         id,
@@ -75,6 +79,7 @@ export function install(rt) {
         ...(cleanAvatarValue ? { avatar: cleanAvatarValue } : {}),
         ...(modelRef ? { model: modelRef } : {}),
         ...(effortId ? { effort: effortId } : {}),
+        ...(dir ? { workDir: dir } : {}),
         instructions: String(instructions).trim(),
         createdAt: Date.now(),
         createdBy: createdBy ?? null,
@@ -84,16 +89,19 @@ export function install(rt) {
       const creator = rt.botOf(createdBy)
       const original = rt.botOf(copyOf)
       const language = rt.uiLanguage?.()
+      // The kickoff arrives as a user message, so it outranks the Bot's instructions
+      // unless it gives way to them, and it names no tool those instructions may rule out.
       const kickoff = main
-        ? `You were just set up as the user's Main Bot. Greet the user in one or two short messages: say you will run their Bot team and that they can come to you for anything that needs a decision. Then use ask_user to ask what they want the team to help with first (3-4 short options). Write in ${language ?? 'the user\'s language if known; otherwise Chinese'}.`
+        ? `You were just set up as the user's Main Bot. Greet the user in one or two short messages: say you will run their Bot team and that they can come to you for anything that needs a decision. Then ask in one short question what they want the team to help with first. Write in ${language ?? 'the user\'s language if known; otherwise Chinese'}.`
         : original
-          ? `The user just made you as a copy of ${original.name}: same job, fresh memory. Greet the user in one short message, then use ask_user to ask what this copy should focus on (3-4 short options).`
+          ? `The user just made you as a copy of ${original.name}: same job, fresh memory. Greet the user in one short message, then ask in one short question what this copy should focus on.`
           : creator
-            ? `${creator.name} just created you for the user.${brief ? ` Why you exist: ${brief}` : ''}\nGreet the user in one short message, then use ask_user to ask where to start (3-4 short options relevant to your role, with allowCustom). Keep it brief.`
+            ? `${creator.name} just created you for the user.${brief ? ` Why you exist: ${brief}` : ''}\nGreet the user in one short message, then ask in one short question where to start. Keep it brief.`
             : brief
               ? `The user just created you and sent this first message:\n\n${brief}\n\nIntroduce yourself in one short line, then help with it.`
-              : 'The user just created you. Greet the user in one short message, then use ask_user to ask what you should focus on (3-4 short options, with allowCustom).'
-      const text = !main && language ? `${kickoff}\nWrite in ${language}.` : kickoff
+              : 'The user just created you. Greet the user in one short message, then ask in one short question what you should focus on.'
+      const opener = `${kickoff}\nWhere your instructions say otherwise, follow them.`
+      const text = !main && language ? `${opener}\nWrite in ${language}.` : opener
       const bot = state.bots[id]
       if (modelRef === undefined) {
         bot.kickoff = { text, from: createdBy ?? null, ...(main ? { main: true } : {}) }
@@ -145,6 +153,8 @@ export function install(rt) {
       avatar: bot.avatar,
       model: served ? bot.model : undefined,
       effort: served ? bot.effort : undefined,
+      // A folder that went away since leaves the copy in the team workspace.
+      workDir: bot.workDir !== undefined && await rt.isFolder(bot.workDir) ? bot.workDir : undefined,
       copyOf: bot.id,
     })
   }
@@ -152,6 +162,9 @@ export function install(rt) {
   async function updateBot(id, patch) {
     const bot = rt.botOf(id)
     if (bot === undefined) throw new Error('Unknown Bot')
+    // Checked first, so a folder that does not pass leaves the rest unchanged too.
+    const moving = patch.workDir !== undefined
+    const workDir = moving ? await rt.cleanWorkDir(patch.workDir ?? '') : undefined
     if (patch.name !== undefined) {
       const next = String(patch.name).trim().slice(0, 40)
       const clash = rt.findBot(next)
@@ -191,8 +204,14 @@ export function install(rt) {
       modelChanged = true
     }
     if (patch.permission !== undefined) await rt.setPermission(bot, patch.permission)
+    const moved = moving && workDir !== bot.workDir
+    if (moving) {
+      if (workDir === undefined) delete bot.workDir
+      else bot.workDir = workDir
+    }
     await rt.save()
     if (modelChanged) await rt.applyModel(bot, { force: true })
+    if (moved) void rt.followFolder(bot.id)
     if (bot.model && bot.kickoff !== undefined) {
       const held = bot.kickoff
       delete bot.kickoff
@@ -260,6 +279,8 @@ export function install(rt) {
     if (adminId !== null && !members.includes(adminId)) throw new Error('The admin must be a member of the group')
     if (mode !== undefined && !ROOM_MODES.includes(mode)) throw new Error(`Reply mode must be one of ${ROOM_MODES.join(', ')}`)
     const title = custom || autoRoomName(members)
+    // The group's own Session only relays, so it stays in the team workspace; the
+    // group's folder is for its members' Sessions.
     const id = await createSession(title)
     try {
       state.rooms[id] = {
@@ -309,6 +330,9 @@ export function install(rt) {
     if (patch.mode !== undefined && !ROOM_MODES.includes(patch.mode)) throw new Error(`Reply mode must be one of ${ROOM_MODES.join(', ')}`)
     const name = patch.name === undefined ? undefined : cleanRoomName(patch.name, room.id)
     const notice = patch.notice === undefined ? undefined : cleanNotice(patch.notice)
+    const moving = patch.workDir !== undefined
+    if (moving && byAdmin) throw new Error(`Only the user or a Main Bot can set the folder of "${room.name}"`)
+    const workDir = moving ? await rt.cleanWorkDir(patch.workDir ?? '') : undefined
 
     const changes = []
     const names = ids => ids.map(member => rt.botOf(member)?.name).filter(Boolean).join(', ')
@@ -331,6 +355,12 @@ export function install(rt) {
     if (notice !== undefined && notice !== (room.notice ?? '')) {
       room.notice = notice
       changes.push(notice ? 'updated the notice' : 'cleared the notice')
+    }
+    // Members' group conversations move on to the folder at their next turn there.
+    if (moving && workDir !== room.workDir) {
+      if (workDir === undefined) delete room.workDir
+      else room.workDir = workDir
+      changes.push(workDir ? `every member now works in ${workDir} here` : 'every member works in its own folder again')
     }
     const before = room.name
     if (name !== undefined) {

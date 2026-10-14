@@ -19,3 +19,26 @@
 **小技巧：** 名字后面加一个空格（`@Anvil 你看下`）。这样只要名字里没有空格，等待时也会显示成 Bot。
 
 **原因：** 这些等待中的行由 DeepSeek Harness 自己画，它读「@」时一直读到下一个空格。插件目前改不了它们的显示。
+
+## DS Bot 没有加载：「disabling profile plugin row "bot"」
+
+**在哪里：** DSH Web（或 Desktop）能启动，但没有 DS Bot。日志里有这一行：
+
+```text
+dsh: disabling profile plugin row "bot": its declared peer dependencies cannot be validated: Cannot read properties of undefined (reading 'startsWith')
+```
+
+换装别的 DS Bot 版本也没用。
+
+**原因：** DeepSeek Harness 加载插件前，会检查 profile 里的每一行插件配置。这条信息表示有一行的 id 是 `bot`，却没有包名。DS Bot 自己加的那一行带有包名 `ds-bot`，所以没有包名的那一行多半来自 profile 文件夹里的文件，比如 `cordis.patch.yml` 里一条已经对不上 DS Bot 那一行的 `- id: bot` 覆盖配置。我们没能复现这个问题，所以还不知道这样的一行是怎么留下来的。
+
+**怎么处理：** profile 文件夹是 `~/.dsh/profiles/web/`（Windows：`C:\Users\<用户名>\.dsh\profiles\web\`）；设置了 `DSH_HOME` 时，是其中的 `profiles/web/`。Desktop 用 `profiles/desktop/`。
+
+1. 退出 DSH。
+2. 打开 profile 文件夹里的 `cordis.patch.yml`，找 `id: bot` 但没有 `name: ds-bot` 的一行，删掉这一行。改之前先备份这个文件。
+3. 确认同一文件夹的 `package.json` 在 `dependencies` 里有 `ds-bot`。没有的话，重新添加 DS Bot：`npx @deepseek-ai/dsh@0.2.1-alpha.1 plugin --profile web add ds-bot`。
+4. 重新启动 DSH。
+
+想知道这一行来自哪里，可以运行 `npx @deepseek-ai/dsh@0.2.1-alpha.1 --profile web --dump-config`。它会列出每一行插件配置，以及提供它的文件。如果要报告这个问题，只复制 `id: bot` 的那几行和文件名，不要带上 key 或你不想公开的路径。
+
+删掉整个 profile 文件夹也能解决，但会一并删掉这个 profile 的其他插件和设置（比如模型）。Bot 团队数据在 `~/.dsh/bot/`，两种做法都不会影响它。

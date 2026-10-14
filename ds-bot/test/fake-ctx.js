@@ -4,12 +4,14 @@ export function fakeContext({ services = {} } = {}) {
   const calls = []
   const disposers = []
   const registeredTools = new Map()
+  const guards = []
   // Listeners by event name, in registration order.
   const listeners = new Map()
   const sections = new Map()
   const ctx = {
     calls,
     registeredTools,
+    guards,
     listeners,
     sections,
     logger: { warn() {}, info() {} },
@@ -40,6 +42,12 @@ export function fakeContext({ services = {} } = {}) {
         registeredTools.set(tool.name, tool)
         return () => {}
       },
+      guard(guard) {
+        calls.push('tools guard')
+        guards.push(guard)
+        return () => {}
+      },
+      schemas: () => [],
     },
     systemPrompt: {
       section(section) {

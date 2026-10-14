@@ -40,6 +40,10 @@ export const stripWrittenCalls = text => text
   .replace(/<function=[\w.-]+>[\s\S]*?(?:<\/function>|$)/g, '')
   .trim()
 
+// Under DSH's PTC presentation the model calls only this tool; the program's sub-calls
+// are the tools it really runs.
+const PROGRAM_TOOL = 'run_code'
+
 const RETRY_TEXT = 'Your last reply wrote a tool call as plain text (<tool_call>…), so it did not run and nothing happened. Call the tool through the tool interface now, then reply as you meant to.'
 
 export function install(rt) {
@@ -119,6 +123,22 @@ export function install(rt) {
     if (value === undefined) delete next[id]
     else next[id] = value
     activity = next
+  }
+  // The newest call still running, a program's sub-calls included, is what the Session
+  // is doing.
+  const showCall = (id, entry) => {
+    const name = [...(entry.calls?.values() ?? [])].at(-1)?.name
+    entry.tool = name
+    if (name !== undefined) setActivity(id, name === 'ask_user' ? undefined : activityOf(name))
+    else if (entry.turn !== undefined) setActivity(id, 'thinking')
+  }
+  const startCall = (id, entry, callId, name, args) => {
+    if (typeof callId === 'string') (entry.calls ??= new Map()).set(callId, { name, args })
+    showCall(id, entry)
+  }
+  const endCall = (id, entry, callId) => {
+    entry.calls?.delete(callId)
+    showCall(id, entry)
   }
 
   const markExchangeTurn = (sessionId, turn) => {
@@ -211,7 +231,7 @@ export function install(rt) {
   // the command, path or address it acts on.
   const callDetail = (sessionId, callId) => {
     let args
-    try { args = JSON.parse(live.get(sessionId)?.calls?.get(callId) ?? '{}') } catch { args = {} }
+    try { args = JSON.parse(live.get(sessionId)?.calls?.get(callId)?.args ?? '{}') } catch { args = {} }
     const first = keys => keys.map(key => args?.[key]).find(value => typeof value === 'string' && value.trim() !== '')
     const text = first(['description', 'justification'])
     const code = first(['command', 'cmd', 'file_path', 'path', 'url', 'query'])
@@ -245,16 +265,22 @@ export function install(rt) {
     switch (event.type) {
       case 'tool/call': {
         const name = String(event.data?.name ?? '')
-        setActivity(id, name === 'ask_user' ? undefined : activityOf(name))
-        entry.tool = name
-        if (rt.groupOwners.has(id)) rt.workRoomTurn?.(id, name)
-        if (typeof event.data?.callId === 'string') (entry.calls ??= new Map()).set(event.data.callId, String(event.data.arguments ?? ''))
+        startCall(id, entry, event.data?.callId, name, String(event.data?.arguments ?? ''))
+        // A program is as quick as the tools it runs, so its sub-calls decide.
+        if (rt.groupOwners.has(id) && name !== PROGRAM_TOOL) rt.workRoomTurn?.(id, name)
         break
       }
+      case 'tool/ptc-dispatch-start': {
+        const name = String(event.data?.name ?? '')
+        startCall(id, entry, event.data?.subCallId, name, JSON.stringify(event.data?.arguments ?? {}))
+        if (rt.groupOwners.has(id)) rt.workRoomTurn?.(id, name)
+        break
+      }
+      case 'tool/ptc-dispatch':
+        endCall(id, entry, event.data?.subCallId)
+        break
       case 'tool/result':
-        if (entry.turn !== undefined) setActivity(id, 'thinking')
-        entry.tool = undefined
-        entry.calls?.delete(event.data?.callId)
+        endCall(id, entry, event.data?.callId)
         break
       case 'turn/start':
         setActivity(id, 'thinking')

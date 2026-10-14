@@ -97,7 +97,7 @@ if (main && !main.model) {
   await shot('model-card')
   await card.locator('.bt-model-opt').first().click()
   check(await card.waitFor({ state: 'detached', timeout: 30_000 }).then(() => true, () => false), 'the model card goes once a model is picked')
-  check(await page.locator('.bt-q:not(.bt-model-card)').first().waitFor({ timeout: 60_000 }).then(() => true, () => false), `${main.name} greets and asks after the pick`)
+  check(await page.getByText('先让团队帮你做哪块', { exact: false }).last().waitFor({ timeout: 60_000 }).then(() => true, () => false), `${main.name} greets and asks after the pick`)
   await page.waitForTimeout(1500)
   await shot('main-greets')
   state = await api('state', {})

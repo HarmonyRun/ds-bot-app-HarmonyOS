@@ -8,6 +8,40 @@ const record = value => ({ type: 'event', event: value })
 const call = (seq = 2, patch = {}) => event('tool/call', seq, { callId: 'read-1', name: 'read', arguments: '{"path":"README.md"}', turn: 1, step: 0, ...patch })
 const result = (seq = 4, patch = {}) => event('tool/result', seq, { turn: 1, step: 0, message: { toolCallId: 'read-1', content: [{ type: 'text', text: 'Project setup instructions' }], isError: false }, ...patch })
 
+test('PTC sub-calls keep stable live cards, redaction, failures and hidden parent boundaries', () => {
+  const calls = new Map(), options = { sessionId: 's1', calls, hiddenTurns: [7] }
+  projectEvent(call(1, { callId: 'root', name: 'run_code', turn: 2 }), options)
+  const data = { rootCallId: 'root', parentCallId: 'root', subCallId: 'root:ptc:1', name: 'read', arguments: { path: 'README.md', token: 'fixture-private' } }
+  const running = projectEvent(event('tool/ptc-dispatch-start', 2, data), options)[0]
+  const completed = projectEvent(event('tool/ptc-dispatch', 4, { ...data, content: [{ type: 'text', text: 'Not found' }], isError: true }), options)[0]
+  assert.equal(completed.id, running.id); assert.equal(completed.seq, 2); assert.equal(completed.turn, 2)
+  assert.equal(completed.tool.state, 'error'); assert.equal(completed.tool.durationMs, 2)
+  assert.equal(completed.tool.input.includes('fixture-private'), false)
+  assert.deepEqual(projectEvent(event('tool/ptc-dispatch', 5, { ...data, rootCallId: 'missing' }), options), [])
+  projectEvent(call(6, { callId: 'hidden', name: 'run_code', turn: 7 }), options)
+  assert.deepEqual(projectEvent(event('tool/ptc-dispatch', 7, { ...data, rootCallId: 'hidden' }), options), [])
+})
+
+test('snapshot PTC calls retain their identity when a live result arrives', () => {
+  const calls = new Map(), options = { sessionId: 's1', calls }
+  const data = { rootCallId: 'root', parentCallId: 'root', subCallId: 'child', name: 'read', arguments: { path: 'README.md' } }
+  const page = projectRecords([call(1, { callId: 'root', name: 'run_code' }), event('tool/ptc-dispatch-start', 2, data)].map(record), options)
+  const next = projectEvent(event('tool/ptc-dispatch', 3, { ...data, content: [{ type: 'text', text: 'Ready' }], isError: false }), options)[0]
+  const merged = mergeMessages(page, [next]); assert.equal(merged.length, 2)
+  assert.equal(merged.find(row => row.tool.callId === 'child').tool.state, 'completed')
+})
+
+test('delivery and change cards select bounded display data without internal paths or snapshots', () => {
+  const options = { sessionId: 's1', hiddenTurns: [7], changesSummary: () => ({ cwd: 'private-host-directory', snapshot: { before: 'private-tree' }, total: 1, files: [{ path: 'result.txt', display: 'result.txt', added: 4, deleted: 2 }] }) }
+  const delivered = projectEvent(event('deliverables/presented', 1, { turn: 2, callId: 'p1', files: [{ path: 'result.txt', description: 'Report' }] }), options)[0]
+  assert.equal(JSON.parse(delivered.tool.output).files[0].path, 'result.txt')
+  const changed = projectEvent(event('workspace/changes', 2, { turn: 2 }), options)[0]
+  assert.deepEqual(JSON.parse(changed.tool.output).files, [{ path: 'result.txt', added: 4, deleted: 2 }])
+  assert.doesNotMatch(JSON.stringify(changed), /private-host-directory|private-tree/)
+  assert.deepEqual(projectEvent(event('deliverables/presented', 3, { turn: 7, files: [{ path: 'hidden.txt' }] }), options), [])
+  assert.deepEqual(projectEvent(event('workspace/changes', 4, { turn: 2 }), { sessionId: 's1' }), [])
+})
+
 test('tool call and result become one stable card at the original call position', () => {
   const calls = new Map()
   const running = projectEvent(call(), { sessionId: 's1', calls })[0]

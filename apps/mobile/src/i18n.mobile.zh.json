@@ -633,5 +633,19 @@
   "Could not stop member work.": "无法停止成员任务。",
   "On your computer, open Settings → Mobile devices, choose a reachable IPv4 or IPv6 address, and enable phone connection. Scan the code, then approve your phone on the computer.": "在电脑上打开「设置 → 手机设备」，选择手机可达的 IPv4 或 IPv6 地址并启用手机连接。手机扫码后，在电脑上批准连接。",
   "Public IPv6 also works across networks when your phone supports IPv6 and both firewalls allow the connection.": "公网 IPv6 也可跨网络直连，手机网络需支持 IPv6，路由器和电脑防火墙需允许连接。",
-  "Could not verify or reach this computer. Check its network address and firewall, then scan a new pairing code if its identity changed.": "无法验证或连接此电脑，请检查网络地址和防火墙；如果电脑身份发生变化，请重新扫码配对。"
+  "Could not verify or reach this computer. Check its network address and firewall, then scan a new pairing code if its identity changed.": "无法验证或连接此电脑，请检查网络地址和防火墙；如果电脑身份发生变化，请重新扫码配对。",
+  "Working folder": "工作目录",
+  "Each Bot's own folder": "各 Bot 自己的目录",
+  "Team workspace": "团队工作区",
+  "Applies to every Bot in this group. Their group conversations move at the next turn.": "应用于群内所有 Bot，群内对话从下一轮起使用新目录。",
+  "Changes continue this Bot's chat in a new part, keeping its history.": "切换后，对话会在新的分段中继续，历史仍然保留。",
+  "Choose a host project or enter a folder path.": "选择电脑上的项目，或输入工作目录路径。",
+  "The folder could not be saved. Check the host settings and try again.": "无法保存工作目录，请检查主机设置后重试。",
+  "Host folder path": "主机目录路径",
+  "Enter the full path on your computer": "输入电脑上的完整目录路径",
+  "Use this folder": "使用此目录",
+  "Browse folders…": "浏览目录…",
+  "Only part of this folder list is shown.": "目录列表过长，仅显示一部分。",
+  "Use a host folder path of at most 4096 characters": "主机目录路径不能超过 4096 个字符",
+  "Delivered files": "交付文件"
 }

@@ -261,4 +261,8 @@ Choose **Export conversation** in chat history to export all available host hist
 
 ## Additional mobile features
 
+New source builds include upstream v0.1.5 working folders. In a Bot or group details page, open **Working folder** to select a known host project, enter an absolute host path, or browse when the host provides a directory browser. Reset to **Team workspace** or **Each Bot's own folder**. These are computer paths, not phone storage. DSH data directories and their ancestors are rejected by the host. Folder changes continue in new parts; a group's members move on their next group turn. Bot-initiated changes outside the team workspace keep upstream approval checks.
+
+Mobile tool cards now include PTC sub-calls, declared file deliveries and file-change summaries while the host retains those summaries. File cards show paths/descriptions and recorded line counts. Host filesystem paths are not phone download URLs; these cards do not open host native dialogs or grant arbitrary filesystem reads. Existing message attachments still use the authenticated preview/download flow above.
+
 The preview now includes scoped Skills, a host-owned skill library, inspected/pinned plugin installation and removal, dedicated tool cards, avatar interaction, opt-in Desktop control and a durable notification inbox. The Android APK includes a runtime background receiver that needs no platform push credentials; iOS runtime reception is limited by its background-task budget. Optional Expo cloud push is unconfigured. Native background delivery, physical devices and Electron remain unverified. See [feature details](mobile-features.zh.md).

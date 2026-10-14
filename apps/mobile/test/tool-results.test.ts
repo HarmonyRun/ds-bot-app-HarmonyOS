@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {toolDisplay,hideQuestionReceipt,toolLabel} from '../src/logic/tool-results.ts';
+test('delivered files and workspace summaries render bounded file cards with recorded line counts',()=>{
+  const delivery=toolDisplay({name:'present',state:'completed',output:JSON.stringify({files:[{path:'report.pdf',description:'Report'}]})});
+  assert.equal(delivery.kind,'file');assert.equal(delivery.rows?.[0].detail,'Report');assert.equal(delivery.body,'');
+  const changes=toolDisplay({name:'workspace_changes',state:'completed',output:JSON.stringify({files:[{path:'main.ts',added:4,deleted:2}]})});
+  assert.equal(changes.kind,'diff');assert.equal(changes.rows?.[0].detail,'+4 · −2');assert.equal(toolLabel({name:'present',state:'completed'}),'Delivered files');
+  assert.equal(toolDisplay({name:'present',state:'error',output:'Could not deliver this file'}).body,'Could not deliver this file');
+});
 test('tool cards retain meaningful terminal and file details with a generic fallback',()=>{
   assert.equal(toolDisplay({name:'terminal_read',state:'completed',output:JSON.stringify({text:'\u001b[31mfailed\u001b[0m',lineBegin:4,lineEnd:8,totalLines:10})}).body,'failed');
   assert.equal(toolDisplay({name:'read_file',state:'completed',input:'{"path":"src/main.ts"}',output:'{"content":"export const x = 1"}'}).title,'src/main.ts');

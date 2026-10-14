@@ -96,25 +96,15 @@ function ModelRows({ roster, current, onPick }) {
     h('span', { className: 'bt-model-tick', 'aria-hidden': true }, model.ref === current ? h(CheckIcon) : null)))))
 }
 
-// The trigger shows the model name over its provider; the menu opens under it, or
-// above when the window has no room below. A Thinking section lists the levels of
-// the shown model when it has them.
-// `onPick`/`onPickEffort` replace saving to the Bot, for a Bot that does not exist yet.
-export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onPickEffort }) {
+export const Caret = () => h('svg', { className: 'bt-model-caret', width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: 'M5.5 8l4.5 4.5L14.5 8' }))
+
+// A menu that opens under its trigger, or above when the window has no room below. A
+// click outside, Escape, or a scroll outside it closes it.
+export function useAnchoredMenu() {
   const [place, setPlace] = useState(null)
   const [shownPlace, leaving] = useLinger(place, MENU_EXIT_MS)
   const button = useRef(null)
   const menu = useRef(null)
-  const shown = modelOf(bot, roster)
-  const current = bot.model ?? bot.appliedModel
-  const served = servedOf(roster, current)
-  const reasoning = useEfforts(served, current, actions)
-  // The level the Bot runs on: its pick when the model serves it, else the model's own.
-  const picked = reasoning?.efforts?.some(effort => effort.id === bot.effort) ? bot.effort : undefined
-  const currentEffort = picked ?? reasoning?.defaultEffort
-  const effortLabel = currentEffort === undefined
-    ? (reasoning?.efforts?.length > 0 ? t('Default') : undefined)
-    : reasoning.efforts.find(effort => effort.id === currentEffort)?.name ?? currentEffort
   const close = () => setPlace(null)
   useEffect(() => {
     if (place === null) return undefined
@@ -133,10 +123,7 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onP
       window.removeEventListener('scroll', onScroll, true)
     }
   }, [place])
-  const toggle = () => {
-    if (place !== null) { close(); return }
-    // DSH settings can change the list at any time, so opening asks again.
-    void actions?.refreshModels?.()
+  const open = () => {
     const rect = button.current.getBoundingClientRect()
     const width = Math.max(240, rect.width)
     const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
@@ -144,6 +131,30 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onP
     setPlace(below >= 260 || below >= rect.top
       ? { left, width, top: rect.bottom + 4, maxHeight: below - 16, '--bt-origin': 'top right' }
       : { left, width, bottom: window.innerHeight - rect.top + 4, maxHeight: rect.top - 16, '--bt-origin': 'bottom right' })
+  }
+  return { isOpen: place !== null, shownPlace, leaving, button, menu, open, close }
+}
+
+// The trigger shows the model name over its provider. A Thinking section lists the
+// levels of the shown model when it has them.
+// `onPick`/`onPickEffort` replace saving to the Bot, for a Bot that does not exist yet.
+export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onPickEffort }) {
+  const { isOpen, shownPlace, leaving, button, menu, open, close } = useAnchoredMenu()
+  const shown = modelOf(bot, roster)
+  const current = bot.model ?? bot.appliedModel
+  const served = servedOf(roster, current)
+  const reasoning = useEfforts(served, current, actions)
+  // The level the Bot runs on: its pick when the model serves it, else the model's own.
+  const picked = reasoning?.efforts?.some(effort => effort.id === bot.effort) ? bot.effort : undefined
+  const currentEffort = picked ?? reasoning?.defaultEffort
+  const effortLabel = currentEffort === undefined
+    ? (reasoning?.efforts?.length > 0 ? t('Default') : undefined)
+    : reasoning.efforts.find(effort => effort.id === currentEffort)?.name ?? currentEffort
+  const toggle = () => {
+    if (isOpen) { close(); return }
+    // DSH settings can change the list at any time, so opening asks again.
+    void actions?.refreshModels?.()
+    open()
   }
   const pick = (ref) => {
     close()
@@ -159,7 +170,7 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onP
   return h(Fragment, null,
     h('button', {
       ref: button, type: 'button', className: 'bt-model-trigger', 'data-wide': wide || undefined,
-      'aria-haspopup': 'menu', 'aria-expanded': place !== null, 'aria-label': t('Model: {model}', { model: shown?.name ?? t('none') }),
+      'aria-haspopup': 'menu', 'aria-expanded': isOpen, 'aria-label': t('Model: {model}', { model: shown?.name ?? t('none') }),
       'data-missing': shown !== undefined && !shown.served && models.length > 0 ? '' : undefined, onClick: toggle,
     },
     h('span', { className: 'bt-model-copy' },
@@ -167,7 +178,7 @@ export function ModelMenu({ bot, roster, actions, run, wide = false, onPick, onP
       shown ? h('span', { className: 'bt-model-provider' }, shown.served || models.length === 0
         ? (effortLabel === undefined ? shown.provider : `${shown.provider} · ${effortLabel}`)
         : t('{provider} · not available', { provider: shown.provider })) : null),
-    h('svg', { className: 'bt-model-caret', width: 12, height: 12, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: 'M5.5 8l4.5 4.5L14.5 8' }))),
+    h(Caret)),
     shownPlace ? createPortal(h('div', { ref: menu, className: `bt-menu bt-model-menu${shownPlace.bottom !== undefined ? ' bt-menu-up' : ''}`, role: 'menu', 'aria-label': t('Model for {name}', { name: bot.name }), style: shownPlace, 'data-leaving': leaving || undefined },
       models.length > 0 ? h(ModelRows, { roster, current, onPick: pick })
         : h('div', { className: 'bt-model-none' }, t('No models are set up in DeepSeek Harness yet.')),

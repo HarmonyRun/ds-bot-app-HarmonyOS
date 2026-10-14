@@ -48,3 +48,14 @@ export function isAgentSession(roster, cache, sessionId) {
   if (roster.ready) return roster.agentOf[sessionId] !== undefined
   return cache.has(sessionId)
 }
+
+// Per Session, how many mounted cells draw each card call; a count of 0 drops the call.
+export function countCards(state, sessionId, callIds, delta) {
+  const own = { ...state[sessionId] }
+  for (const callId of callIds) {
+    const count = (own[callId] ?? 0) + delta
+    if (count > 0) own[callId] = count
+    else delete own[callId]
+  }
+  return { ...state, [sessionId]: own }
+}

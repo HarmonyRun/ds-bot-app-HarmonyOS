@@ -90,8 +90,9 @@ export function historyEntry(event, group) {
     const text = textOf(event.data?.message?.content)
     return text === '' ? undefined : { answer: true, text }
   }
-  // Cards only show in an own chat.
-  if (event.type === 'tool/call' && event.data?.name === 'ask_user' && !group) {
+  // Cards only show in an own chat. A PTC program's sub-call asks too.
+  const asks = (event.type === 'tool/call' || event.type === 'tool/ptc-dispatch-start') && event.data?.name === 'ask_user'
+  if (asks && !group) {
     const text = cardText(event.data.arguments)
     return text === '' ? undefined : { answer: true, text }
   }
@@ -143,6 +144,7 @@ export function install(rt) {
   const STEWARD_MAX_TOKENS = 4_096
   const STEWARD_TIMEOUT_MS = 120_000
   const STEWARD_LINES = 40
+  const FOLDER_RETRY_MS = 300_000
 
   // A broken provider adapter must not crash every turn; estimate from the
   // derived messages instead, with one warning.
@@ -312,7 +314,8 @@ export function install(rt) {
       complete = false
       rt.warn('ds-bot: reading %s for its handoff stopped early: %s', sessionId, error)
     }
-    return { recent: recent.reverse(), earlier: earlier.reverse(), unlisted, complete }
+    // `whole`: every message of the part is in `recent`.
+    return { recent: recent.reverse(), earlier: earlier.reverse(), unlisted, complete, whole: complete && !full }
   }
 
   // The note's sections, in order. A note without all of them is not used.
@@ -326,8 +329,8 @@ export function install(rt) {
     ['Next step', 'the single next action, with the words of the request it follows quoted exactly; "(none)" when nothing is pending'],
     ['Where to look', 'details this note leaves out that you may need again, each with a few words copied exactly from the message that holds it, for read_own_chat to search'],
   ]
-  const HANDOFF_PROMPT = [
-    'You are now writing a handoff note to yourself. This request comes from DS Bot, not from the user: do not answer or continue the messages above. Your conversation is long, so it moves on to a fresh conversation now. The fresh one starts with this note and your latest messages word for word; everything else leaves your working context. The full record stays saved, and you can search it later with read_own_chat. Write the note that lets you carry on as the same Bot without losing anything that matters.',
+  const handoffPrompt = why => [
+    `You are now writing a handoff note to yourself. This request comes from DS Bot, not from the user: do not answer or continue the messages above. ${why}, so it moves on to a fresh conversation now. The fresh one starts with this note and your latest messages word for word; everything else leaves your working context. The full record stays saved, and you can search it later with read_own_chat. Write the note that lets you carry on as the same Bot without losing anything that matters.`,
     '',
     'Output EXACTLY the Markdown structure below: every heading as written, in English and in this order. Write the content in the language the user writes in, as terse bullets. Write "(none)" under a heading with nothing to say.',
     '',
@@ -341,6 +344,8 @@ export function install(rt) {
     '- Do NOT mention this request or the move to a fresh conversation.',
     '- Output only the note, in at most about 2,000 words: no preface, and no tool calls.',
   ].join('\n')
+  const HANDOFF_PROMPT = handoffPrompt('Your conversation is long')
+  const FOLDER_PROMPT = handoffPrompt('Your working folder changed')
   const NOTE_RETRY_SHORTER = 'Your last note was cut off at the output limit, so it was not used. Write the whole note again, shorter: at most about 1,000 words. Keep every heading; drop detail before you drop facts.'
   const noteRetryMissing = missing => `Your last note lacked these headings, so it was not used: ${missing.map(name => `"## ${name}"`).join(', ')}. Write the whole note again with every heading exactly as given, in English.`
   const missingSections = note => NOTE_SECTIONS.map(([name]) => name)
@@ -349,16 +354,17 @@ export function install(rt) {
   // The same system prompt, tools, and messages as the conversation's own requests,
   // plus the note prompt; nothing is written into the Session. A cut-off note, or one
   // without every section, is asked for again once; then the note fails.
-  async function writeNote(agent, signal) {
+  async function writeNote(agent, signal, { folder = false } = {}) {
     const session = agent.session
     const header = session.requestHeader()
     const route = header?.config
     if (!route?.provider || !route?.model) throw new Error('the Session has not called a model yet')
     const messages = session.deriveMessages()
+    const base = folder ? FOLDER_PROMPT : HANDOFF_PROMPT
     let retry
     let problem
     for (let attempt = 1; attempt <= NOTE_ATTEMPTS; attempt += 1) {
-      const prompt = retry === undefined ? HANDOFF_PROMPT : `${HANDOFF_PROMPT}\n\n${retry}`
+      const prompt = retry === undefined ? base : `${base}\n\n${retry}`
       const assembler = new BlockAssembler()
       for await (const chunk of ctx.llm.stream({
         provider: route.provider,
@@ -489,6 +495,7 @@ export function install(rt) {
       system: STEWARD_SYSTEM,
       messages: rt.tagUsage([{ role: 'user', content: [{ type: 'text', text: stewardRequest({ lines, midTurn, checkpoints: checkpointCount(session.deriveMessages()), group }) }] }], { sessionId: agent.id, kind: 'compaction' }),
       maxTokens: STEWARD_MAX_TOKENS,
+      sessionId: session.id,
       purpose: 'compaction',
       signal: AbortSignal.timeout(STEWARD_TIMEOUT_MS),
     })) assembler.push(chunk)
@@ -547,6 +554,10 @@ export function install(rt) {
   // together without the model carries the last note the model wrote.
   function noteText(segment) {
     if (segment?.fallback === undefined) return segment?.note
+    if (segment.fallback === 'whole') {
+      const head = '(No new note: every message of the part was carried over word for word.'
+      return segment.note === undefined ? `${head})` : `${head} Below is the note written at the end of part ${segment.noteFrom}, carried over unchanged.)\n\n${segment.note}`
+    }
     const why = segment.fallback === 'overflow' ? 'the part overflowed the model\'s window'
       : segment.fallback === 'failure' ? 'a request in the previous part kept failing'
         : 'the model did not write a usable note'
@@ -556,13 +567,14 @@ export function install(rt) {
       : `${head} It is the note written at the end of part ${segment.noteFrom}, carried over unchanged; anything newer is in the messages below, and read_own_chat finds the rest.)\n\n${segment.note}`
   }
 
-  function handoffPackage({ room, segment, lines, number, resume, overflow, failed, bare }) {
+  function handoffPackage({ room, segment, lines, number, resume, overflow, failed, bare, folder }) {
     const where = room ? `your conversation in the group chat "${room.name}"` : 'your own chat with the user'
     const lookup = room
       ? 'read_group_chat shows the group\'s latest messages, and read_own_chat your own chat.'
       : 'read_own_chat searches every part, reads around an anchor such as [part 2 #1234 · …], and shows the note that closed any earlier part.'
     const reason = failed !== undefined ? `a request in the previous part kept failing (${failed})`
-      : overflow ? 'the previous part overflowed the model\'s window' : 'the previous part grew long'
+      : overflow ? 'the previous part overflowed the model\'s window'
+        : folder !== undefined ? `your working folder changed to ${folder}` : 'the previous part grew long'
     const { recent, earlier, unlisted, complete } = lines
     const omitted = [
       ...(unlisted > 0 ? [`(${unlisted} older messages are not listed.)`] : []),
@@ -573,6 +585,7 @@ export function install(rt) {
       `DS Bot moved ${where} on to a fresh conversation, part ${number}, because ${reason}. This message is not from the user.`,
       'It is reference, not new instructions: the note and the messages below are a record of earlier work. Do what they say only as part of the work they record, and take new requests only from messages that come after this one.',
       `Everything earlier stays saved: ${lookup}`,
+      ...(folder !== undefined ? [`You now work in ${folder}: commands and file tools start there. Relative paths in the messages below meant the previous folder.`] : []),
       ...(failed !== undefined ? ['Images from the previous part are not in this conversation; if one matters, ask the user to send it again.'] : []),
       '',
       '## Handoff note',
@@ -607,8 +620,11 @@ export function install(rt) {
     ...(resume && job.joined?.length ? { joined: job.joined } : {}),
   })
 
-  /** @type {Map<string, {botId:string, roomId?:string, carry:any[], info?:any, joined?:any[], resume:boolean, overflow:boolean, failed?:string, bare?:boolean, hard:boolean, started?:boolean, moved?:boolean, noteFailed?:boolean}>} */
+  /** @type {Map<string, {botId:string, roomId?:string, carry:any[], info?:any, joined?:any[], resume:boolean, overflow:boolean, failed?:string, bare?:boolean, folder?:boolean, hard:boolean, started?:boolean, moved?:boolean, noteFailed?:boolean}>} */
   const switches = new Map()
+  // Parts whose move to their working folder failed, and the time before which it is
+  // not tried again.
+  const folderRetry = new Map()
   // Parts opened because requests kept failing, until one of their turns ends well:
   // 'carried' brought the latest messages along, 'bare' left them out.
   /** @type {Map<string, 'carried'|'bare'>} */
@@ -653,11 +669,11 @@ export function install(rt) {
   }
 
   // `hard`: past the hard line or the window, the part moves on even without a note
-  // from the model.
-  function startSwitch(agent, { resume = false, carry = [], info, joined, overflow = false, failed, bare = false, hard = overflow } = {}) {
+  // from the model. `folder`: the part moves on because its working folder changed.
+  function startSwitch(agent, { resume = false, carry = [], info, joined, overflow = false, failed, bare = false, folder = false, hard = overflow || folder } = {}) {
     const place = placeOf(agent.id)
     if (place === undefined || switches.has(agent.id) || readOnly()) return
-    const job = { ...place, carry: [...carry], info, joined, resume, overflow, failed, bare, hard }
+    const job = { ...place, carry: [...carry], info, joined, resume, overflow, failed, bare, folder, hard }
     switches.set(agent.id, job)
     void runSwitch(agent, job)
       .catch(error => rt.warn('ds-bot: %s did not move on to a fresh part: %s', rt.botOf(job.botId)?.name ?? agent.id, error))
@@ -665,8 +681,12 @@ export function install(rt) {
         switches.delete(agent.id)
         if (job.moved) {
           noteFailures.delete(agent.id)
+          folderRetry.delete(agent.id)
+          // The folder may have changed again while the switch ran.
+          if (job.roomId === undefined) void followFolder(job.botId)
           return
         }
+        if (folder) folderRetry.set(agent.id, Date.now() + FOLDER_RETRY_MS)
         if (!job.noteFailed) partBase.set(agent.id, tokensOf(agent.session) ?? 0)
         // The stopped turn goes on where it was.
         const back = job.carry.splice(0)
@@ -711,11 +731,16 @@ export function install(rt) {
     const lines = await contextLines(session).catch(() => undefined)
     const parts = partsOf(bot.id, room?.id)
     const number = parts.length
+    const budget = Math.min(RECENT_TOKENS, Math.floor((lines?.check ?? 4 * RECENT_TOKENS) / 4))
+    const readLines = () => (job.bare ? { recent: [], earlier: [], unlisted: 0, complete: true } : handoffLines(agent.id, { budget, group: room !== undefined, number }))
+    let carried = job.folder ? await readLines() : undefined
+    // A short part with no tool work goes over word for word, so it needs no note.
+    const whole = carried?.whole === true && !session.deriveMessages().some(message => message.role === 'tool')
     let written
     let failure
-    if (!job.overflow && job.failed === undefined) {
+    if (!job.overflow && job.failed === undefined && !whole) {
       try {
-        written = await writeNote(agent, AbortSignal.any([signal, AbortSignal.timeout(NOTE_TIMEOUT_MS)]))
+        written = await writeNote(agent, AbortSignal.any([signal, AbortSignal.timeout(NOTE_TIMEOUT_MS)]), { folder: job.folder })
       } catch (error) {
         if (signal.aborted) throw error
         failure = error
@@ -734,11 +759,12 @@ export function install(rt) {
     if (failure !== undefined) rt.warn('ds-bot: handoff note for %s failed past the hard line; moving on with the earlier note: %s', bot.name, failure)
     const previous = parts.at(-2)
     const noted = written !== undefined ? { note: written.note }
-      : { fallback: job.failed !== undefined ? 'failure' : job.overflow ? 'overflow' : 'failed', ...(previous?.note ? { note: previous.note, noteFrom: previous.noteFrom ?? previous.number } : {}) }
-    const budget = Math.min(RECENT_TOKENS, Math.floor((lines?.check ?? 4 * RECENT_TOKENS) / 4))
-    const carried = job.bare ? { recent: [], earlier: [], unlisted: 0, complete: true } : await handoffLines(agent.id, { budget, group: room !== undefined, number })
+      : { fallback: whole ? 'whole' : job.failed !== undefined ? 'failure' : job.overflow ? 'overflow' : 'failed', ...(previous?.note ? { note: previous.note, noteFrom: previous.noteFrom ?? previous.number } : {}) }
+    carried ??= await readLines()
     if (signal.aborted) throw signal.reason
-    const freshId = await rt.createSession(room ? `${bot.name} · ${room.name}` : bot.name)
+    const dir = rt.workDirOf(job)
+    const intended = dir !== undefined && await rt.isFolder(dir) ? dir : rt.teamFolder()
+    const freshId = await rt.createSession(room ? `${bot.name} · ${room.name}` : bot.name, { dir })
     const route = session.requestHeader()?.config
     const ref = route?.provider && route?.model ? `${route.provider}/${route.model}` : await rt.desiredModel(bot)
     if (ref !== undefined) {
@@ -769,19 +795,26 @@ export function install(rt) {
     void rt.moveSchedules(agent.id, freshId)
     job.moved = true
     const resume = job.resume || job.overflow
-    const text = handoffPackage({ room, segment, lines: carried, number: number + 1, resume, overflow: job.overflow, failed: job.failed, bare: job.bare })
-    freshParts.set(freshId, estimateTokens(text))
     await rt.ensureCapabilities(freshId)
     const fresh = await rt.resolveAgent(freshId)
+    const cwd = fresh.session.header?.cwd
+    const folder = cwd !== undefined && cwd !== session.header?.cwd ? cwd : undefined
+    // A fresh part that is not where it was made for would move on at every step.
+    if (intended !== undefined && cwd !== undefined && cwd !== intended) {
+      folderRetry.set(freshId, Date.now() + FOLDER_RETRY_MS)
+      rt.warn('ds-bot: the fresh part of %s did not start in %s; it works in %s', bot.name, intended, cwd)
+    }
+    const text = handoffPackage({ room, segment, lines: carried, number: number + 1, resume, overflow: job.overflow, failed: job.failed, bare: job.bare, folder })
+    freshParts.set(freshId, estimateTokens(text))
     fresh.followup(createUserMessage({ content: [{ type: 'text', text }], source: handoffSource(job, resume) }))
     await ctx.sessions.flush(fresh.session)
     // Then what the old part held: the stopped turn's input, then whatever waited.
     const held = [...agent.inbox.nextStep, ...agent.inbox.nextTurn]
     for (const message of held) agent.inbox.remove(message.id)
     await forward(job, [...job.carry.splice(0), ...held])
-    ctx.logger.info('ds-bot: %s%s moved on to part %d at %d tokens (check line %d, hard line %d); %s; %d latest and %d earlier messages carried', bot.name, room ? ` in ${room.name}` : '', number + 1, tokens ?? -1, lines?.check ?? -1, lines?.hard ?? -1,
+    ctx.logger.info('ds-bot: %s%s moved on to part %d at %d tokens (check line %d, hard line %d); %s; %d latest and %d earlier messages carried%s', bot.name, room ? ` in ${room.name}` : '', number + 1, tokens ?? -1, lines?.check ?? -1, lines?.hard ?? -1,
       written !== undefined ? `note written in ${written.attempts} attempt(s)` : `note put together by DS Bot (${noted.fallback}${noted.note ? `, carries part ${noted.noteFrom}'s` : ', nothing to carry'})`,
-      carried.recent.length, carried.earlier.length)
+      carried.recent.length, carried.earlier.length, folder === undefined ? '' : `; now works in ${folder}`)
   }
 
   // Runs first: an earlier part hands its input on, a part past the hard line makes
@@ -807,21 +840,54 @@ export function install(rt) {
       freshParts.delete(agent.id)
       partBase.set(agent.id, (tokensOf(agent.session) ?? 0) + fresh)
     }
+    if (!readOnly() && await folderMove(agent, { midTurn: payload.step > 1 }) !== undefined) return switchBeforeStep(agent, payload, { folder: true })
     const lines = await contextLines(agent.session).catch(() => undefined)
     const tokens = tokensOf(agent.session)
     if (lines === undefined || tokens === undefined || tokens < lines.hard || !grown(agent.id, tokens, lines) || readOnly()) return next()
-    const midTurn = payload.step > 1
-    if (await decide(agent, { midTurn }) === 'compact' && await condense(agent, lines, { inTurn: true, signal: payload.signal })) return next()
-    if (switches.has(agent.id)) {
-      switches.get(agent.id).carry.push(...payload.messages)
+    if (await decide(agent, { midTurn: payload.step > 1 }) === 'compact' && await condense(agent, lines, { inTurn: true, signal: payload.signal })) return next()
+    return switchBeforeStep(agent, payload, { hard: true })
+  }, { prepend: true })
+
+  // `messages` left the inbox for this step, so the switch carries them along.
+  function switchBeforeStep(agent, payload, options) {
+    // A switch may have started while the checks above awaited.
+    const running = switches.get(agent.id)
+    if (running !== undefined) {
+      running.carry.push(...payload.messages)
       return { kind: 'reject' }
     }
-    // `messages` left the inbox for this step, so the switch carries them along.
+    const midTurn = payload.step > 1
     const entry = rt.liveOf(agent.id)
     entry.switched = true
-    startSwitch(agent, { resume: midTurn, carry: payload.messages, info: midTurn ? entry.info : undefined, joined: midTurn ? [...(entry.joined ?? [])] : undefined, hard: true })
+    startSwitch(agent, { resume: midTurn, carry: payload.messages, info: midTurn ? entry.info : undefined, joined: midTurn ? [...(entry.joined ?? [])] : undefined, ...options })
     return { kind: 'reject' }
-  }, { prepend: true })
+  }
+
+  // The folder a part should move to, when it is not the one the part was made in. A
+  // working folder that is gone counts as the team workspace, where a fresh part would
+  // start. A group reply ends where it began; the group conversation moves at its next
+  // turn there.
+  async function folderMove(agent, { midTurn = false } = {}) {
+    const place = placeOf(agent.id)
+    const cwd = agent.session.header?.cwd
+    if (place === undefined || cwd === undefined || (midTurn && place.roomId !== undefined) || Date.now() < (folderRetry.get(agent.id) ?? 0)) return undefined
+    const wanted = rt.workDirOf(place)
+    const target = wanted !== undefined && await rt.isFolder(wanted) ? wanted : rt.teamFolder()
+    return target === undefined || target === cwd ? undefined : target
+  }
+
+  // A Bot's own chat moves to its new folder now when it is idle; a running turn
+  // moves at its next step, and each group conversation at its next turn there.
+  async function followFolder(botId) {
+    const sessionId = rt.chatOf(botId)
+    if (sessionId === undefined || switches.has(sessionId) || readOnly()) return
+    try {
+      const agent = await rt.resolveAgent(sessionId)
+      if (agent.status === 'idle' && await folderMove(agent) !== undefined) startSwitch(agent, { folder: true })
+    } catch (error) {
+      rt.warn('ds-bot: %s did not move to its working folder: %s', rt.botOf(botId)?.name ?? botId, error)
+    }
+  }
 
   ctx.on('agent/request-error', async (payload, next) => {
     const failure = payload.failure
@@ -902,7 +968,7 @@ export function install(rt) {
   // in the part's history. When nothing is left to do, that turn's reply is a fixed
   // line instead of a model call.
   ctx.on('llm/stream', (options, next) => {
-    if (options.sessionId === undefined || options.purpose !== undefined) return next()
+    if (options.sessionId === undefined || options.purpose !== undefined || rt.ownRequest(options)) return next()
     const messages = options.messages ?? []
     const since = messages.findLastIndex(message => message.role === 'assistant' || message.role === 'tool') + 1
     const opened = messages.slice(since).filter(message => message.role === 'user' && (message.source?.kind === 'user' || message.source?.kind === SOURCE_KIND))
@@ -971,5 +1037,5 @@ export function install(rt) {
     }
   }
 
-  Object.assign(rt, { clock, partsOf, historyEntry, partLines, noteText, earlierPage, switchJobs: () => switches.values() })
+  Object.assign(rt, { clock, partsOf, historyEntry, partLines, noteText, earlierPage, followFolder, switchJobs: () => switches.values() })
 }
