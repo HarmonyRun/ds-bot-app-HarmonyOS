@@ -48,6 +48,23 @@ function fixture() {
   return { rt, view, calls, pages, extra, adapter: createAdapter(rt) }
 }
 
+test('conversation activity timestamps come only from the owned public session summary', async () => {
+  const { rt, view, adapter } = fixture()
+  view.agents = [{id:'agent-one',name:'Agent',sessions:['agent-chat']}]
+  rt.ctx.sessionController.list = async () => ({items:[
+    {sessionId:'new',updatedAt:100,running:false},
+    {sessionId:'room',updatedAt:'2026-10-14T08:00:00Z',running:true},
+    {sessionId:'agent-chat',updatedAt:300,running:false},
+    {sessionId:'foreign',updatedAt:900,private:'do-not-expose'},
+  ]})
+  const { conversations } = await adapter.conversations()
+  assert.equal(conversations.find(item=>item.id==='b1').updatedAt,100)
+  assert.equal(conversations.find(item=>item.id==='room').updatedAt,'2026-10-14T08:00:00Z')
+  assert.equal(conversations.find(item=>item.kind==='agent').updatedAt,300)
+  assert.equal(conversations.some(item=>item.sessionId==='foreign'),false)
+  assert.equal(JSON.stringify(conversations).includes('do-not-expose'),false)
+})
+
 test('mobile working folders forward only reviewed fields and validate team ownership', async () => {
   const { adapter, calls } = fixture()
   await adapter.action('update-bot', { id: 'b1', workDir: '/srv/project', ignored: 'private' })

@@ -293,7 +293,10 @@ export function createAdapter(rt) {
         agentId: agent.id, name: summariesById.get(sessionId)?.title || `${agent.name ?? 'DSH Agent'} · ${index + 1}`, role: 'DSH Agent', sessionId, parts: [], model: null,
         pinned: agent.pinned === true, hidden: agent.hidden === true, waiting: false, activity: view.activity?.[sessionId] ?? null }))),
     ]
-    return { conversations: rows.map(item => ({ ...item, ...(summariesById.has(item.sessionId) ? { running: summariesById.get(item.sessionId).running } : {}) })), revision: view.revision }
+    return { conversations: rows.map(item => ({ ...item, ...(summariesById.has(item.sessionId) ? {
+      running: summariesById.get(item.sessionId).running,
+      updatedAt: summariesById.get(item.sessionId).updatedAt,
+    } : {}) })), revision: view.revision }
   }
   async function conversation(id) {
     if (!validId(id)) throw error(400, 'mobile/invalid', 'A conversation ID is required')

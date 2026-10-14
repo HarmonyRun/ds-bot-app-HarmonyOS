@@ -47,7 +47,7 @@ Screenshots use demonstration data. [Capture details](docs/images/mobile/README.
 
 ## Get started
 
-1. Download the plugin `.tgz` and Android ARM64 `.apk` from the same [Release](https://github.com/QingJ01/DS-Bot-App/releases/latest).
+1. Download the plugin `.tgz` and Android ARM64 `.apk` from the same [Release](https://github.com/QingJ01/DS-Bot-App/releases/latest). For `0.1.1`, choose the revised files containing `r2`.
 2. In DSH **Plugins → Add plugin**, enter the plugin package's absolute path, install it, enable it and restart. Configure your model on the computer.
 3. Install the APK on your phone. On the computer, open DS Bot **Settings → Mobile devices → Enable phone connection**, scan the QR with the App and approve the device on the computer.
 

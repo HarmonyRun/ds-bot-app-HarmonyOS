@@ -33,6 +33,10 @@ git push origin v0.1.1
 
 The tag pipeline creates a public stable release with the plugin tarball, signed APKs (for example, `dsbot-android-arm64-v0.1.1.apk`), public certificate and combined checksums. Missing signing credentials fail tag validation; unsigned APKs are not published as installable releases. It uploads no signing password, private backup or DSH data. Artifacts expire according to GitHub retention; Releases are intended for versions kept longer. Release checksums use flat filenames: run `sha256sum -c SHA256SUMS` in the download directory, or `shasum -a 256 -c SHA256SUMS` on macOS.
 
+## Revising a published version
+
+Never replace a published archive or move its source tag: existing pnpm lockfiles record the original bytes. To revise `0.1.1`, keep package/Expo versions at `0.1.1`, write `docs/releases/v0.1.1-r2.md`, then push a new `v0.1.1-r2` tag. Actions adds revision-named plugin/APKs and `SHA256SUMS-r2` to the existing `v0.1.1` Release and updates its notes. It preserves all original assets and the signing certificate; Android versionCode increases. A completed revision cannot be overwritten; use the next revision number for another fix.
+
 ## Local builds
 
 Install Node 24, Java 17, Android SDK/Build Tools 36, NDK `27.1.12297006` and CMake. Expo/Gradle download pinned components. From `apps/mobile`:

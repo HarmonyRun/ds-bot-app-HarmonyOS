@@ -6,7 +6,7 @@
 
 ## 下载与准备
 
-从 [v0.1.1 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.1) 下载 `dsbot-android-arm64-v0.1.1.apk`、`SHA256SUMS` 和主机插件 `ds-bot-0.1.1.tgz`。另从仓库下载 [`android-device.py`](../apps/mobile/scripts/android-device.py)，与 APK 放在同一目录。
+从 [v0.1.1 Release](https://github.com/QingJ01/DS-Bot-App/releases/tag/v0.1.1) 下载 `dsbot-android-arm64-v0.1.1-r2.apk`、`SHA256SUMS-r2` 和主机插件 `ds-bot-0.1.1-r2.tgz`。另从仓库下载 [`android-device.py`](../apps/mobile/scripts/android-device.py)，与 APK 放在同一目录。
 
 本地只需：
 
@@ -39,10 +39,10 @@
 3. 使用同一个连接地址指定目标设备，安装并打开 App：
 
    ```sh
-   python android-device.py install --serial 192.168.1.20:37002 --apk dsbot-android-arm64-v0.1.1.apk --launch
+   python android-device.py install --serial 192.168.1.20:37002 --apk dsbot-android-arm64-v0.1.1-r2.apk --launch
    ```
 
-   脚本安装前按同目录 `SHA256SUMS` 核验 APK，使用 `adb install -r` 保留数据；不会清空缓存、卸载应用或选择列表中的第一台设备。校验文件与 APK 必须来自同一次可信交付。自己构建的新包可使用 `--sha256` 显式提供该包的哈希。
+   脚本安装前按同目录 `SHA256SUMS-r2` 核验 APK，使用 `adb install -r` 保留数据；不会清空缓存、卸载应用或选择列表中的第一台设备。校验文件与 APK 必须来自同一次可信交付。自己构建的新包可使用 `--sha256` 显式提供该包的哈希。
 
 如果 ADB 不在 PATH，例如 Windows：
 
@@ -56,7 +56,7 @@ USB 调试时先在手机确认电脑授权，运行 `adb devices -l`，把设�
 
 **ADB 配对只让电脑安装/诊断手机 App，不会让 App 登录 DSH。**
 
-1. 在自己的 DSH 主机手动安装当前 `ds-bot-0.1.1.tgz`；Desktop 使用 **Plugins → Add plugin**，选择本地包路径，安装后重启。不要运行测试 bench 来操作自己的 DSH 数据，也不要启动两个进程读写同一 DSH home。
+1. 在自己的 DSH 主机手动安装当前 `ds-bot-0.1.1-r2.tgz`；Desktop 使用 **Plugins → Add plugin**，选择本地包路径，安装后重启。不要运行测试 bench 来操作自己的 DSH 数据，也不要启动两个进程读写同一 DSH home。
 2. 在现有配置中启用 Mobile Bridge，并准备手机可达、证书受信任的 HTTPS 地址。按[部署指南](mobile.zh.md#配置-https)配置；保留原来的完整 `bot.config`。本地 Wi-Fi 或私有 VPN 连接不等于 HTTPS 已配置。此 APK 不接受普通局域网 HTTP，也不跳过证书校验。
 3. 在 DSH **Settings → Mobile devices** 生成 App 配对二维码或 JSON，手机扫描/粘贴，再回电脑确认设备。
 4. 在 App 中打开现有 Bot/群聊。模型请求和工具仍在 DSH 主机执行；主机须保持开机、在线。

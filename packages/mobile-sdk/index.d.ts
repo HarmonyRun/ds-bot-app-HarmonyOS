@@ -71,6 +71,8 @@ export interface Conversation {
   admin?: string | null;
   mode?: 'everyone' | 'admin';
   notice?: string;
+  createdAt?: number | string;
+  updatedAt?: number | string;
   [key: string]: unknown;
 }
 export interface HistoryPage { messages: Message[]; cursor: string | null; sessionId: string }

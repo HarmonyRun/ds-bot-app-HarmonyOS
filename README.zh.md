@@ -47,7 +47,7 @@ DS Bot App 连接自己电脑或服务器上的 [DeepSeek Harness](https://githu
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/QingJ01/DS-Bot-App/releases/latest) 下载同一版本的插件 `.tgz` 和 Android ARM64 `.apk`。
+1. 在 [Releases](https://github.com/QingJ01/DS-Bot-App/releases/latest) 下载同一版本的插件 `.tgz` 和 Android ARM64 `.apk`。当前 `0.1.1` 请选带 `r2` 的修正版文件。
 2. 在 DSH **插件 → 添加插件** 中填写插件包的完整路径，安装、启用并重启；在电脑上配置模型。
 3. 手机安装 APK。电脑打开 DS Bot **设置 → 移动设备 → 启用手机连接**，手机扫码，电脑批准设备。
 

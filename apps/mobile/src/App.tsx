@@ -53,6 +53,7 @@ import {
   setLocalePreference,
   useI18n,
 } from "./i18n";
+import { conversationTime, orderConversations } from "./logic/conversation-order";
 type Route =
   | {
       page: "home";
@@ -269,13 +270,13 @@ function Shell() {
       setCreating(false);
     }
   }
-  const showNavigation = () => navigate({ page: "home" });
+  const showNavigation = () => { navigate({ page: "home" }); void workspace.refresh(); };
   useEffect(() => {
     if (route.page !== "chat") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {showNavigation();return true;});
     return () => sub.remove();
   }, [route.page]);
-  const sorted = workspace.conversations
+  const sorted = orderConversations(workspace.conversations
     .filter((c) => {
       if (classic && c.kind !== "agent") return false;
       const bot = workspace.team.bots.find(
@@ -292,38 +293,38 @@ function Shell() {
             .toLowerCase()
             .includes(query.toLowerCase()))
       );
-    })
-    .sort((a, b) => {
-      const rank = (c: Conversation) => {
-        const bot = workspace.team.bots.find(
-          (x) => x.id === c.id || x.sessionId === c.sessionId,
-        );
-        if (bot && mainIds.includes(bot.id))
-          return -100 + mainIds.indexOf(bot.id);
-        const item =
-          bot ||
-          workspace.team.rooms.find((x) => x.id === c.id) ||
-          workspace.team.agents?.find((x) => x.id === c.agentId);
-        return c.pinned || item?.pinned ? -1 : 0;
-      };
-      return rank(a) - rank(b);
+    }), previews, (c) => {
+      const item = workspace.team.bots.find(x => x.id === c.id || x.sessionId === c.sessionId)
+        || workspace.team.rooms.find(x => x.id === c.id)
+        || workspace.team.agents?.find(x => x.id === c.agentId);
+      return !!(c.pinned || item?.pinned);
     });
-  const conversationIds = workspace.conversations.map(item => item.id).join("\n");
+  const conversationActivity = JSON.stringify(workspace.conversations.map(item => [item.id, item.sessionId, item.updatedAt]));
   useEffect(() => {
     if (route.page !== "home" || !host) return;
     let alive = true;
     const controller = new AbortController();
-    void Promise.all(workspace.conversations.slice(0,20).map(async item => {
+    void Promise.all(orderConversations(workspace.conversations, previews, () => false).slice(0,20).map(async item => {
       let messages = await cache.getMessages(host.serverId, item.id);
       if (workspace.online && client) {
         try { messages = (await client.messages(item.id,{limit:6,signal:controller.signal})).messages; }
         catch { /* Keep this host's cached preview when a read fails. */ }
       }
-      const latest = [...messages].reverse().find(message => !message.pending && ['assistant','user'].includes(message.role) && !!message.text);
+      const latest = [...messages].reverse().find(message => !message.pending && ['assistant','user'].includes(message.role) && (!!message.text || !!message.attachments?.length));
       return latest ? [item.id, latest] as const : null;
-    })).then(rows => { if (alive) setPreviewState({serverId:host.serverId,items:Object.fromEntries(rows.filter(row => row !== null))}); }).catch(() => {});
+    })).then(rows => {
+      if (!alive) return;
+      const liveIds = new Set(workspace.conversations.map(item => item.id));
+      setPreviewState(previous => {
+        const retained = previous?.serverId === host.serverId ? previous.items : {};
+        return { serverId: host.serverId, items: {
+          ...Object.fromEntries(Object.entries(retained).filter(([id]) => liveIds.has(id))),
+          ...Object.fromEntries(rows.filter(row => row !== null)),
+        } };
+      });
+    }).catch(() => {});
     return () => { alive = false; controller.abort(); };
-  }, [route.page, host, client, workspace.online, conversationIds, notificationInbox?.cursor]);
+  }, [route.page, host, client, workspace.online, conversationActivity, notificationInbox?.cursor]);
   function unread(item:Conversation) {
     return !!notificationInbox?.items.some(event => !event.read && (event.conversationId === item.id || item.id === `bot:${event.conversationId}` || item.id === `room:${event.conversationId}`));
   }
@@ -336,6 +337,7 @@ function Shell() {
     const room = workspace.team.rooms.find((r) => r.id === item.id);
     const main = !!bot && mainIds.includes(bot.id);
     const active = item.id === conversation?.id;
+    const lastActivity = conversationTime(item, previews[item.id]);
     const needsApproval = workspace.team.work?.approvals.some(entry => bot ? entry.botId === bot.id && !entry.roomId : room ? entry.roomId === room.id : false);
       return (
       <Pressable
@@ -382,14 +384,14 @@ function Shell() {
             {needsApproval ? " · " + tr("Waiting for approval") : ""}
           </Text>
           <Text numberOfLines={1} style={{fontSize:17,lineHeight:24,color:t.muted}}>
-            {previews[item.id]?.text.replace(/\s+/g," ").trim() || (typeof item.preview === "string" && item.preview) ||
+            {previews[item.id]?.text.replace(/\s+/g," ").trim() || (previews[item.id]?.attachments?.length ? tr("Attachment message") : "") || (typeof item.preview === "string" && item.preview) ||
               (item.waiting ? tr("Waiting for your answer") : bot?.role || (room ? room.members.map(id => workspace.team.bots.find(b => b.id === id)?.name || id).join(" · ") : tr("DSH Agent")))}
           </Text>
         </View>
         <View style={{alignItems:"flex-end",alignSelf:"stretch",justifyContent:"space-between",paddingVertical:4,gap:10}}>
-          {previews[item.id]?.createdAt && <Text style={{fontSize:14,color:t.muted}}>{new Date(previews[item.id].createdAt).toLocaleDateString() === new Date().toLocaleDateString()
-            ? new Date(previews[item.id].createdAt).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US",{hour:"2-digit",minute:"2-digit"})
-            : new Date(previews[item.id].createdAt).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US",{month:"short",day:"numeric"})}</Text>}
+          {!!lastActivity && <Text style={{fontSize:14,color:t.muted}}>{new Date(lastActivity).toLocaleDateString() === new Date().toLocaleDateString()
+            ? new Date(lastActivity).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en-US",{hour:"2-digit",minute:"2-digit"})
+            : new Date(lastActivity).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US",{month:"short",day:"numeric"})}</Text>}
           {notificationInbox?.items.some(event => !event.read && (event.conversationId === item.id || item.id === `bot:${event.conversationId}` || item.id === `room:${event.conversationId}`))
             ? <View accessibilityLabel={tr("Unread")} style={{width:11,height:11,borderRadius:6,backgroundColor:t.accent}}/>
             : (item.pinned || bot?.pinned || room?.pinned) ? <Icon name="pin" size={14} color={t.muted}/> : null}

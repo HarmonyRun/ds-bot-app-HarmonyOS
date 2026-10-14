@@ -43,9 +43,10 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
+          import { createRequire } from 'node:module';
+          const { releaseTarget } = createRequire(import.meta.url)('./scripts/release-target.cjs');
           const tag = process.env.RELEASE_TAG;
-          if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Use a stable vMAJOR.MINOR.PATCH release tag');
-          const version = tag.slice(1);
+          const { version, notesFile } = releaseTarget(tag);
           for (const directory of ['ds-bot', 'apps/mobile']) {
             const pkg = JSON.parse(fs.readFileSync(`${directory}/package.json`, 'utf8'));
             const lock = JSON.parse(fs.readFileSync(`${directory}/package-lock.json`, 'utf8'));
@@ -55,7 +56,7 @@ jobs:
           }
           const app = JSON.parse(fs.readFileSync('apps/mobile/app.json', 'utf8'));
           if (app.expo.version !== version) throw new Error('Expo version must match the release tag');
-          if (!fs.existsSync(`docs/releases/${tag}.md`)) throw new Error('Write bilingual release notes before tagging');
+          if (!fs.existsSync(notesFile)) throw new Error('Write bilingual release notes before tagging');
           console.log(`Plugin and App versions match ${tag}`);
           NODE
       - run: npm ci --no-fund --no-audit
@@ -170,12 +171,50 @@ jobs:
             echo 'A release requires ANDROID_KEYSTORE_PASSWORD and signed APKs.' >&2
             exit 1
           fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { releaseTarget } = require('./scripts/release-target.cjs');
+          const target = releaseTarget(process.env.RELEASE_TAG);
+          fs.writeFileSync('release-target.json', JSON.stringify(target));
+          NODE
+          version=$(node -p "require('./release-target.json').version")
+          revision=$(node -p "require('./release-target.json').revision")
+          publish_tag=$(node -p "require('./release-target.json').releaseTag")
+          plugin_file=$(node -p "require('./release-target.json').pluginFile")
+          notes_file=$(node -p "require('./release-target.json').notesFile")
+          sums_file=$(node -p "require('./release-target.json').checksumsFile")
           mkdir release
-          cp out/dsbot-plugin/*.tgz out/dsbot-android-arm64/DeepSeekBot.cer release/
+          if [[ -n "$revision" ]]; then
+            mkdir legacy
+            gh release download "$publish_tag" --repo "$REPOSITORY" --dir legacy \
+              --pattern "ds-bot-$version.tgz" --pattern SHA256SUMS --pattern DeepSeekBot.cer
+            node <<'NODE'
+          const fs = require('node:fs'), crypto = require('node:crypto');
+          const name = 'ds-bot-' + require('./release-target.json').version + '.tgz';
+          const lines = fs.readFileSync('legacy/SHA256SUMS', 'utf8').trim().split('\n');
+          const expected = lines.map(line => line.trim().split(/\s+/)).find(row => row[1] === name)?.[0];
+          const actual = crypto.createHash('sha256').update(fs.readFileSync('legacy/' + name)).digest('hex');
+          if (!expected || expected !== actual) throw new Error('Original plugin checksum does not match');
+          if (!fs.readFileSync('legacy/DeepSeekBot.cer').equals(fs.readFileSync('out/dsbot-android-arm64/DeepSeekBot.cer'))) throw new Error('Revision signing identity differs from the original release');
+          NODE
+          fi
+          cp "out/dsbot-plugin/ds-bot-$version.tgz" "release/$plugin_file"
+          cp out/dsbot-android-arm64/DeepSeekBot.cer release/
           cp out/dsbot-android-arm64/dsbot-android-arm64.apk "release/dsbot-android-arm64-$RELEASE_TAG.apk"
           cp out/dsbot-android-x86_64/dsbot-android-x86_64.apk "release/dsbot-android-x86_64-$RELEASE_TAG.apk"
-          notes="$GITHUB_WORKSPACE/docs/releases/$RELEASE_TAG.md"
+          notes="$GITHUB_WORKSPACE/$notes_file"
           cd release
-          sha256sum *.tgz *.apk *.cer > SHA256SUMS
-          gh release create "$RELEASE_TAG" ./*.tgz ./*.apk SHA256SUMS DeepSeekBot.cer \
-            --repo "$REPOSITORY" --title "DS Bot $RELEASE_TAG" --notes-file "$notes" --verify-tag
+          sha256sum *.tgz *.apk *.cer > "$sums_file"
+          if [[ -n "$revision" ]]; then
+            if gh release view "$publish_tag" --repo "$REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$sums_file"; then
+              echo 'This revision is already published; use a new revision tag.' >&2
+              exit 1
+            fi
+            gh release upload "$publish_tag" "$plugin_file" ./*.apk "$sums_file" \
+              --repo "$REPOSITORY" --clobber
+            gh release edit "$publish_tag" --repo "$REPOSITORY" --title "DS Bot $publish_tag" \
+              --notes-file "$notes" --latest
+          else
+            gh release create "$publish_tag" "$plugin_file" ./*.apk SHA256SUMS DeepSeekBot.cer \
+              --repo "$REPOSITORY" --title "DS Bot $publish_tag" --notes-file "$notes" --verify-tag
+          fi

@@ -6,6 +6,12 @@ All notable changes to DS Bot are listed here. The format follows [Keep a Change
 
 ## DS Bot App [v0.1.1] - 2026-10-14
 
+### Revision 2
+
+- Sort mobile conversations by recent activity with explicit pins first; keep Chief in the list without a permanent first-row rank.
+- Refresh previews when activity changes and on returning home, prioritize recent conversations and retain older cached previews. Include attachment-only messages.
+- Publish immutable revision assets under `v0.1.1-r2` while preserving the original v0.1.1 download bytes and source tag to protect existing lockfiles.
+
 ### Added
 
 - Sync upstream [v0.1.5](https://github.com/Fei2411/DeepSeek-Bot/releases/tag/v0.1.5), source `20ebc9213cbbde7249d71786765f86be00dc6663`, while retaining this fork's mobile bridge and IPv6 access.

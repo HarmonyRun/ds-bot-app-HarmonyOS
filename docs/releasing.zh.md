@@ -48,6 +48,10 @@ git push origin v0.1.1
 
 Artifacts 有 GitHub 保留期限，需要长期保存的版本使用 Releases。Release 的校验和按下载后的平铺文件名记录；Linux 在下载目录执行 `sha256sum -c SHA256SUMS`，macOS 用 `shasum -a 256 -c SHA256SUMS`，Windows 用 PowerShell `Get-FileHash 文件名 -Algorithm SHA256` 核对。
 
+## 修订已发布版本
+
+不要覆盖已发布的归档或移动源码标签：已有 pnpm 锁文件记录了原文件的校验值。修订 `0.1.1` 时，package/Expo 版本仍为 `0.1.1`，编写 `docs/releases/v0.1.1-r2.md`，再推送新标签 `v0.1.1-r2`。Actions 向已有 `v0.1.1` Release 添加带修订号的插件、APK 和 `SHA256SUMS-r2`，并更新说明。原下载文件和签名证书保持不变，Android versionCode 递增。已完成的修订不允许覆盖；再次修复请使用下一个修订号。
+
 ## 本地构建与签名
 
 需要 Node 24、Java 17、Android SDK 36 / Build Tools 36、NDK `27.1.12297006` 和 CMake。Expo/Gradle 按锁定版本下载组件。
