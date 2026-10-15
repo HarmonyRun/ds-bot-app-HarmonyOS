@@ -893,14 +893,16 @@ struct Index {
       }.width('100%').height('100%');
     } else {
       Column() {
-        if (this.section === 'chat') {
-          if (this.selectedId.length === 0) this.conversationList();
-          else this.chatPanel();
-        } else if (this.section === 'team') {
-          this.teamPage();
-        } else {
-          this.settingsPage();
-        }
+        Column() {
+          if (this.section === 'chat') {
+            if (this.selectedId.length === 0) this.conversationList();
+            else this.chatPanel();
+          } else if (this.section === 'team') {
+            this.teamPage();
+          } else {
+            this.settingsPage();
+          }
+        }.width('100%').layoutWeight(1);
         this.bottomBar();
       }.width('100%').height('100%');
     }
