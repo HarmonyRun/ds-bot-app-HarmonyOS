@@ -11,6 +11,7 @@ import {
   PairCompletePayload,
   PairPayload,
   PairingStart,
+  ReadMarkerPayload,
   RefreshPayload,
   ServerInfo,
   Session,
@@ -230,5 +231,14 @@ export class MobileApi {
 
   devices(): Promise<DeviceList> {
     return this.request<DeviceList>('/devices');
+  }
+
+  revokeDevice(deviceId: string): Promise<object> {
+    return this.request<object>(`/devices/${encodeURIComponent(deviceId)}`, http.RequestMethod.DELETE);
+  }
+
+  markRead(conversationId: string, seq: number): Promise<object> {
+    const payload: ReadMarkerPayload = { conversationId: conversationId, seq: seq };
+    return this.request<object>('/read-markers', http.RequestMethod.POST, payload);
   }
 }

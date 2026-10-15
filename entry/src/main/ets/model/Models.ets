@@ -185,6 +185,12 @@ export interface DeviceListItem {
 
 export interface DeviceList {
   devices: DeviceListItem[];
+  currentDeviceId?: string;
+}
+
+export interface ReadMarkerPayload {
+  conversationId: string;
+  seq: number;
 }
 
 export interface Approval {

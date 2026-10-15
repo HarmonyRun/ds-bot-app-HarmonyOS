@@ -35,6 +35,12 @@ interface CreateRoomPayload {
   greet: boolean;
 }
 
+interface ConversationFlagPayload {
+  id: string;
+  pinned?: boolean;
+  hidden?: boolean;
+}
+
 const EMPTY_TEAM: TeamState = { bots: [], rooms: [], models: [] };
 
 @Entry
@@ -63,6 +69,8 @@ struct Index {
   @State approvals: Approval[] = [];
   @State devices: DeviceListItem[] = [];
   @State dark: boolean = false;
+  @State showHidden: boolean = false;
+  @State pendingRevokeId: string = '';
   private apiClient?: MobileApi;
   private profile?: ClientProfile;
   private messageScroller: Scroller = new Scroller();
@@ -168,7 +176,7 @@ struct Index {
       const state = await api.state();
       const result = await api.conversations();
       this.team = state;
-      this.conversations = result.conversations.filter((item: Conversation) => !item.hidden);
+      this.conversations = result.conversations;
       this.online = true;
       if (this.selectedId.length === 0 && this.conversations.length > 0 && this.windowWidth >= 600) {
         await this.selectConversation(this.conversations[0]);
@@ -201,6 +209,14 @@ struct Index {
       const page = await this.apiClient.messages(this.selectedId, 100);
       this.messages = page.messages;
       this.online = true;
+      if (page.messages.length > 0) {
+        const latest = page.messages[page.messages.length - 1];
+        if (Number.isSafeInteger(latest.seq) && latest.seq >= 0) {
+          try {
+            await this.apiClient.markRead(this.selectedId, latest.seq);
+          } catch (_error) {}
+        }
+      }
       setTimeout((): void => this.messageScroller.scrollEdge(Edge.Bottom), 40);
     } catch (error) {
       this.online = false;
@@ -342,6 +358,47 @@ struct Index {
     }
   }
 
+  private async setConversationFlag(item: Conversation, pinned?: boolean, hidden?: boolean): Promise<void> {
+    if (this.apiClient === undefined || this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      const payload: ConversationFlagPayload = { id: item.id };
+      if (pinned !== undefined) payload.pinned = pinned;
+      if (hidden !== undefined) payload.hidden = hidden;
+      await this.apiClient.action<object>('set-flags', payload);
+      if (hidden === true && !this.showHidden) {
+        this.selectedId = '';
+        this.messages = [];
+      }
+      await this.refreshAll();
+    } catch (error) {
+      this.error = (error as Error).message;
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async revokeDevice(device: DeviceListItem): Promise<void> {
+    if (this.apiClient === undefined || this.busy) return;
+    if (this.pendingRevokeId !== device.id) {
+      this.pendingRevokeId = device.id;
+      this.getUIContext().getPromptAction().showToast({ message: '再次点击“确认移除”以撤销该设备', duration: 2200 });
+      return;
+    }
+    this.busy = true;
+    this.error = '';
+    try {
+      await this.apiClient.revokeDevice(device.id);
+      this.pendingRevokeId = '';
+      await this.loadAdminData();
+    } catch (error) {
+      this.error = (error as Error).message;
+    } finally {
+      this.busy = false;
+    }
+  }
+
   private async logout(): Promise<void> {
     await ProfileStore.clear(this.context());
     this.apiClient = undefined;
@@ -361,8 +418,11 @@ struct Index {
 
   private filteredConversations(): Conversation[] {
     const query = this.searchText.trim().toLowerCase();
-    if (query.length === 0) return this.conversations;
-    return this.conversations.filter((item: Conversation) => `${item.name} ${item.role ?? ''}`.toLowerCase().includes(query));
+    const visible = this.conversations.filter((item: Conversation) => this.showHidden || !item.hidden);
+    const matched = query.length === 0 ? visible : visible.filter((item: Conversation) =>
+      `${item.name} ${item.role ?? ''}`.toLowerCase().includes(query));
+    return matched.sort((left: Conversation, right: Conversation) =>
+      left.pinned === right.pinned ? 0 : left.pinned ? -1 : 1);
   }
 
   @Builder
@@ -477,6 +537,11 @@ struct Index {
         .height(42).margin({ left: 14, right: 14, bottom: 10 }).borderRadius(14)
         .backgroundColor(this.pageBg()).fontColor(this.ink())
         .onChange((value: string) => this.searchText = value);
+      Row() {
+        Text('显示已隐藏会话').fontSize(12).fontColor(this.muted()).layoutWeight(1);
+        Toggle({ type: ToggleType.Switch, isOn: this.showHidden })
+          .onChange((value: boolean) => this.showHidden = value);
+      }.width('100%').padding({ left: 16, right: 14, bottom: 8 });
       List({ space: 4 }) {
         ForEach(this.filteredConversations(), (item: Conversation) => {
           ListItem() {
@@ -489,6 +554,8 @@ struct Index {
               Column({ space: 4 }) {
                 Row() {
                   Text(item.name).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.ink()).maxLines(1).layoutWeight(1);
+                  if (item.pinned) Text('置顶').fontSize(10).fontColor('#665CF6');
+                  if (item.hidden) Text('隐藏').fontSize(10).fontColor(this.muted());
                   if (item.waiting !== undefined) Circle({ width: 8, height: 8 }).fill('#F29D49');
                 }.width('100%');
                 Text(item.role ?? (item.kind === 'room' ? '群聊' : 'Bot'))
@@ -576,6 +643,19 @@ struct Index {
         if (this.busy) {
           Button('停止').height(36).borderRadius(18).backgroundColor('#FDECEC').fontColor('#C93C3C')
             .onClick(() => void this.stop());
+        } else if (this.selectedConversation() !== undefined) {
+          Button(this.selectedConversation()?.pinned ? '取消置顶' : '置顶')
+            .height(34).borderRadius(17).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
+            .onClick(() => {
+              const item = this.selectedConversation();
+              if (item !== undefined) void this.setConversationFlag(item, !item.pinned, undefined);
+            });
+          Button(this.selectedConversation()?.hidden ? '恢复' : '隐藏')
+            .height(34).borderRadius(17).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
+            .onClick(() => {
+              const item = this.selectedConversation();
+              if (item !== undefined) void this.setConversationFlag(item, undefined, !item.hidden);
+            });
         }
       }
       .height(68).width('100%').padding({ left: 16, right: 16 })
@@ -748,9 +828,18 @@ struct Index {
         Column({ space: 10 }) {
           Text('已配对设备').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
           ForEach(this.devices, (device: DeviceListItem) => {
-            Row() {
+            Row({ space: 10 }) {
               Text(device.deviceName ?? device.name ?? device.id).fontSize(14).fontColor(this.ink()).layoutWeight(1);
-              Text(device.id === this.profile?.session.deviceId ? '本机' : '').fontSize(12).fontColor('#665CF6');
+              if (device.id === this.profile?.session.deviceId) {
+                Text('本机').fontSize(12).fontColor('#665CF6');
+              } else {
+                Button(this.pendingRevokeId === device.id ? '确认移除' : '移除')
+                  .height(32).borderRadius(16).fontSize(12)
+                  .backgroundColor(this.pendingRevokeId === device.id ? '#FDECEC' : this.pageBg())
+                  .fontColor(this.pendingRevokeId === device.id ? '#C93C3C' : this.ink())
+                  .enabled(!this.busy)
+                  .onClick(() => void this.revokeDevice(device));
+              }
             }.width('100%').padding({ top: 8, bottom: 8 });
           }, (device: DeviceListItem) => device.id);
         }.width('100%').padding(18).backgroundColor(this.surface()).borderRadius(18);
