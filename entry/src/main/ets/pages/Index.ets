@@ -59,11 +59,16 @@ struct Index {
   @State deviceName: string = 'HarmonyOS 设备';
   @State team: TeamState = EMPTY_TEAM;
   @State conversations: Conversation[] = [];
+  @State conversationPreviews: Record<string, string> = {};
   @State selectedId: string = '';
   @State messages: Message[] = [];
   @State draft: string = '';
   @State searchText: string = '';
+  @State searching: boolean = false;
+  @State mobileOverlay: string = '';
   @State newBotName: string = '';
+  @State newBotShape: string = 'gumdrop';
+  @State newBotColor: string = 'blue';
   @State newGroupName: string = '';
   @State selectedMembers: string[] = [];
   @State approvals: Approval[] = [];
@@ -106,6 +111,20 @@ struct Index {
 
   private line(): string {
     return this.dark ? '#2B2E39' : '#E7E9F1';
+  }
+
+  private botColor(): string {
+    if (this.newBotColor === 'black') return '#000000';
+    if (this.newBotColor === 'brown') return '#A27952';
+    if (this.newBotColor === 'red') return '#F15152';
+    if (this.newBotColor === 'orange') return '#FF781C';
+    if (this.newBotColor === 'yellow') return '#FFAF38';
+    if (this.newBotColor === 'green') return '#00C972';
+    if (this.newBotColor === 'cyan') return '#1CC3B0';
+    if (this.newBotColor === 'violet') return '#A97EFE';
+    if (this.newBotColor === 'magenta') return '#FF5EB1';
+    if (this.newBotColor === 'gray') return '#959595';
+    return '#4D6BFE';
   }
 
   private async restore(): Promise<void> {
@@ -177,6 +196,7 @@ struct Index {
       const result = await api.conversations();
       this.team = state;
       this.conversations = result.conversations;
+      void this.loadConversationPreviews(result.conversations);
       this.online = true;
       if (this.selectedId.length === 0 && this.conversations.length > 0 && this.windowWidth >= 600) {
         await this.selectConversation(this.conversations[0]);
@@ -201,6 +221,27 @@ struct Index {
     this.selectedId = item.id;
     this.messages = [];
     await this.loadMessages();
+  }
+
+  private async loadConversationPreviews(items: Conversation[]): Promise<void> {
+    const api = this.apiClient;
+    if (api === undefined) return;
+    const previews: Record<string, string> = {};
+    const count = Math.min(items.length, 24);
+    for (let index = 0; index < count; index++) {
+      const item = items[index];
+      try {
+        const page = await api.messages(item.id, 8);
+        for (let messageIndex = page.messages.length - 1; messageIndex >= 0; messageIndex--) {
+          const text = page.messages[messageIndex].text.trim().replace(/\s+/gu, ' ');
+          if (text.length > 0) {
+            previews[item.id] = text;
+            break;
+          }
+        }
+      } catch (_error) {}
+    }
+    this.conversationPreviews = previews;
   }
 
   private async loadMessages(): Promise<void> {
@@ -284,12 +325,12 @@ struct Index {
     if (this.apiClient === undefined || name.length === 0 || this.busy) return;
     this.busy = true;
     try {
-      const avatar: Avatar = { shape: 'gumdrop' };
+      const avatar: Avatar = { shape: this.newBotShape };
       const payload: CreateBotPayload = {
         name: name,
         role: '',
         instructions: '',
-        color: 'blue',
+        color: this.newBotColor,
         avatar: avatar
       };
       if (this.team.models.length > 0) payload.model = this.team.models[0].ref;
@@ -298,6 +339,7 @@ struct Index {
       await this.refreshAll();
       const found = this.conversations.find((item: Conversation) => item.id === bot.id || item.id === `bot:${bot.id}`);
       if (found !== undefined) {
+        this.mobileOverlay = '';
         this.section = 'chat';
         await this.selectConversation(found);
       }
@@ -423,6 +465,118 @@ struct Index {
       `${item.name} ${item.role ?? ''}`.toLowerCase().includes(query));
     return matched.sort((left: Conversation, right: Conversation) =>
       left.pinned === right.pinned ? 0 : left.pinned ? -1 : 1);
+  }
+
+  private isMainConversation(item: Conversation): boolean {
+    const ids = this.team.mainBotIds ?? (this.team.mainBotId === undefined ? [] : [this.team.mainBotId]);
+    return ids.includes(item.id) || ids.some((id: string) => item.id === `bot:${id}`);
+  }
+
+  private mainConversation(): Conversation | undefined {
+    return this.conversations.find((item: Conversation) => this.isMainConversation(item));
+  }
+
+  private conversationTime(item: Conversation): string {
+    if (item.updatedAt === undefined) return '';
+    const date = new Date(item.updatedAt);
+    if (!Number.isFinite(date.getTime())) return '';
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  @Builder
+  private conversationAvatar(item: Conversation, size: number = 50) {
+    Stack() {
+      if (item.kind === 'bot' && this.isMainConversation(item)) {
+        Image($r('app.media.ds_whale')).width(size).height(size).objectFit(ImageFit.Contain);
+      } else if (item.kind === 'room') {
+        Circle({ width: size, height: size }).fill('#F0F1F4');
+        Text('群').fontSize(size * 0.34).fontWeight(FontWeight.Medium).fontColor('#4D6BFE');
+      } else {
+        Circle({ width: size, height: size }).fill('#4D6BFE');
+        Text(item.name.length > 0 ? item.name.slice(0, 1) : 'B')
+          .fontSize(size * 0.34).fontWeight(FontWeight.Bold).fontColor('#FFFFFF');
+      }
+    }.width(size).height(size);
+  }
+
+  @Builder
+  private mobileHome() {
+    Column() {
+      Row({ space: 10 }) {
+        Button() {
+          Image($r('app.media.ic_settings')).width(23).height(23);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
+        .border({ width: 1, color: this.line() })
+        .onClick(() => {
+          this.section = 'settings';
+          void this.loadAdminData();
+        });
+        Blank();
+        Button() {
+          Image($r('app.media.ic_search')).width(22).height(22);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
+        .border({ width: 1, color: this.line() })
+        .onClick(() => {
+          this.searching = !this.searching;
+          if (!this.searching) this.searchText = '';
+        });
+        Button() {
+          Image($r('app.media.ic_plus')).width(27).height(27);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
+        .border({ width: 1, color: this.line() })
+        .onClick(() => this.mobileOverlay = 'create-bot');
+      }.width('100%').height(72).padding({ left: 20, right: 20, top: 12, bottom: 12 });
+      if (this.searching) {
+        TextInput({ placeholder: '搜索会话', text: this.searchText })
+          .height(50).margin({ left: 20, right: 20, bottom: 8 }).padding({ left: 18, right: 18 })
+          .fontSize(17).fontColor(this.ink()).backgroundColor(this.dark ? '#202022' : '#F1F1F1')
+          .borderRadius(25).onChange((value: string) => this.searchText = value);
+      }
+      Scroll() {
+        Column() {
+          if (!this.searching && this.mainConversation() !== undefined) {
+            Column({ space: 10 }) {
+              Image($r('app.media.ds_whale')).width(100).height(100).objectFit(ImageFit.Contain);
+              Text(this.mainConversation()?.name ?? 'Chief').fontSize(16).fontColor(this.muted());
+            }
+            .width('100%').padding({ top: 4, bottom: 22 })
+            .onClick(() => {
+              const item = this.mainConversation();
+              if (item !== undefined) void this.selectConversation(item);
+            });
+          }
+          ForEach(this.filteredConversations(), (item: Conversation) => {
+            Row({ space: 18 }) {
+              this.conversationAvatar(item, 50);
+              Column({ space: 5 }) {
+                Text(item.name).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.ink())
+                  .maxLines(1).width('100%');
+                Text(this.conversationPreviews[item.id] ?? item.role ?? (item.kind === 'room' ? '群聊' : 'Bot'))
+                  .fontSize(16).fontColor(this.muted()).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%');
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+              Column() {
+                Text(this.conversationTime(item)).fontSize(13).fontColor(this.muted());
+                Blank();
+                if (item.waiting !== undefined && item.waiting.length > 0) {
+                  Circle({ width: 10, height: 10 }).fill('#4D6BFE');
+                }
+              }.height(52).alignItems(HorizontalAlign.End);
+            }
+            .width('100%').height(92).padding({ left: 8, right: 8 })
+            .onClick(() => void this.selectConversation(item));
+          }, (item: Conversation) => item.id);
+          if (this.filteredConversations().length === 0) {
+            Text('没有找到会话').fontSize(16).fontColor(this.muted())
+              .width('100%').padding(32).textAlign(TextAlign.Center);
+          }
+        }
+        .width('100%').constraintSize({ minHeight: '100%' }).justifyContent(FlexAlign.Start)
+        .padding({ left: 16, right: 16, bottom: 24 });
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
   }
 
   @Builder
@@ -556,7 +710,9 @@ struct Index {
                   Text(item.name).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.ink()).maxLines(1).layoutWeight(1);
                   if (item.pinned) Text('置顶').fontSize(10).fontColor('#665CF6');
                   if (item.hidden) Text('隐藏').fontSize(10).fontColor(this.muted());
-                  if (item.waiting !== undefined) Circle({ width: 8, height: 8 }).fill('#F29D49');
+                  if (item.waiting !== undefined && item.waiting.length > 0) {
+                    Circle({ width: 8, height: 8 }).fill('#F29D49');
+                  }
                 }.width('100%');
                 Text(item.role ?? (item.kind === 'room' ? '群聊' : 'Bot'))
                   .fontSize(12).fontColor(this.muted()).maxLines(1).width('100%');
@@ -581,17 +737,25 @@ struct Index {
     Row() {
       if (message.role === 'user') Blank();
       Column({ space: 6 }) {
-        Text(message.role === 'user' ? '你' : message.role === 'assistant' ? 'Bot' : message.role)
-          .fontSize(11).fontColor(message.role === 'user' ? '#DCD8FF' : this.muted());
+        if (this.windowWidth >= 600) {
+          Text(message.role === 'user' ? '你' : message.role === 'assistant' ? 'Bot' : message.role)
+            .fontSize(11).fontColor(message.role === 'user' ? '#DCD8FF' : this.muted());
+        }
         if (message.reasoning !== undefined && message.reasoning.length > 0) {
-          Text(message.reasoning).fontSize(12).fontColor(this.muted()).maxLines(4)
-            .padding({ left: 10 }).border({ width: { left: 2 }, color: '#9D96FF' });
+          if (this.windowWidth < 600) {
+            Text('⌄ 思考过程').fontSize(12).fontColor(this.muted()).width('100%');
+          }
+          Text(message.reasoning).fontSize(this.windowWidth < 600 ? 16 : 12)
+            .lineHeight(this.windowWidth < 600 ? 23 : 18).fontColor(this.windowWidth < 600 ? this.ink() : this.muted())
+            .maxLines(this.windowWidth < 600 ? 8 : 4)
+            .padding(this.windowWidth < 600 ? 0 : { left: 10 })
+            .border(this.windowWidth < 600 ? { width: 0 } : { width: { left: 2 }, color: '#9D96FF' });
         }
         if (message.tool !== undefined) {
           this.toolCard(message.tool);
         } else {
           Text(message.text).fontSize(15).lineHeight(23)
-            .fontColor(message.role === 'user' ? '#FFFFFF' : this.ink())
+            .fontColor(this.windowWidth < 600 ? this.ink() : message.role === 'user' ? '#FFFFFF' : this.ink())
             .copyOption(CopyOptions.LocalDevice);
         }
         if (message.pending) {
@@ -599,11 +763,14 @@ struct Index {
         }
       }
       .alignItems(HorizontalAlign.Start)
-      .constraintSize({ maxWidth: this.windowWidth >= 840 ? 720 : '88%' })
-      .padding(13).borderRadius(17)
-      .backgroundColor(message.role === 'user' ? '#665CF6' : this.surface());
+      .constraintSize({ maxWidth: this.windowWidth >= 840 ? 720 : '90%' })
+      .padding(this.windowWidth < 600 ? { left: 18, right: 18, top: 13, bottom: 13 } : 13)
+      .borderRadius(this.windowWidth < 600 ? 26 : 17)
+      .backgroundColor(this.windowWidth < 600 ?
+        (this.dark ? '#333333' : message.role === 'user' ? '#EDF3FF' : '#F0F0F0') :
+        message.role === 'user' ? '#665CF6' : this.surface());
       if (message.role !== 'user') Blank();
-    }.width('100%').padding({ left: 16, right: 16, top: 6, bottom: 6 });
+    }.width('100%').padding({ left: 16, right: 16, top: this.windowWidth < 600 ? 8 : 6, bottom: this.windowWidth < 600 ? 8 : 6 });
   }
 
   @Builder
@@ -702,12 +869,88 @@ struct Index {
   }
 
   @Builder
+  private mobileChatPanel() {
+    Column() {
+      Row({ space: 10 }) {
+        Button() {
+          Image(this.dark ? $r('app.media.ic_back_light') : $r('app.media.ic_back')).width(22).height(22);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
+        .border({ width: 1, color: this.line() }).onClick(() => this.selectedId = '');
+        Row({ space: 8 }) {
+          if (this.selectedConversation() !== undefined) {
+            this.conversationAvatar(this.selectedConversation()!, 30);
+          }
+          Text(this.selectedConversation()?.name ?? 'DS Bot')
+            .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()).maxLines(1);
+        }
+        .height(48).padding({ left: 12, right: 16 }).borderRadius(24)
+        .backgroundColor(this.dark ? '#242424' : '#FFFFFF').border({ width: 1, color: this.line() })
+        .layoutWeight(1);
+        Button() {
+          Image(this.dark ? $r('app.media.ic_more_light') : $r('app.media.ic_more')).width(22).height(22);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
+        .border({ width: 1, color: this.line() })
+        .onClick(() => this.getUIContext().getPromptAction().showToast({ message: '长按会话可在设置中管理置顶与隐藏', duration: 1800 }));
+      }.width('100%').height(72).padding({ left: 20, right: 20, top: 12, bottom: 12 });
+      Scroll(this.messageScroller) {
+        Column() {
+          if (this.messages.length === 0) {
+            Text('还没有消息，向这个 Bot 打个招呼吧。')
+              .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
+          }
+          ForEach(this.messages, (message: Message) => {
+            this.messageBubble(message);
+          }, (message: Message) => message.id);
+          if (this.busy) {
+            Row({ space: 10 }) {
+              LoadingProgress().width(22).height(22).color('#4D6BFE');
+              Text('Bot 正在主机上工作…').fontSize(13).fontColor(this.muted());
+            }.padding(18).width('100%');
+          }
+        }.width('100%').padding({ top: 8, bottom: 8 });
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+      Row({ space: 10 }) {
+        Button() {
+          Image(this.dark ? $r('app.media.ic_plus_light') : $r('app.media.ic_plus')).width(24).height(24);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
+        .border({ width: 1, color: this.line() })
+        .onClick(() => this.getUIContext().getPromptAction().showToast({ message: '图片与文件附件正在转译中', duration: 1800 }));
+        TextArea({ placeholder: `向 ${this.selectedConversation()?.name ?? 'Bot'} 提问`, text: this.draft })
+          .layoutWeight(1).height(48).maxLength(32000).fontSize(16).fontColor(this.ink())
+          .backgroundColor(this.dark ? '#202022' : '#FFFFFF').borderRadius(24)
+          .border({ width: 1, color: this.line() }).padding({ left: 14, right: 14, top: 10, bottom: 8 })
+          .onChange((value: string) => this.draft = value);
+        Button() {
+          Image($r('app.media.ic_send')).width(22).height(22);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor('#4D6BFE')
+        .opacity(!this.busy && this.draft.trim().length > 0 && this.online ? 1 : 0.38)
+        .enabled(!this.busy && this.draft.trim().length > 0 && this.online)
+        .onClick(() => void this.send());
+      }
+      .width('100%').padding({ left: 20, right: 20, top: 10, bottom: 10 })
+      .backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+  }
+
+  @Builder
   private teamPage() {
     Scroll() {
       Column({ space: 18 }) {
         Row() {
+          if (this.windowWidth < 600) {
+            Button() {
+              Image($r('app.media.ic_close')).width(22).height(22);
+            }
+            .width(48).height(48).margin({ right: 14 }).borderRadius(24).backgroundColor('#FFFFFF')
+            .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.section = 'chat');
+          }
           Column({ space: 3 }) {
-            Text('Bot 团队').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.ink());
+            Text(this.windowWidth < 600 ? 'Bot 与群聊' : 'Bot 团队')
+              .fontSize(this.windowWidth < 600 ? 22 : 28).fontWeight(FontWeight.Bold).fontColor(this.ink());
             Text(`${this.team.bots.length} 个 Bot · ${this.team.rooms.length} 个群聊`)
               .fontSize(13).fontColor(this.muted());
           }.alignItems(HorizontalAlign.Start).layoutWeight(1);
@@ -852,6 +1095,300 @@ struct Index {
   }
 
   @Builder
+  private mobileSettingsPage() {
+    Scroll() {
+      Column({ space: 0 }) {
+        Row() {
+          Button() {
+            Image($r('app.media.ic_close')).width(22).height(22);
+          }
+          .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
+          .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.section = 'chat');
+          Blank();
+        }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
+
+        Column() {
+          Row({ space: 14 }) {
+            Stack() {
+              Circle({ width: 46, height: 46 }).fill('#E0E0E0');
+              Text('DS').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#777777');
+            }.width(46).height(46);
+            Column({ space: 3 }) {
+              Text(this.serverName.length > 0 ? this.serverName : 'DS Bot')
+                .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink());
+              Text(this.profile?.serverUrl ?? '').fontSize(14).fontColor(this.muted()).maxLines(1);
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(76).width('100%').padding({ left: 20, right: 18 });
+          Divider().color(this.line()).margin({ left: 20 });
+          Row() {
+            Text('用量').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(58).padding({ left: 20, right: 18 });
+        }
+        .width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+
+        Column() {
+          Row() {
+            Column({ space: 3 }) {
+              Text('工具与技能').fontSize(18).fontColor(this.ink());
+              Text('DS Bot 的工具、技能与插件').fontSize(13).fontColor(this.muted());
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(78).padding({ left: 20, right: 18 });
+        }
+        .width('100%').margin({ top: 32 }).backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22)
+        .onClick(() => this.mobileOverlay = 'tools');
+
+        Text('Bot').fontSize(14).fontColor(this.muted()).width('100%').margin({ top: 32, bottom: 10, left: 20 });
+        Column() {
+          Row() {
+            Text('Bot 与群聊').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(64).padding({ left: 20, right: 18 }).onClick(() => this.section = 'team');
+          Divider().color(this.line()).margin({ left: 20 });
+          Row() {
+            Text('定时任务').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(64).padding({ left: 20, right: 18 });
+          Divider().color(this.line()).margin({ left: 20 });
+          Row() {
+            Column({ space: 3 }) {
+              Text('经典 Agent 模式').fontSize(18).fontColor(this.ink());
+              Text('在主页显示 DSH Agent 会话。').fontSize(13).fontColor(this.muted());
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+            Toggle({ type: ToggleType.Switch, isOn: false });
+          }.height(80).padding({ left: 20, right: 18 });
+          Divider().color(this.line()).margin({ left: 20 });
+          Row() {
+            Text('Bot 电脑').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(64).padding({ left: 20, right: 18 });
+        }
+        .width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+
+        Text('偏好设置').fontSize(14).fontColor(this.muted()).width('100%').margin({ top: 32, bottom: 10, left: 20 });
+        Column() {
+          Row() {
+            Text('通知中心').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Image($r('app.media.ic_chevron')).width(18).height(18);
+          }.height(64).padding({ left: 20, right: 18 });
+          Divider().color(this.line()).margin({ left: 20 });
+          Row() {
+            Text('夜间模式').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+            Toggle({ type: ToggleType.Switch, isOn: this.dark })
+              .onChange((value: boolean) => this.dark = value);
+          }.height(64).padding({ left: 20, right: 18 });
+        }.width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+
+        if (this.approvals.length > 0) {
+          Text('待批准操作').fontSize(14).fontColor(this.muted()).width('100%').margin({ top: 32, bottom: 10, left: 20 });
+          Column({ space: 10 }) {
+            ForEach(this.approvals, (approval: Approval) => {
+              Column({ space: 8 }) {
+                Text(approval.toolName).fontSize(16).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
+                Text(approval.reason ?? '主机请求批准此工具操作').fontSize(13).fontColor(this.muted()).width('100%');
+                Row({ space: 8 }) {
+                  Button('允许一次').height(36).borderRadius(18).backgroundColor('#4D6BFE')
+                    .onClick(() => void this.resolveApproval(approval.id, 'allowed-once'));
+                  Button('拒绝').height(36).borderRadius(18).backgroundColor('#FDECEC').fontColor('#C93C3C')
+                    .onClick(() => void this.resolveApproval(approval.id, 'rejected'));
+                }
+              }.padding(14).backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(18);
+            }, (approval: Approval) => approval.id);
+          }.width('100%');
+        }
+
+        Button('断开此设备').width('100%').height(50).margin({ top: 32, bottom: 20 }).borderRadius(25)
+          .backgroundColor('#FDECEC').fontColor('#C93C3C').onClick(() => void this.logout());
+      }
+      .width('100%').padding({ left: 18, right: 18, bottom: 24 });
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+  }
+
+  @Builder
+  private botAvatarPreview(size: number) {
+    Stack() {
+      if (this.newBotShape === 'gumdrop' && this.newBotColor === 'blue') {
+        Image($r('app.media.avatar_gumdrop_large')).width(size).height(size * 1.36).objectFit(ImageFit.Contain);
+      } else if (this.newBotShape === 'circle') {
+        Circle({ width: size, height: size }).fill(this.botColor());
+      } else if (this.newBotShape === 'square') {
+        Rect().width(size).height(size).radius(size * 0.2).fill(this.botColor());
+      } else if (this.newBotShape === 'diamond') {
+        Rect().width(size * 0.72).height(size * 0.72).radius(size * 0.16).fill(this.botColor()).rotate({ angle: 45 });
+      } else {
+        Rect().width(size).height(size * 0.9).radius(size * 0.46).fill(this.botColor());
+      }
+      if (!(this.newBotShape === 'gumdrop' && this.newBotColor === 'blue')) {
+        Row({ space: size * 0.08 }) {
+          Rect().width(size * 0.1).height(size * 0.29).radius(size * 0.05).fill('#FFFFFF');
+          Rect().width(size * 0.1).height(size * 0.29).radius(size * 0.05).fill('#FFFFFF');
+        }
+      }
+    }.width(size).height(size * 1.36);
+  }
+
+  @Builder
+  private mobileCreateBotPage() {
+    Column() {
+      Row() {
+        Button() {
+          Image($r('app.media.ic_close')).width(22).height(22);
+        }
+        .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
+        .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.mobileOverlay = '');
+        Text('创建新 Bot').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()).layoutWeight(1)
+          .textAlign(TextAlign.Center);
+        Blank().width(48);
+      }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
+
+      Scroll() {
+        Column({ space: 28 }) {
+          this.botAvatarPreview(126);
+          TextInput({ placeholder: '为 Bot 取个名字', text: this.newBotName })
+            .width('100%').height(64).fontSize(20).fontWeight(FontWeight.Medium).textAlign(TextAlign.Center)
+            .fontColor(this.ink()).backgroundColor(this.dark ? '#202022' : '#EFEFEF').borderRadius(18)
+            .onChange((value: string) => this.newBotName = value);
+
+          Text('选择形状').fontSize(14).fontColor(this.muted()).width('100%');
+          Column({ space: 4 }) {
+            Row() {
+            Button() { Image($r('app.media.avatar_whale')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'whale' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'whale');
+            Button() { Image($r('app.media.avatar_star')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'star' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'star');
+            Button() { Image($r('app.media.avatar_moon')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'moon' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'moon');
+            Button() { Image($r('app.media.avatar_wave')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'wave' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'wave');
+            Button() { Image($r('app.media.avatar_squircle')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'squircle' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'squircle');
+            }.width('100%');
+            Row() {
+            Button() { Image($r('app.media.avatar_zed')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'zed' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'zed');
+            Button() { Image($r('app.media.avatar_hex')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'hex' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'hex');
+            Button() { Image($r('app.media.avatar_gumdrop')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).onClick(() => this.newBotShape = 'gumdrop');
+            Button() { Image($r('app.media.avatar_peanut')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'peanut' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'peanut');
+            Button() { Image($r('app.media.avatar_saucer')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'saucer' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'saucer');
+            }.width('100%');
+            Row() {
+            Button() { Image($r('app.media.avatar_bunny')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'bunny' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'bunny');
+            Button() { Image($r('app.media.avatar_kitty')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'kitty' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'kitty');
+            Button() { Image($r('app.media.avatar_beacon')).width(42).height(42); }.layoutWeight(1).height(50).borderRadius(25).backgroundColor(Color.Transparent).border({ width: this.newBotShape === 'beacon' ? 2 : 0, color: this.line() }).onClick(() => this.newBotShape = 'beacon');
+            Blank().layoutWeight(2);
+            }.width('100%');
+          }.width('100%');
+
+          Text('选择颜色').fontSize(14).fontColor(this.muted()).width('100%');
+          Column({ space: 2 }) {
+            Row() {
+            Button() { Circle({ width: 32, height: 32 }).fill('#000000'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'black');
+            Button() { Circle({ width: 32, height: 32 }).fill('#A27952'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'brown');
+            Button() { Circle({ width: 32, height: 32 }).fill('#FF3E51'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'red');
+            Button() { Circle({ width: 32, height: 32 }).fill('#FF781C'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'orange');
+            Button() { Circle({ width: 32, height: 32 }).fill('#FFAF38'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'yellow');
+            Button() { Circle({ width: 32, height: 32 }).fill('#00C972'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'green');
+            }.width('100%');
+            Row() {
+            Button() { Circle({ width: 32, height: 32 }).fill('#1CC3B0'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'cyan');
+            Button() { Circle({ width: 32, height: 32 }).fill('#4D6BFE'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).border({ width: this.newBotColor === 'blue' ? 2 : 0, color: this.line() }).borderRadius(23).onClick(() => this.newBotColor = 'blue');
+            Button() { Circle({ width: 32, height: 32 }).fill('#A97EFE'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'violet');
+            Button() { Circle({ width: 32, height: 32 }).fill('#FF5EB1'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'magenta');
+            Button() { Circle({ width: 32, height: 32 }).fill('#959595'); }.layoutWeight(1).height(46).backgroundColor(Color.Transparent).onClick(() => this.newBotColor = 'gray');
+            Blank().layoutWeight(1);
+            }.width('100%');
+          }.width('100%');
+          Button(this.busy ? '正在创建…' : '创建 Bot').width('100%').height(54).borderRadius(27)
+            .margin({ top: 12, bottom: 18 }).backgroundColor('#4D6BFE').fontSize(17)
+            .enabled(!this.busy && this.online && this.newBotName.trim().length > 0)
+            .onClick(() => void this.createBot());
+        }.width('100%').padding({ left: 24, right: 24, top: 32, bottom: 30 });
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FAFAFA');
+  }
+
+  @Builder
+  private mobileToolsPage() {
+    Column() {
+      Row({ space: 10 }) {
+        Button() { Image($r('app.media.ic_close')).width(22).height(22); }
+          .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
+          .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.mobileOverlay = '');
+        Row() {
+          Text('工具与技能').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink());
+        }.height(48).padding({ left: 18, right: 18 }).borderRadius(24).backgroundColor('#FFFFFF')
+          .border({ width: 1, color: '#E5E5E5' });
+      }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
+      Scroll() {
+        Column({ space: 8 }) {
+          Text('工具与技能').fontSize(14).fontColor(this.muted()).width('100%').padding({ left: 20 });
+          Column() {
+            Row() {
+              Text('技能').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+              Image($r('app.media.ic_chevron')).width(18).height(18);
+            }.height(64).padding({ left: 20, right: 18 });
+            Divider().color(this.line()).margin({ left: 20 });
+            Row() {
+              Text('插件').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+              Image($r('app.media.ic_chevron')).width(18).height(18);
+            }.height(64).padding({ left: 20, right: 18 });
+            Divider().color(this.line()).margin({ left: 20 });
+            Row() {
+              Text('连接器').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+              Image($r('app.media.ic_chevron')).width(18).height(18);
+            }.height(64).padding({ left: 20, right: 18 });
+            Divider().color(this.line()).margin({ left: 20 });
+            Row() {
+              Text('能力库').fontSize(18).fontColor(this.ink()).layoutWeight(1);
+              Image($r('app.media.ic_chevron')).width(18).height(18);
+            }.height(64).padding({ left: 20, right: 18 }).onClick(() => this.mobileOverlay = 'capabilities');
+          }.width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+        }
+        .width('100%').constraintSize({ minHeight: '100%' }).justifyContent(FlexAlign.Start)
+        .padding({ left: 18, right: 18, top: 12 });
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+  }
+
+  @Builder
+  private mobileCapabilitiesPage() {
+    Column() {
+      Row({ space: 10 }) {
+        Button() { Image($r('app.media.ic_back')).width(22).height(22); }
+          .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
+          .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.mobileOverlay = 'tools');
+        Row() { Text('能力库').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()); }
+          .height(48).padding({ left: 18, right: 18 }).borderRadius(24).backgroundColor('#FFFFFF')
+          .border({ width: 1, color: '#E5E5E5' });
+      }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
+      Scroll() {
+        Column({ space: 18 }) {
+          Text('为 Bot 添加可复用能力').fontSize(14).fontColor(this.muted()).width('100%');
+          if (this.team.bots.length > 0) {
+            Flex({ wrap: FlexWrap.Wrap }) {
+              ForEach(this.team.bots, (bot: Bot) => {
+                Button(bot.name).height(38).margin({ right: 8, bottom: 8 }).borderRadius(19)
+                  .backgroundColor('#E8EDFF').fontColor('#4D6BFE');
+              }, (bot: Bot) => bot.id);
+            }.width('100%');
+          }
+          Column({ space: 10 }) {
+            Text('网页浏览').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
+            Text('允许 Bot 打开网页、搜索资料并提取内容。').fontSize(14).fontColor(this.muted()).width('100%');
+            Button('＋ 添加能力').height(38).borderRadius(19).backgroundColor('#E8EDFF').fontColor('#4D6BFE').alignSelf(ItemAlign.End);
+          }.padding(20).width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+          Column({ space: 10 }) {
+            Text('文件与工作区').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
+            Text('读取、整理和编辑主机工作目录里的文件。').fontSize(14).fontColor(this.muted()).width('100%');
+            Button('＋ 添加能力').height(38).borderRadius(19).backgroundColor('#E8EDFF').fontColor('#4D6BFE').alignSelf(ItemAlign.End);
+          }.padding(20).width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+          Column({ space: 10 }) {
+            Text('定时执行').fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
+            Text('让 Bot 按计划运行任务并发送结果通知。').fontSize(14).fontColor(this.muted()).width('100%');
+            Button('＋ 添加能力').height(38).borderRadius(19).backgroundColor('#E8EDFF').fontColor('#4D6BFE').alignSelf(ItemAlign.End);
+          }.padding(20).width('100%').backgroundColor(this.dark ? '#202022' : '#F1F1F1').borderRadius(22);
+        }.width('100%').padding({ left: 18, right: 18, top: 12, bottom: 24 });
+      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+  }
+
+  @Builder
   private bottomBar() {
     Row() {
       this.bottomButton('✦', '对话', 'chat');
@@ -892,19 +1429,20 @@ struct Index {
         }
       }.width('100%').height('100%');
     } else {
-      Column() {
-        Column() {
-          if (this.section === 'chat') {
-            if (this.selectedId.length === 0) this.conversationList();
-            else this.chatPanel();
-          } else if (this.section === 'team') {
-            this.teamPage();
-          } else {
-            this.settingsPage();
-          }
-        }.width('100%').layoutWeight(1);
-        this.bottomBar();
-      }.width('100%').height('100%');
+      if (this.mobileOverlay === 'create-bot') {
+        this.mobileCreateBotPage();
+      } else if (this.mobileOverlay === 'tools') {
+        this.mobileToolsPage();
+      } else if (this.mobileOverlay === 'capabilities') {
+        this.mobileCapabilitiesPage();
+      } else if (this.section === 'chat') {
+        if (this.selectedId.length === 0) this.mobileHome();
+        else this.mobileChatPanel();
+      } else if (this.section === 'team') {
+        this.teamPage();
+      } else {
+        this.mobileSettingsPage();
+      }
     }
   }
 
