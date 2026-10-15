@@ -1,19 +1,10 @@
-node_modules/
-*.tgz
-
-# A DeepSeek Harness checkout for the tests and the test bench.
-/deepseek-harness/
-
-# Test bench, local DSH data and the screenshots of dev/check.sh.
-.dsh-test*/
-.dsh-home/
-/shots/
-.playwright-mcp/
-
-# Local signing backups and build output. Only the encrypted release key is versioned.
-.signing-private/
-*.apk
-*.aab
-*.log
-__pycache__/
-*.pyc
+.idea/
+.hvigor/
+build/
+entry/build/
+entry/.preview/
+oh_modules/
+entry/oh_modules/
+local.properties
+*.hap
+*.app

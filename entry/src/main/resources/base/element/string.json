@@ -1,0 +1,7 @@
+{
+  "string": [
+    { "name": "app_name", "value": "DS Bot" },
+    { "name": "module_desc", "value": "DS Bot HarmonyOS 客户端" },
+    { "name": "entry_ability_desc", "value": "连接你的 Bot 团队" }
+  ]
+}

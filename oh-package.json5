@@ -1,0 +1,11 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "ds-bot-harmony",
+  "version": "0.1.0",
+  "description": "Native HarmonyOS client for DS Bot",
+  "main": "",
+  "author": "DS Bot Harmony contributors",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "devDependencies": {}
+}
