@@ -1,4 +1,5 @@
 .idea/
+.DS_Store
 .hvigor/
 build/
 entry/build/

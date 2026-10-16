@@ -29,7 +29,8 @@
 
 - DevEco 仍有 3 条 ArkTSCheck 建议，均是将固定颜色迁移到分层资源，不影响编译和运行。
 - Hvigor 会对 Network Kit 和 Preferences 的可抛异常 API 输出静态提示；调用方已通过 `try/catch/finally` 处理失败与资源释放。
-- 调试 HAP 尚未配置签名，产物为 `entry-default-unsigned.hap`。
+- 调试签名已配置，当前产物为 `entry-default-signed.hap`；若 DevEco Project Structure 覆盖 product 配置，需确认 `signingConfig: "default"` 仍在。
+- 当前全套纯逻辑回归为 **68 passed / 0 failed**；P1-6/P1-7 新界面和历史分页仍待设备重新连接后做真实触发验收。
 
 ## 后续回归建议
 

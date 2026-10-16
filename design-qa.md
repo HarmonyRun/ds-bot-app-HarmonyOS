@@ -60,3 +60,9 @@
 - [x] ArkTS 类型检查、资源编译和 HAP 打包成功。
 
 final result: passed
+
+## 2026-10-15 增量说明
+
+上述 `passed` 结论覆盖当时已有的首页、聊天、设置、创建、工具与能力库。其后新增的 P1-6 提问/审批/队列卡片和 P1-7 群成员进度尚未进入这些截图，不能沿用旧结论。
+
+本轮已完成代码层收口：删除旧手机底栏死代码与重复手写颜色映射，重新通过 DevEco Sync、68 个纯逻辑测试和签名 HAP 构建。当前 `hdc list targets` 为 `[Empty]`，增量界面的 Phone/Foldable/Tablet/2in1 截图与深色模式对照待设备恢复后补充，步骤见 `docs/handoff-p1-8.md`。
