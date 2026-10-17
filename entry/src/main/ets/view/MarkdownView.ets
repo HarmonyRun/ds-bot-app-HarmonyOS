@@ -48,6 +48,14 @@ export struct MarkdownView {
   @Prop ownBubble: boolean = false;
   /** 气泡内可用宽度（vp）。由调用方按窗口宽度算好传入，见 bubbleContentWidth()。 */
   @Prop maxContentWidth: number = 0;
+  /**
+   * `maxContentWidth <= 0`（填满父容器）模式下，「实际可用宽度」的数值。
+   *
+   * 为什么还需要它：块级容器可以用 `width('100%')` 交给父容器，但**行内文字不行**——
+   * 列表每层还要扣掉缩进与项目符号位，没有数值就只能贴到边界
+   * （2026-10-16 实测：列表文字贴到 x=1202、气泡内容边界 1201）。
+   */
+  @Prop measureWidth: number = 0;
   @State blocks: Block[] = [];
   @State copiedCode: number = -1;
 
@@ -76,8 +84,17 @@ export struct MarkdownView {
    * 长代码行会把气泡整个撑开，之后所有内容溢出气泡边界。
    * 2026-10-16 已用构造用例复现（见 P1 报告 §9.6）。
    */
+  /**
+   * 内容宽度：> 0 用调用方给的确定值；否则返回 0，由调用处改用 `width('100%')`
+   * 填满父容器（气泡已有确定宽度时这是更稳的做法，避免两处宽度推导分叉）。
+   */
   private blockWidth(): number {
-    return this.maxContentWidth > 0 ? this.maxContentWidth : 320;
+    return this.maxContentWidth > 0 ? this.maxContentWidth : 0;
+  }
+
+  /** 是否用「填满父容器」模式。 */
+  private fillParent(): boolean {
+    return this.maxContentWidth <= 0;
   }
 
   /**
@@ -89,7 +106,11 @@ export struct MarkdownView {
    * 深层嵌套必然越出气泡背景（2026-10-16 实测：背景右边界 1132px，列表文字到 1141px，
    * 且层级越深超出越多）。
    */
-  private listWidth(depth: number): number {
+  private listWidth(depth: number): Length {
+    // 填满父容器模式：`blockWidth()` 为 0，若仍按 `0 - 缩进` 计算会得到负数并被钳成 60，
+    // 列表会被压塌（2026-10-16 实测：列表行 60~140px、文字溢出 52px）。
+    // 此时返回 `100%` 交给父容器，缩进仍由 Row 的 padding 表达。
+    if (this.fillParent()) return '100%';
     const indent = depth * 12;
     const width = this.blockWidth() - indent;
     return width > 60 ? width : 60;
@@ -97,16 +118,25 @@ export struct MarkdownView {
 
   /** 引用块内文字的可用宽度（引用块自身有左侧竖线与内边距）。 */
   private quoteTextWidth(): number {
-    const width = this.blockWidth() - 40;
+    const frame = this.fillParent() ? this.measureWidth : this.blockWidth();
+    const width = frame - 40;
     return width > 40 ? width : 40;
   }
 
   /** 列表某一层里**文字**的可用宽度：再扣掉项目符号(minWidth 14) 与 Row space(7)。 */
   private listTextWidth(depth: number): number {
-    // 逐层扣减：项目符号(minWidth 14) + Row space(7) + 余量。
-    // 余量取 16vp 是按**紧邻父容器**实测收敛的：只留 4vp 时深层列表仍超出父 Column 约 35px
-    // （约 12vp）——之前只与「气泡」比对了右边界，漏掉了这一层（2026-10-16）。
-    const width = this.listWidth(depth) - 37;
+    // 本层行的**外框**宽度 = 卡片宽 − 本层缩进（每层 12vp）。
+    //
+    // 关键：不能拿「卡片宽 − 绝对缩进」当文字宽度。父层的 Column 已经因为 padding
+    // 收窄了一次，文字若只扣一次缩进就会比父层宽（2026-10-16 折叠屏实测：
+    // 深层列表文字 732px vs 父 Column 710px，超出 22px）。
+    const base = this.fillParent() ? this.measureWidth : this.blockWidth();
+    const frame = base - depth * 12;
+    // 再扣：项目符号(minWidth 14) + Row space(7) + 余量。
+    // 余量取 56：实测表明「按公式推导」不可靠（运算符与 fontScale 都会影响实际排版宽度），
+    // 因此改为**留足余量 + 逐次实测收敛**。列表缩进本身由父层 padding 表达，
+    // 文字略窄不影响观感，但越出父容器是明确的缺陷。
+    const width = frame - 56;
     return width > 40 ? width : 40;
   }
 
@@ -210,7 +240,8 @@ export struct MarkdownView {
     // 必须用**调用方传入的可用宽度**，不能固定用 blockWidth()（气泡全宽）：
     // 列表/引用会通过 padding 把内容推右，若文字仍按全宽排版，起点+宽度就会越出气泡
     // （2026-10-16 铁证：Text x0=323 宽=956 → 右边界 1279，而气泡右边界仅 1075）。
-    .width(availWidth > 40 ? availWidth : 40)
+    // `availWidth <= 0` 表示「填满父容器」（气泡已由调用方定宽时用）。
+    .width(availWidth > 0 ? availWidth : '100%')
   }
 
 
@@ -238,10 +269,10 @@ export struct MarkdownView {
       .scrollable(ScrollDirection.Horizontal)
       // **关键**：横向 Scroll 在「父容器只有 maxWidth」时会按内容宽度测量，把气泡撑开。
       // 在 Scroll 自身加 maxWidth 约束，它才会被压缩并在内部横向滚动。
-      .constraintSize({ maxWidth: this.blockWidth() })
+      .constraintSize({ maxWidth: this.fillParent() ? undefined : this.blockWidth() })
       .width('100%').scrollBar(BarState.Off)
     }
-    .width('100%').constraintSize({ maxWidth: this.blockWidth() })
+    .width('100%').constraintSize({ maxWidth: this.fillParent() ? undefined : this.blockWidth() })
     .backgroundColor(this.theme.surface)
     .borderRadius(10)
     .border({ width: 1, color: this.theme.line })
@@ -271,7 +302,7 @@ export struct MarkdownView {
     // **确定宽度**，不用 `width('100%')`：本组件挂在「只有 constraintSize({maxWidth})」
     // 的气泡里时，百分比会按内容解析，长文本会把宽度算成内容宽并溢出气泡
     // （2026-10-16 实测：用户气泡内层 1075px 伸到屏宽 1320px）。
-    .width(this.blockWidth()).alignItems(HorizontalAlign.Start)
+    .width(this.fillParent() ? '100%' : this.blockWidth()).alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -285,9 +316,13 @@ export struct MarkdownView {
           Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Stretch }) {
             ForEach(row.cells, (cell: TableCellView, colIndex: number) => {
               Column() {
-                // 单元格内可用宽度 = 列宽 148 - 内边距(10*2)
-                this.inlineSpans(cell.spans, this.fontSize - 1, 128);
+                // **不要传固定宽度**：单元格是固定列宽(148) + 内边距(10*2)，
+                // 传数值会让文字宽度与单元格内宽脱钩并撑破单元格
+                // （2026-10-16 折屏实测：Text 到 1590、单元格右边界仅 1452，超 138px）。
+                // 传 0 表示「填满父容器」，由单元格自身决定内宽。
+                this.inlineSpans(cell.spans, this.fontSize - 1, 0);
               }
+              // 列宽固定 148vp；文字填满其内容区（`inlineSpans` 收到 0 时用 width('100%')）
               .width(148).padding(10).alignItems(HorizontalAlign.Start)
               .backgroundColor(cell.header ? this.theme.line : this.theme.surface)
               .border({ width: { left: colIndex > 0 ? 1 : 0, bottom: 1 }, color: this.theme.line })
@@ -300,7 +335,7 @@ export struct MarkdownView {
       .borderRadius(7)
     }
     .scrollable(ScrollDirection.Horizontal)
-    .constraintSize({ maxWidth: this.blockWidth() })
+    .constraintSize({ maxWidth: this.fillParent() ? undefined : this.blockWidth() })
     .width('100%').scrollBar(BarState.Off)
   }
 

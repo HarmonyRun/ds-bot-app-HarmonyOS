@@ -1,6 +1,7 @@
 import { Conversation, TeamState } from '../model/Models';
 import { ConversationAvatar } from './ConversationAvatarView';
 import { ThemeTokens } from './Theme';
+import { AppMark } from './AppMark';
 
 /**
  * 宽屏左侧栏（抽自 `Index.ets`）：应用标记 + 导航栏 + 会话列表。
@@ -56,8 +57,8 @@ export interface SidebarTheme {
 @Component
 export struct DesktopSidebar {
   @Prop tokens: SidebarTheme = {
-    surface: '#FFFFFF', ink: '#202336', muted: '#6F758B', line: '#E7E9F1', pageBg: '#F6F7FB',
-    selectedBg: '#EFEDFF', chipBg: '#F0F2F7', brand: '#665CF6', waitingDot: '#F29D49', online: false
+    surface: '#FFFFFF', ink: '#172033', muted: '#657086', line: '#E3E8F0', pageBg: '#F5F7FA',
+    selectedBg: '#EEF2FF', chipBg: '#F3F5F9', brand: '#3F5EF5', waitingDot: '#E89432', online: false
   };
   @Prop themeTokens: ThemeTokens | undefined = undefined;
   /** 当前窗口宽（决定 76 / 180 / 320vp 三档） */
@@ -125,38 +126,44 @@ export struct DesktopSidebar {
     return this.forcedWidth > 0;
   }
 
-  /** 应用标记与桌面图标共用原作者的鲸鱼品牌图，避免出现两套品牌形象。 */
+  /** 应用标记（与桌面图标共用同一资源，实现见 view/AppMark.ets）。 */
   @Builder
   private appMark(size: number) {
-    Image($r('app.media.app_icon_original'))
-      .width(size).height(size)
-      .borderRadius(size * 0.28)
-      .objectFit(ImageFit.Cover);
+    AppMark({ markSize: size });
   }
 
   @Builder
   private rail() {
-    Column() {
-      Row({ space: 12 }) {
-        this.appMark(40);
-        if (this.expanded()) {
-          Column() {
-            Text('DS Bot').fontSize(19).fontWeight(FontWeight.Bold).fontColor(this.tokens.ink);
-            Text(this.serverName).fontSize(11).fontColor(this.tokens.muted).maxLines(1);
-          }.alignItems(HorizontalAlign.Start);
-        }
-      }.width('100%').padding({ left: 12, right: 12, top: 16, bottom: 20 });
+    Stack() {
+      // 只延伸本栏背景，不延伸交互内容；透明系统栏下可保持分栏配色。
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(this.tokens.pageBg)
+        .border({ width: { right: 1 }, color: this.tokens.line })
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]);
+      Column() {
+        Row({ space: 10 }) {
+          this.appMark(this.expanded() ? 36 : 34);
+          if (this.expanded()) {
+            Column() {
+              Text('DS Bot').fontSize(17).fontWeight(FontWeight.Bold).fontColor(this.tokens.ink);
+              Text('智能协作工作台').fontSize(10).fontColor(this.tokens.muted).maxLines(1);
+            }.alignItems(HorizontalAlign.Start);
+          }
+        }.width('100%').padding({ left: 10, right: 10, top: 18, bottom: 22 });
 
-      ForEach(this.railItems, (item: RailItem) => {
-        this.railButton(item);
-      }, (item: RailItem) => item.section);
+        ForEach(this.railItems, (item: RailItem) => {
+          this.railButton(item);
+        }, (item: RailItem) => item.section);
 
-      Blank();
-      this.statusPill();
+        Blank();
+        this.statusPill();
+      }
+      .width('100%').height('100%')
+      .padding({ left: 8, right: 8, bottom: 16 });
     }
     .width(this.expanded() ? 180 : 76).height('100%')
-    .padding({ left: 8, right: 8, bottom: 18 })
-    .backgroundColor(this.tokens.surface)
+    .backgroundColor(this.tokens.pageBg)
     .border({ width: { right: 1 }, color: this.tokens.line });
   }
 
@@ -169,6 +176,7 @@ export struct DesktopSidebar {
           .objectFit(ImageFit.Contain);
         if (this.expanded()) {
           Text(item.label).fontSize(15)
+            .fontWeight(this.section === item.section ? FontWeight.Medium : FontWeight.Regular)
             .fontColor(this.section === item.section ? this.tokens.brand : this.tokens.ink);
         }
       }
@@ -177,9 +185,9 @@ export struct DesktopSidebar {
       // 展开栏包含「图标 + 文字」，继续从左侧起排。
       .justifyContent(this.expanded() ? FlexAlign.Start : FlexAlign.Center);
     }
-    .height(48).width('100%').margin({ bottom: 6 })
+    .height(44).width('100%').margin({ bottom: 6 })
     .backgroundColor(this.section === item.section ? this.tokens.selectedBg : Color.Transparent)
-    .borderRadius(14)
+    .borderRadius(10)
     .onClick(() => this.onSelectSection(item.section));
   }
 
@@ -189,7 +197,7 @@ export struct DesktopSidebar {
     // 圆点 8 + 间距 6 + 文字“已连接”≈ 40vp，再加左右 padding 6*2 = 60vp，
     // 之前用 padding 10 + fontSize 12 会超出 rail 约 3px（折叠屏实测）。
     Row({ space: 5 }) {
-      Circle({ width: 8, height: 8 }).fill(this.tokens.online ? '#24B47E' : '#A4A9BB');
+      Circle({ width: 7, height: 7 }).fill(this.tokens.online ? '#159A72' : '#A4A9BB');
       Text(this.tokens.online ? '已连接' : '离线').fontSize(11).fontColor(this.tokens.muted);
     }
     .padding({ left: 6, right: 6, top: 6, bottom: 6 })
@@ -199,39 +207,50 @@ export struct DesktopSidebar {
 
   @Builder
   private conversationList() {
-    Column() {
-      Row() {
-        Text('会话').fontSize(24).fontWeight(FontWeight.Bold).fontColor(this.tokens.ink).layoutWeight(1);
-        Button() {
-          Image($r('app.media.ic_refresh'))
-            .width(21).height(21)
-            .objectFit(ImageFit.Contain);
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(this.tokens.surface)
+        .border({ width: { right: this.windowWidth >= 840 ? 1 : 0 }, color: this.tokens.line })
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]);
+      Column() {
+        Row() {
+          Column({ space: 2 }) {
+            Text('会话').fontSize(21).fontWeight(FontWeight.Bold).fontColor(this.tokens.ink);
+            Text(`${this.entries.length} 个工作会话`).fontSize(11).fontColor(this.tokens.muted);
+          }.alignItems(HorizontalAlign.Start).layoutWeight(1);
+          Button() {
+            Image($r('app.media.ic_refresh'))
+              .width(21).height(21)
+              .objectFit(ImageFit.Contain);
+          }
+            .width(36).height(36).borderRadius(10)
+            .padding(0)
+            .backgroundColor(this.tokens.chipBg)
+            .onClick(() => this.onRefresh());
+        }.width('100%').padding({ left: 18, right: 14, top: 18, bottom: 14 });
+        TextInput({ placeholder: '搜索会话', text: this.searchText })
+          .height(40).margin({ left: 14, right: 14, bottom: 12 }).borderRadius(10)
+          .backgroundColor(this.tokens.pageBg).fontColor(this.tokens.ink)
+          .border({ width: 1, color: this.tokens.line })
+          .onChange((value: string) => this.onSearch(value));
+        Row() {
+          Text('最近会话').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.tokens.muted).layoutWeight(1);
+          Text('显示隐藏').fontSize(11).fontColor(this.tokens.muted).margin({ right: 6 });
+          Toggle({ type: ToggleType.Switch, isOn: this.showHidden })
+            .onChange((value: boolean) => this.onToggleHidden(value));
+        }.width('100%').padding({ left: 16, right: 14, bottom: 8 });
+        List({ space: 4 }) {
+          ForEach(this.entries, (entry: ConversationEntry) => {
+            ListItem() {
+              this.entryRow(entry);
+            }.onClick(() => this.onSelectConversation(entry.conversation));
+          }, (entry: ConversationEntry) => entry.id);
         }
-          .width(40).height(40).borderRadius(20)
-          .padding(0)
-          .backgroundColor(this.tokens.chipBg)
-          .onClick(() => this.onRefresh());
-      }.width('100%').padding({ left: 18, right: 14, top: 18, bottom: 12 });
-      TextInput({ placeholder: '搜索会话', text: this.searchText })
-        .height(42).margin({ left: 14, right: 14, bottom: 10 }).borderRadius(14)
-        .backgroundColor(this.tokens.pageBg).fontColor(this.tokens.ink)
-        .onChange((value: string) => this.onSearch(value));
-      Row() {
-        Text('显示已隐藏会话').fontSize(12).fontColor(this.tokens.muted).layoutWeight(1);
-        Toggle({ type: ToggleType.Switch, isOn: this.showHidden })
-          .onChange((value: boolean) => this.onToggleHidden(value));
-      }.width('100%').padding({ left: 16, right: 14, bottom: 8 });
-      List({ space: 4 }) {
-        ForEach(this.entries, (entry: ConversationEntry) => {
-          ListItem() {
-            this.entryRow(entry);
-          }.onClick(() => this.onSelectConversation(entry.conversation));
-        }, (entry: ConversationEntry) => entry.id);
+        .layoutWeight(1).padding({ left: 8, right: 8 })
+        .scrollBar(BarState.Off);
       }
-      // **不要 width('100%')**：它会反向把父 Column 撑到可用宽度（实测 List 1972px），
-      // 导致外层 Row 没有空间留给右侧聊天面板。父 Column 已有确定宽度，这里去掉即可。
-      .layoutWeight(1).padding({ left: 8, right: 8 })
-      .scrollBar(BarState.Off);
+      .width('100%').height('100%');
     }
     // **必须用确定宽度**：`width('100%')` 在 Row 里会吃掉 include 全部剩余宽度，
     // 把右侧聊天面板挤成 0 宽（2026-10-16 折叠屏实测：List 宽 1972px = 整行剩余全宽，
@@ -246,24 +265,26 @@ export struct DesktopSidebar {
 
   @Builder
   private entryRow(entry: ConversationEntry) {
-    Row({ space: 12 }) {
+    Row({ space: 11 }) {
       // 会话头像统一走 view/ConversationAvatarView.ets（叠加算法在 logic/ConversationAvatar.ets）
       ConversationAvatar({
         item: entry.conversation, team: this.team, avatarSize: 50, dark: false
       });
       Column({ space: 4 }) {
         Row() {
-          Text(entry.name).fontSize(16).fontWeight(FontWeight.Medium)
+          Text(entry.name).fontSize(15).fontWeight(FontWeight.Medium)
             .fontColor(this.tokens.ink).maxLines(1).layoutWeight(1);
           if (entry.pinned) Text('置顶').fontSize(10).fontColor(this.tokens.brand);
           if (entry.hidden) Text('隐藏').fontSize(10).fontColor(this.tokens.muted);
           if (entry.waiting) Circle({ width: 8, height: 8 }).fill(this.tokens.waitingDot);
         }.width('100%');
-        Text(entry.preview).fontSize(12).fontColor(this.tokens.muted).maxLines(1).width('100%');
+        Text(entry.preview).fontSize(12).fontColor(this.tokens.muted).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%');
       }.alignItems(HorizontalAlign.Start).layoutWeight(1);
     }
-    .width('100%').padding(12)
+    .width('100%').constraintSize({ minHeight: 72 }).padding({ left: 11, right: 10, top: 9, bottom: 9 })
     .backgroundColor(entry.selected ? this.tokens.selectedBg : Color.Transparent)
-    .borderRadius(14);
+    .borderRadius(10)
+    .border({ width: { left: entry.selected ? 3 : 0 }, color: this.tokens.brand });
   }
 }

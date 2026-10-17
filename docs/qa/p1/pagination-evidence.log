@@ -1,0 +1,7 @@
+[mock] GET /mobile/v1/conversations/room-mock/messages?limit=90
+[mock] GET /mobile/v1/conversations/room-mock/messages?limit=90&cursor=cursor-page-1
+
+# 说明（2026-10-17）
+# 第一行 = 首次加载最新一页（无 cursor）
+# 第二行 = 点击「加载更早消息」后带 cursor 的分页请求 —— 证明按钮回调链路通
+# 该页返回 cursor='' → hasEarlier=false → 按钮从布局消失（端到端闭环）

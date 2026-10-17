@@ -62,6 +62,42 @@
 - `entry/src/main/resources/base/media/app_icon_original.png`
 - `entry/src/main/resources/base/media/ic_nav_*.svg`
 
+## 独立复核（2026-10-16，接手人）
+
+对报告逐条核对代码与资源，结论：**内容属实**。
+
+| 报告结论 | 复核结果 |
+|---|---|
+| 图标资源已引入 | ✅ `app_icon_original.png`(60949B) + 6 枚 `ic_nav_*.svg` + `ic_refresh.svg` 均在 `base/media/` |
+| 清单已切换 | ✅ `AppScope/app.json5` 与 `module.json5` 的 icon / startWindowIcon 均为 `$media:app_icon_original` |
+| `RailItem.icon` 改为 `Resource` 并加 `selectedIcon` | ✅ 结构一致；`Index` 传入成对资源 |
+| 收起栏图标居中 | ✅ 实测按钮 `x=62..187`（中心 124.5）、图标 `x=80..155`（中心 117.5）；报告中的 `x=25..210` 是按钮**内容区**坐标（按钮含 margin/padding 后为 62..187），差值同样为 0 |
+| 折叠屏/手机均正常 | ✅ 双端 0 越出；侧栏数值自洽（rail 238 + List 825 = 分隔条 1063） |
+
+### 复核中发现并修复的一处遗漏：应用标记仍有两套实现
+
+侧栏换成了鲸鱼品牌图，但 **`Index.appMark()` 仍是旧的「紫底 + ✦」字体标记**，且它还被 3 处引用：
+
+| 位置 | 界面 |
+|---|---|
+| `pairingPage()` | 连接/配对页（首次启动可见） |
+| `chatPanel()` 空态 | 宽屏未选会话时的「选择一个 Bot 开始对话」 |
+| `mainContent()` 加载页 | 启动时的「正在准备 DS Bot…」 |
+
+也就是说**桌面图标、侧栏是鲸鱼，而连接页与启动页是紫底 ✦**——同一个 app 仍有两套品牌形象，
+正好是报告「不再手绘另一套 Logo」想消除的情况，只是漏了这三处。
+
+修法：抽出 `view/AppMark.ets`（唯一实现，引用 `app_icon_original`），
+`Index.appMark()` 与 `DesktopSidebar.appMark()` 都改为委托它。
+这样以后换图标只需改一处——与此前 `BotAvatar` / `ConversationAvatar` 的处理方式一致。
+
+实测：折叠屏侧栏与手机首页渲染正常；双端越界校验 0。
+
+### 复核结论
+
+报告里「`app_icon.svg` 保留但不再被清单引用，可清理」**已确认**：
+全仓库搜索 `media:app_icon` 仅命中 `app_icon_original`，`app_icon.svg` 确为死资源（本次未删除，留待统一清理）。
+
 ## 后续注意事项
 
 - `app_icon.svg` 目前保留但不再被清单引用，可在后续统一清理未使用资源时删除。

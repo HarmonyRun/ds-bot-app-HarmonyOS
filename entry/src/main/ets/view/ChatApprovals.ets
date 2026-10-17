@@ -29,9 +29,9 @@ export interface NoticePanelTheme {
 }
 
 export const LIGHT_NOTICE_THEME: NoticePanelTheme = {
-  ink: '#202336', muted: '#6F758B', warning: '#C77A28', warningBg: '#FFF4E5',
-  cardBg: '#FFFBF3', cardLine: '#F3E2C7', primary: '#4D6BFE',
-  dangerBg: '#FDECEC', danger: '#C93C3C'
+  ink: '#172033', muted: '#657086', warning: '#B86A16', warningBg: '#FFF6E8',
+  cardBg: '#FFFCF6', cardLine: '#F1DFC4', primary: '#3F5EF5',
+  dangerBg: '#FFF0F1', danger: '#C93F49'
 };
 
 export const DARK_NOTICE_THEME: NoticePanelTheme = {
@@ -77,11 +77,11 @@ export struct ChatApprovals {
         .fontSize(13).fontColor(this.tokens.muted).width('100%').maxLines(4)
         .wordBreak(WordBreak.BREAK_WORD);
       Row({ space: 10 }) {
-        Button('允许一次').layoutWeight(1).height(40).borderRadius(20).fontSize(14)
+        Button('允许一次').layoutWeight(1).height(40).borderRadius(10).fontSize(14)
           .backgroundColor(this.tokens.primary)
           .enabled(!this.disabled)
           .onClick(() => this.onResolve(approval.id, 'allowed-once'));
-        Button('拒绝').layoutWeight(1).height(40).borderRadius(20).fontSize(14)
+        Button('拒绝').layoutWeight(1).height(40).borderRadius(10).fontSize(14)
           .backgroundColor(this.tokens.dangerBg).fontColor(this.tokens.danger)
           .enabled(!this.disabled)
           .onClick(() => this.onResolve(approval.id, 'rejected'));

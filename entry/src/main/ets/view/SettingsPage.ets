@@ -1,4 +1,5 @@
 import { Approval } from '../model/Models';
+import { AppMark } from './AppMark';
 
 /**
  * 手机设置页（抽自 `Index.ets` 的 `mobileSettingsPage`，P1 视图拆分第五步）。
@@ -44,8 +45,8 @@ export interface SettingsView {
 export struct SettingsPage {
   @Prop view: SettingsView = { serverName: '', serverUrl: '', dark: false, approvals: [] };
   @Prop tokens: SettingsTheme = {
-    pageBg: '#FFFFFF', rowBg: '#F1F1F1', ink: '#202336', muted: '#6F758B', line: '#E5E5E5',
-    dangerBg: '#FDECEC', danger: '#C93C3C', brand: '#4D6BFE'
+    pageBg: '#F5F7FA', rowBg: '#FFFFFF', ink: '#172033', muted: '#657086', line: '#E3E8F0',
+    dangerBg: '#FFF0F1', danger: '#C93F49', brand: '#3F5EF5'
   };
 
   /** 关闭设置页（回到聊天）。 */
@@ -92,11 +93,12 @@ export struct SettingsPage {
       Button() {
         Image($r('app.media.ic_close')).width(22).height(22);
       }
-      .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
+      .width(44).height(44).borderRadius(12).backgroundColor(this.tokens.rowBg)
       .border({ width: 1, color: this.tokens.line })
       .onClick(() => this.onClose());
-      Blank();
-    }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
+      Text('设置').fontSize(22).fontWeight(FontWeight.Bold).fontColor(this.tokens.ink)
+        .layoutWeight(1).margin({ left: 12 });
+    }.width('100%').height(68).padding({ left: 20, right: 20, top: 10, bottom: 12 });
   }
 
   /** 分组标题（P2 新增面板复用）。 */
@@ -121,10 +123,7 @@ export struct SettingsPage {
   private hostCard() {
     Column() {
       Row({ space: 14 }) {
-        Stack() {
-          Circle({ width: 46, height: 46 }).fill('#E0E0E0');
-          Text('DS').fontSize(16).fontWeight(FontWeight.Medium).fontColor('#777777');
-        }.width(46).height(46);
+        AppMark({ markSize: 46 });
         Column({ space: 3 }) {
           Text(this.view.serverName.length > 0 ? this.view.serverName : 'DS Bot')
             .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.tokens.ink);
@@ -138,7 +137,8 @@ export struct SettingsPage {
         Image($r('app.media.ic_chevron')).width(18).height(18);
       }.height(58).padding({ left: 20, right: 18 });
     }
-    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(22);
+    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(14)
+    .border({ width: 1, color: this.tokens.line });
   }
 
   @Builder
@@ -149,7 +149,8 @@ export struct SettingsPage {
         Image($r('app.media.ic_chevron')).width(18).height(18);
       }.height(78).padding({ left: 20, right: 18 });
     }
-    .width('100%').margin({ top: 32 }).backgroundColor(this.tokens.rowBg).borderRadius(22)
+    .width('100%').margin({ top: 24 }).backgroundColor(this.tokens.rowBg).borderRadius(14)
+    .border({ width: 1, color: this.tokens.line })
     .onClick(() => this.onOpenTools());
   }
 
@@ -177,7 +178,8 @@ export struct SettingsPage {
         Image($r('app.media.ic_chevron')).width(18).height(18);
       }.height(64).padding({ left: 20, right: 18 });
     }
-    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(22);
+    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(14)
+    .border({ width: 1, color: this.tokens.line });
   }
 
   @Builder
@@ -194,7 +196,8 @@ export struct SettingsPage {
         Toggle({ type: ToggleType.Switch, isOn: this.view.dark })
           .onChange((value: boolean) => this.onToggleDark(value));
       }.height(64).padding({ left: 20, right: 18 });
-    }.width('100%').backgroundColor(this.tokens.rowBg).borderRadius(22);
+    }.width('100%').backgroundColor(this.tokens.rowBg).borderRadius(14)
+      .border({ width: 1, color: this.tokens.line });
   }
 
   @Builder
@@ -214,7 +217,8 @@ export struct SettingsPage {
               .backgroundColor(this.tokens.dangerBg).fontColor(this.tokens.danger)
               .onClick(() => this.onResolveApproval(approval.id, 'rejected'));
           }
-        }.padding(14).backgroundColor(this.tokens.rowBg).borderRadius(18);
+        }.padding(14).backgroundColor(this.tokens.rowBg).borderRadius(12)
+          .border({ width: 1, color: this.tokens.line });
       }, (approval: Approval) => approval.id);
     }.width('100%');
   }
@@ -242,12 +246,13 @@ export struct SettingsPage {
       .height(78).padding({ left: 20, right: 18 })
       .onClick(() => this.onClearCache());
     }
-    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(22);
+    .width('100%').backgroundColor(this.tokens.rowBg).borderRadius(14)
+    .border({ width: 1, color: this.tokens.line });
   }
 
   @Builder
   private logoutButton() {
-    Button('断开此设备').width('100%').height(50).margin({ top: 32, bottom: 20 }).borderRadius(25)
+    Button('断开此设备').width('100%').height(48).margin({ top: 28, bottom: 20 }).borderRadius(12)
       .backgroundColor(this.tokens.dangerBg).fontColor(this.tokens.danger)
       .onClick(() => this.onLogout());
   }

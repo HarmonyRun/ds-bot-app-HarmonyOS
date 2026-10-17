@@ -40,35 +40,35 @@ export interface ThemeTokens {
 }
 
 export const LIGHT_THEME: ThemeTokens = {
-  pageBg: '#F6F7FB',
+  pageBg: '#F5F7FA',
   surface: '#FFFFFF',
-  ink: '#202336',
-  muted: '#6F758B',
-  line: '#E7E9F1',
-  brand: '#4D6BFE',
-  danger: '#C93C3C',
-  dangerBg: '#FDECEC',
-  warning: '#C77A28',
-  warningBg: '#FFF4E5',
-  success: '#24B47E',
-  code: '#F0F2F7',
-  link: '#3A5BD9'
+  ink: '#172033',
+  muted: '#657086',
+  line: '#E3E8F0',
+  brand: '#3F5EF5',
+  danger: '#C93F49',
+  dangerBg: '#FFF0F1',
+  warning: '#B86A16',
+  warningBg: '#FFF6E8',
+  success: '#159A72',
+  code: '#F3F5F9',
+  link: '#3155D9'
 };
 
 export const DARK_THEME: ThemeTokens = {
-  pageBg: '#101116',
-  surface: '#1A1C24',
-  ink: '#F4F5FA',
-  muted: '#A4A9BB',
-  line: '#2B2E39',
-  brand: '#8FA8FF',
+  pageBg: '#111722',
+  surface: '#19212E',
+  ink: '#F3F6FC',
+  muted: '#9DA9BC',
+  line: '#2B3545',
+  brand: '#8EA2FF',
   danger: '#FF8A8A',
-  dangerBg: '#3A2226',
+  dangerBg: '#3B252B',
   warning: '#F0B45E',
-  warningBg: '#3A2E18',
+  warningBg: '#3A301F',
   success: '#4ED9A4',
-  code: '#242732',
-  link: '#8FA8FF'
+  code: '#222C3A',
+  link: '#9AAEFF'
 };
 
 /** 按深浅色取令牌。 */
@@ -80,5 +80,5 @@ export function themeOf(dark: boolean): ThemeTokens {
  * 消息气泡等场景需要的「固定配色」：用户气泡在深浅色下都是浅底深字
  * （主题只改背景，不改气泡配色），所以这里给出气泡专用的字色。
  */
-export const OWN_BUBBLE_INK: string = '#1B1F35';
-export const OWN_BUBBLE_MUTED: string = '#5B6B99';
+export const OWN_BUBBLE_INK: string = '#172033';
+export const OWN_BUBBLE_MUTED: string = '#52668F';

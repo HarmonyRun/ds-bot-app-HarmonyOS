@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import {
   Approval,
@@ -50,9 +51,19 @@ import { QuestionCard } from '../view/QuestionCard';
 import { SettingsPage, SettingsTheme, SettingsView } from '../view/SettingsPage';
 import { CapabilitiesPage, SecondaryPageTheme, ToolsPage } from '../view/SecondaryPages';
 import { ConversationAvatar } from '../view/ConversationAvatarView';
+import { AppMark } from '../view/AppMark';
+import { ChatComposer, ComposerTheme } from '../view/ChatComposer';
+import { ReasoningBlock } from '../view/ReasoningBlock';
+import { BubbleMetrics, MessageBubble } from '../view/MessageBubble';
+import { ChatMessageList } from '../view/ChatMessageList';
+import { BotCard, TeamPage } from '../view/TeamPage';
+import { MobileHome, MobileHomeEntry } from '../view/MobileHome';
+import { MobileCreateBotPage } from '../view/MobileCreateBotPage';
+import { PairingPage } from '../view/PairingPage';
 import { ConversationEntry, DesktopSidebar, RailItem, SidebarTheme } from '../view/DesktopSidebar';
 import { AvatarSpec, BotAvatar } from '../view/BotAvatar';
 import { ThemeTokens, themeOf } from '../view/Theme';
+import { WorkspaceInspector } from '../view/WorkspaceInspector';
 import { toDefaultEffort, toEffortOptions } from '../logic/Efforts';
 import {
   conversationTime as conversationTimeOf, isAuthFailure as isAuthFailureOf,
@@ -192,9 +203,15 @@ struct Index {
   /** 本地是否还有更早的历史（翻到最早时为 false）。 */
   @State hasEarlier: boolean = true;
   @State historyCursor: string = '';
-  private historyInitialized: boolean = false;
+  /**
+   * 是否已完成首次历史加载（决定「加载更早消息」按钮是否可显示）。
+   *
+   * **必须是 `@State`**：它在 `loadMessages()` 返回后被置为 true，
+   * 而 `earlierMessagesButton()` 的渲染条件依赖它。此前写成普通私有字段，
+   * 赋值不触发重渲染，按钮因此**从不出现**（2026-10-16 检查消息区插槽时发现）。
+   */
+  @State historyInitialized: boolean = false;
   /** 已展开思考过程的消息 id（P1-4）。 */
-  @State expandedReasoning: string[] = [];
   /** 长按消息弹出的动作列表。 */
   @State messageActions: MessageAction[] = [];
   @State actionTargetId: string = '';
@@ -232,6 +249,8 @@ struct Index {
   private profile?: ClientProfile;
   private cache?: MessageCache;
   private scroller: Scroller = new Scroller();
+  /** 桌面设置页独立滚动位置，避免与聊天/团队页切换时复用偏移。 */
+  private settingsScroller: Scroller = new Scroller();
   private composerController: TextAreaController = new TextAreaController();
   /** 已登记的滚动定时器，销毁时统一清理（旧实现从不清理，见缺陷 B3）。 */
   private scrollTimers: number[] = [];
@@ -287,29 +306,60 @@ struct Index {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
 
+  /** 系统栏背景透明，由当前页面安全区背景着色；这里只同步图标明暗。 */
+  private async updateSystemBars(dark: boolean): Promise<void> {
+    try {
+      const appWindow: window.Window = await window.getLastWindow(this.context());
+      await appWindow.setWindowSystemBarProperties({
+        statusBarColor: '#00000000',
+        statusBarContentColor: dark ? '#F3F6FC' : '#172033',
+        isStatusBarLightIcon: dark,
+        navigationBarColor: '#00000000',
+        navigationBarContentColor: dark ? '#9DA9BC' : '#657086',
+        isNavigationBarLightIcon: dark
+      });
+    } catch (error) {
+      console.warn(`update system bars failed: ${JSON.stringify(error)}`);
+    }
+  }
+
+  private toggleDark(value: boolean): void {
+    this.dark = value;
+    this.updateSystemBars(value);
+  }
+
   private updateWindowWidth(width: Length): void {
     const parsed = typeof width === 'number' ? width : Number.parseFloat(width.toString());
     if (Number.isFinite(parsed) && parsed > 0) this.windowWidth = parsed;
   }
 
   private pageBg(): string {
-    return this.dark ? '#101116' : '#F6F7FB';
+    return this.tokens().pageBg;
   }
 
   private surface(): string {
-    return this.dark ? '#1A1C24' : '#FFFFFF';
+    return this.tokens().surface;
+  }
+
+  /** 与系统栏相邻区域的语义底色：聊天衔接面板，其余页面衔接页面背景。 */
+  private systemChromeBg(): string {
+    // 宽屏由导航栏、会话栏、工作区各自延伸背景；这里仅提供缝隙回退色。
+    if (this.windowWidth < 600 && this.paired && this.section === 'chat' && this.selectedId.length > 0) {
+      return this.surface();
+    }
+    return this.pageBg();
   }
 
   private ink(): string {
-    return this.dark ? '#F4F5FA' : '#202336';
+    return this.tokens().ink;
   }
 
   private muted(): string {
-    return this.dark ? '#A4A9BB' : '#6F758B';
+    return this.tokens().muted;
   }
 
   private line(): string {
-    return this.dark ? '#2B2E39' : '#E7E9F1';
+    return this.tokens().line;
   }
 
   private async restore(): Promise<void> {
@@ -1351,7 +1401,6 @@ struct Index {
 
   /** 群聊头像：最多 4 个成员头像叠放（对齐上游 RoomAvatar 的排布思路）。 */
   @Builder
-  @Builder
   private roomAvatar(item: Conversation, size: number) {
     // 保留旧名以兼容既有调用点，实际渲染统一交给 ConversationAvatar
     ConversationAvatar({ item: item, team: this.team, avatarSize: size, dark: this.dark });
@@ -1380,7 +1429,6 @@ struct Index {
    * 注意：`@Builder` 内不能写局部变量声明等普通语句，所以判断逻辑放在辅助方法里。
    */
   @Builder
-  @Builder
   private conversationAvatar(item: Conversation, size: number = 50) {
     // 头像组合已抽到 view/ConversationAvatarView.ets（叠加算法在 logic/ConversationAvatar.ets）
     ConversationAvatar({ item: item, team: this.team, avatarSize: size, dark: this.dark });
@@ -1391,145 +1439,107 @@ struct Index {
     return isMainAvatarIn(this.team, item);
   }
 
+  /** 手机首页会话行视图模型。 */
+  private mobileHomeEntries(): MobileHomeEntry[] {
+    const entries: MobileHomeEntry[] = [];
+    for (const item of this.filteredConversations()) {
+      entries.push({
+        id: item.id,
+        conversation: item,
+        name: item.name,
+        preview: this.conversationPreviews[item.id] ?? item.role ?? (item.kind === 'room' ? '群聊' : 'Bot'),
+        time: this.conversationTime(item),
+        waiting: item.waiting !== undefined && item.waiting.length > 0
+      });
+    }
+    return entries;
+  }
+
   @Builder
   private mobileHome() {
-    Column() {
-      Row({ space: 10 }) {
-        Button() {
-          Image($r('app.media.ic_settings')).width(23).height(23);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
-        .border({ width: 1, color: this.line() })
-        .onClick(() => {
-          this.section = 'settings';
-          void this.loadAdminData();
-        });
-        Blank();
-        Button() {
-          Image($r('app.media.ic_search')).width(22).height(22);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
-        .border({ width: 1, color: this.line() })
-        .onClick(() => {
-          this.searching = !this.searching;
-          if (!this.searching) this.searchText = '';
-        });
-        Button() {
-          Image($r('app.media.ic_plus')).width(27).height(27);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.surface())
-        .border({ width: 1, color: this.line() })
-        .onClick(() => this.mobileOverlay = 'create-bot');
-      }.width('100%').height(72).padding({ left: 20, right: 20, top: 12, bottom: 12 });
-      if (this.searching) {
-        TextInput({ placeholder: '搜索会话', text: this.searchText })
-          .height(50).margin({ left: 20, right: 20, bottom: 8 }).padding({ left: 18, right: 18 })
-          .fontSize(17).fontColor(this.ink()).backgroundColor(this.dark ? '#202022' : '#F1F1F1')
-          .borderRadius(25).onChange((value: string) => this.searchText = value);
-      }
-      Scroll() {
-        Column() {
-          if (!this.searching && this.mainConversation() !== undefined) {
-            Column({ space: 10 }) {
-              this.botAvatar(this.mainBotOf(), this.mainConversation()?.name ?? 'Chief', 100,
-                this.mainBotOf() !== undefined && this.isMainBotId(this.mainBotOf()!.id), false);
-              Text(this.mainConversation()?.name ?? 'Chief').fontSize(16).fontColor(this.muted());
-            }
-            .width('100%').padding({ top: 4, bottom: 22 })
-            .onClick(() => {
-              const item = this.mainConversation();
-              if (item !== undefined) void this.selectConversation(item);
-            })
-            // 长按首页主 Bot 头像打开诊断页；页内可切换「事件流诊断 / 头像诊断」。
-            .gesture(LongPressGesture().onAction(() => this.showProbe = true));
-          }
-          ForEach(this.filteredConversations(), (item: Conversation) => {
-            Row({ space: 18 }) {
-              this.conversationAvatar(item, 50);
-              Column({ space: 5 }) {
-                Text(item.name).fontSize(20).fontWeight(FontWeight.Medium).fontColor(this.ink())
-                  .maxLines(1).width('100%');
-                Text(this.conversationPreviews[item.id] ?? item.role ?? (item.kind === 'room' ? '群聊' : 'Bot'))
-                  .fontSize(16).fontColor(this.muted()).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%');
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1);
-              Column() {
-                Text(this.conversationTime(item)).fontSize(13).fontColor(this.muted());
-                Blank();
-                if (item.waiting !== undefined && item.waiting.length > 0) {
-                  Circle({ width: 10, height: 10 }).fill('#4D6BFE');
-                }
-              }.height(52).alignItems(HorizontalAlign.End);
-            }
-            .width('100%').height(92).padding({ left: 8, right: 8 })
-            .onClick(() => void this.selectConversation(item));
-          }, (item: Conversation) => item.id);
-          if (this.filteredConversations().length === 0) {
-            Text('没有找到会话').fontSize(16).fontColor(this.muted())
-              .width('100%').padding(32).textAlign(TextAlign.Center);
-          }
-        }
-        .width('100%').constraintSize({ minHeight: '100%' }).justifyContent(FlexAlign.Start)
-        .padding({ left: 16, right: 16, bottom: 24 });
-      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
-    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+    // 页面本体已抽到 view/MobileHome.ets
+    MobileHome({
+      theme: {
+        pageBg: this.pageBg(),
+        surface: this.surface(),
+        ink: this.ink(), muted: this.muted(), line: this.line(),
+        fieldBg: this.dark ? '#222C3A' : '#F3F5F9', waitingDot: this.tokens().brand
+      },
+      entries: this.mobileHomeEntries(),
+      team: this.team,
+      searchText: this.searchText,
+      searching: this.searching,
+      heroName: !this.searching && this.mainConversation() !== undefined
+        ? (this.mainConversation()?.name ?? 'Chief') : '',
+      heroAvatar: this.mainBotAvatarSpec(),
+      onOpenSettings: (): void => {
+        this.section = 'settings';
+        void this.loadAdminData();
+      },
+      onToggleSearch: (): void => {
+        this.searching = !this.searching;
+        if (!this.searching) this.searchText = '';
+      },
+      onSearchChange: (value: string): void => { this.searchText = value; },
+      onOpenCreate: (): void => { this.mobileOverlay = 'create-bot'; },
+      onSelect: (entry: MobileHomeEntry): void => void this.selectConversation(entry.conversation),
+      onOpenHero: (): void => {
+        const item = this.mainConversation();
+        if (item !== undefined) void this.selectConversation(item);
+      },
+      onLongPressHero: (): void => { this.showProbe = true; }
+    });
+  }
+
+  /** 首页主 Bot 大头像参数。 */
+  private mainBotAvatarSpec(): AvatarSpec | undefined {
+    const bot = this.mainBotOf();
+    if (bot === undefined) return undefined;
+    return {
+      shape: bot.avatar?.shape ?? '',
+      color: bot.avatar?.color ?? bot.color ?? '',
+      image: '',
+      main: this.isMainBotId(bot.id),
+      live: false
+    };
   }
 
   @Builder
   private appMark(size: number = 42) {
-    Stack() {
-      Rect().width(size).height(size).radius(size * 0.3).fill('#665CF6');
-      Text('✦').fontSize(size * 0.52).fontColor('#FFFFFF').fontWeight(FontWeight.Bold);
-    }.width(size).height(size);
+    // 品牌图只有一处实现（view/AppMark.ets）；此前这里仍是「紫底 ✦」旧标记，
+    // 导致连接页/聊天空态/启动页与侧栏、桌面图标品牌不一致。
+    AppMark({ markSize: size });
   }
-
-  @Builder
-
 
   @Builder
   private pairingPage() {
-    Scroll() {
-      Column({ space: 16 }) {
-        this.appMark(76);
-        Text('DS Bot').fontSize(32).fontWeight(FontWeight.Bold).fontColor(this.ink());
-        Text('把你的 Bot 团队带到鸿蒙设备上')
-          .fontSize(16).fontColor(this.muted()).textAlign(TextAlign.Center);
-        Column({ space: 14 }) {
-          Text('连接主机').fontSize(21).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
-          Text('在电脑端打开 DS Bot 设置 → 移动设备，启用手机连接，然后粘贴完整配对 JSON 并在电脑端批准。')
-            .fontSize(14).lineHeight(21).fontColor(this.muted());
-          TextArea({ placeholder: '{"url":"https://…","code":"…","serverId":"…"}', text: this.pairingJson })
-            .height(120).fontSize(14).fontColor(this.ink()).backgroundColor(this.pageBg())
-            .borderRadius(14).padding(12).onChange((value: string) => this.pairingJson = value);
-          TextInput({ placeholder: '设备名称', text: this.deviceName })
-            .height(48).fontSize(15).fontColor(this.ink()).backgroundColor(this.pageBg())
-            .borderRadius(14).padding({ left: 14, right: 14 })
-            .onChange((value: string) => this.deviceName = value);
-          if (this.error.length > 0) {
-            Text(this.error).fontSize(13).fontColor('#D94343').width('100%');
-          }
-          Button(this.busy ? '等待电脑批准…' : '连接我的主机')
-            .width('100%').height(50).borderRadius(25).backgroundColor('#665CF6')
-            .fontSize(17).enabled(!this.busy && this.pairingJson.trim().length > 0 && this.deviceName.trim().length > 0)
-            .onClick(() => void this.pair());
-        }
-        .width('100%').constraintSize({ maxWidth: 560 }).padding(22)
-        .backgroundColor(this.surface()).borderRadius(24);
-        Text('连接信息和会话凭据仅保存在本机应用沙箱中。')
-          .fontSize(12).fontColor(this.muted()).textAlign(TextAlign.Center);
-      }
-      .width('100%').height('100%').justifyContent(FlexAlign.Center)
-      .padding({ left: 20, right: 20, top: 40, bottom: 40 });
-    }.width('100%').height('100%');
+    // 页面本体已抽到 view/PairingPage.ets（配对 JSON 与设备名自持，Index 少两个 @State）
+    PairingPage({
+      theme: {
+        pageBg: this.pageBg(), surface: this.surface(), ink: this.ink(),
+        muted: this.muted(), brand: this.tokens().brand, error: this.tokens().danger
+      },
+      outerBg: this.pageBg(),
+      error: this.error,
+      busy: this.busy,
+      initialJson: this.pairingJson,
+      initialDeviceName: this.deviceName,
+      onSubmit: (json: string, deviceName: string): void => {
+        this.pairingJson = json;
+        this.deviceName = deviceName;
+        void this.pair();
+      },
+      mark: (): void => { this.appMark(76); }
+    });
   }
-
   /** 宽屏左栏的配色与数据（抽到 view/DesktopSidebar.ets）。 */
   private sidebarTheme(): SidebarTheme {
     return {
       surface: this.surface(), ink: this.ink(), muted: this.muted(), line: this.line(),
       pageBg: this.pageBg(),
-      selectedBg: this.dark ? '#2B2946' : '#EFEDFF',
-      chipBg: this.dark ? '#252833' : '#F0F2F7',
-      brand: '#665CF6', waitingDot: '#F29D49', online: this.online
+      selectedBg: this.dark ? '#28344F' : '#EEF2FF',
+      chipBg: this.dark ? '#222C3A' : '#F3F5F9',
+      brand: this.tokens().brand, waitingDot: '#E89432', online: this.online
     };
   }
 
@@ -1566,13 +1576,26 @@ struct Index {
   /** 宽屏右侧内容区（聊天 / 团队 / 设置）。 */
   @Builder
   private desktopPane() {
-    Column() {
-      if (this.section === 'chat') {
-        this.chatPanel();
-      } else if (this.section === 'team') {
-        this.teamPage();
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(this.section === 'chat' ? this.surface() : this.pageBg())
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]);
+      if (this.section === 'chat' && this.windowWidth >= 1200) {
+        Row() {
+          this.chatPanel();
+          this.workspaceInspector();
+        }.width('100%').height('100%');
       } else {
-        this.settingsPage();
+        Column() {
+          if (this.section === 'chat') {
+            this.chatPanel();
+          } else if (this.section === 'team') {
+            this.teamPage();
+          } else {
+            this.settingsPage();
+          }
+        }.width('100%').height('100%');
       }
     }.width('100%').height('100%');
   }
@@ -1606,7 +1629,11 @@ struct Index {
       showHidden: this.showHidden,
       onSelectSection: (target: string): void => {
         this.section = target as AppSection;
-        if (target === 'settings') void this.loadAdminData();
+        if (target === 'settings') {
+          void this.loadAdminData();
+          const timer = setTimeout((): void => this.settingsScroller.scrollEdge(Edge.Top), 80);
+          this.scrollTimers.push(timer);
+        }
       },
       onRefresh: (): void => void this.refreshAll(),
       onSearch: (value: string): void => { this.searchText = value; },
@@ -1615,118 +1642,86 @@ struct Index {
     });
   }
 
-
-
+  /** PC 右侧栏只展示当前上下文，不改变协议层状态。 */
   @Builder
+  private workspaceInspector() {
+    WorkspaceInspector({
+      tokens: this.tokens(),
+      title: this.selectedConversation()?.name ?? '选择一个会话',
+      bots: this.botCards(),
+      busy: this.busy,
+      queueCount: this.queue.length,
+      activities: this.recentActivities(),
+      onOpenBot: (card: BotCard): void => this.openBotCard(card)
+    });
+  }
+
+  /** 右侧栏与团队页共用的打开 Bot 行为。 */
+  private openBotCard(card: BotCard): void {
+    const targetBot = this.team.bots.find((bot: Bot) => bot.id === card.id);
+    const item = this.conversations.find((value: Conversation) =>
+      value.id === card.id || value.id === `bot:${card.id}` || value.sessionId === targetBot?.sessionId);
+    if (item !== undefined) {
+      this.section = 'chat';
+      void this.selectConversation(item);
+    }
+  }
+
+  /** PC 活动栏使用的轻量投影，最多展示最近四条真实会话活动。 */
+  private recentActivities(): string[] {
+    const result: string[] = [];
+    for (let index = this.messages.length - 1; index >= 0 && result.length < 4; index--) {
+      const message = this.messages[index];
+      if (message.tool !== undefined) {
+        result.push(`${message.tool.name.length > 0 ? message.tool.name : '工具'} · ${message.tool.isError === true ? '执行失败' : message.tool.state === 'running' ? '执行中' : '已完成'}`);
+      } else if (message.role === 'user') {
+        result.push('你发送了一条消息');
+      } else if (message.role === 'assistant') {
+        result.push(`${message.author?.name ?? 'Bot'} 更新了回复`);
+      }
+    }
+    return result;
+  }
 
 
-  @Builder
 
+  /** 气泡几何口径（唯一来源，传给 view/MessageBubble.ets）。 */
+  private bubbleMetrics(): BubbleMetrics {
+    return {
+      maxWidth: this.bubbleMaxWidth(),
+      contentWidth: this.bubbleContentWidth(),
+      padding: this.bubblePadding(),
+      windowWidth: this.windowWidth
+    };
+  }
 
   @Builder
   private messageBubble(message: Message) {
-    // 对齐用 Row 的 justifyContent，**不要用 `Blank()`**：
-    // Blank 会贪婪占位，与气泡的 `constraintSize({ maxWidth })` 叠加后
-    // 总数超过行宽，用户气泡会被推到屏幕右边缘（2026-07-16 实测 bounds 右边界 = 屏宽）。
-    Row() {
-      Column({ space: 6 }) {
-        // 作者标识：群聊里每条回复显示是谁在说话（P1-7）；单聊沿用「你 / Bot」。
-        if (message.role === 'assistant' && message.author !== undefined &&
-          message.author.name !== undefined && message.author.name.length > 0) {
-          Row({ space: 6 }) {
-            BotAvatarView({
-              shape: this.botById(message.author.id)?.avatar?.shape ?? '',
-              color: this.botById(message.author.id)?.avatar?.color ?? this.botById(message.author.id)?.color ?? '',
-              avatarSize: 18,
-              image: ''
-            });
-            Text(message.author.name)
-              .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.muted()).maxLines(1);
-          }.alignItems(VerticalAlign.Center)
-        } else if (this.windowWidth >= 600) {
-          Text(message.role === 'user' ? '你' : message.role === 'assistant' ? 'Bot' : message.role)
-            .fontSize(11).fontColor(message.role === 'user' ? '#5B6B99' : this.muted());
-        }
-        if (message.reasoning !== undefined && message.reasoning.length > 0) {
-          this.reasoningBlock(message);
-        }
-        if (message.tool !== undefined) {
-          this.toolCard(message.tool);
-        } else if (message.text.length > 0) {
-          MarkdownView({
-            text: message.text,
-            theme: {
-              ink: this.ink(),
-              muted: this.muted(),
-              surface: this.surface(),
-              line: this.line(),
-              code: this.dark ? '#242732' : '#F0F2F7',
-              link: this.dark ? '#8FA8FF' : '#3A5BD9'
-            },
-            fontSize: this.windowWidth < 600 ? 16 : 15,
-            ownBubble: message.role === 'user',
-            maxContentWidth: this.bubbleContentWidth()
-          });
-        }
-        if (message.pending) {
-          Text(message.role === 'user' ? '发送中…' : '正在输出…')
-            .fontSize(11).fontColor(message.role === 'user' ? '#5B6B99' : this.muted());
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      // 气泡宽度必须用**显式 vp 数值**：`constraintSize({ maxWidth: '90%' })` 在嵌套
-      // Row → Blank → Column 里百分比会相对内容而非父容器解析，长文本会溢出气泡边界
-      // （2026-10-16 用户报告 + 截图确认）。留出两侧 padding(16*2) 与气泡内边距。
-      .constraintSize({ maxWidth: this.bubbleMaxWidth() })
-      .padding({
-        left: this.bubblePadding(), right: this.bubblePadding(),
-        top: this.windowWidth < 600 ? 13 : 13, bottom: this.windowWidth < 600 ? 13 : 13
-      })
-      .borderRadius(this.windowWidth < 600 ? 26 : 17)
-      .backgroundColor(this.windowWidth < 600 ?
-        (this.dark ? '#333333' : message.role === 'user' ? '#EDF3FF' : '#F0F0F0') :
-        message.role === 'user' ? '#665CF6' : this.surface())
-      .gesture(LongPressGesture().onAction(() => this.openMessageActions(message)));
-    }
-    .width('100%')
-    .justifyContent(message.role === 'user' ? FlexAlign.End : FlexAlign.Start)
-    .padding({ left: 16, right: 16, top: this.windowWidth < 600 ? 8 : 6, bottom: this.windowWidth < 600 ? 8 : 6 });
+    // 消息渲染整条链路已组件化（view/MessageBubble.ets → ReasoningBlock / ToolCard / MarkdownView / BotAvatar）
+    MessageBubble({
+      message: message,
+      metrics: this.bubbleMetrics(),
+      dark: this.dark,
+      authorName: message.role === 'assistant' && message.author?.name !== undefined
+        ? message.author.name : '',
+      authorAvatar: this.authorSpec(message),
+      onLongPress: (item: Message): void => this.openMessageActions(item),
+      onCopy: (text: string, toast: string): void => this.copyToClipboard(text, toast)
+    });
   }
 
-  /**
-   * 思考过程：默认折叠成一行，点一下展开。
-   * 旧实现是固定 maxLines 截断，长推理看不到全文（P1-4）。
-   */
-  @Builder
-  private reasoningBlock(message: Message) {
-    Column({ space: 4 }) {
-      Row({ space: 6 }) {
-        Text(this.expandedReasoning.includes(message.id) ? '⌃ 思考过程' : '⌄ 思考过程')
-          .fontSize(12).fontColor(this.muted());
-        if (message.pending === true) {
-          Text('进行中').fontSize(11).fontColor('#C77A28');
-        }
-        Blank();
-      }
-      .width('100%')
-      .onClick(() => this.toggleReasoning(message.id))
-      if (this.expandedReasoning.includes(message.id)) {
-        Text(message.reasoning ?? '')
-          .fontSize(this.windowWidth < 600 ? 14 : 12)
-          .lineHeight(this.windowWidth < 600 ? 21 : 18)
-          .fontColor(this.muted())
-          .padding(this.windowWidth < 600 ? 0 : { left: 10 })
-          .border(this.windowWidth < 600 ? { width: 0 } : { width: { left: 2 }, color: '#9D96FF' })
-          .copyOption(CopyOptions.LocalDevice)
-          .width('100%')
-      }
-    }
-    .width('100%').alignItems(HorizontalAlign.Start)
-  }
-
-  private toggleReasoning(id: string): void {
-    this.expandedReasoning = this.expandedReasoning.includes(id) ?
-      this.expandedReasoning.filter((value: string) => value !== id) : [...this.expandedReasoning, id];
+  /** 群聊作者头像参数（需要 team 查找，因此在父组件解析）。 */
+  private authorSpec(message: Message): AvatarSpec | undefined {
+    if (message.author === undefined || message.author.id === undefined) return undefined;
+    const bot = this.botById(message.author.id);
+    if (bot === undefined) return undefined;
+    return {
+      shape: bot.avatar?.shape ?? '',
+      color: bot.avatar?.color ?? bot.color ?? '',
+      image: '',
+      main: this.isMainBotId(bot.id),
+      live: false
+    };
   }
 
   private conversationQuestions(): ConversationQuestion[] {
@@ -1800,7 +1795,7 @@ struct Index {
           danger: '#C93C3C',
           dangerBg: this.dark ? '#3B2930' : '#FDECEC',
           activeBg: this.dark ? '#252D47' : '#F0F4FF',
-          brand: '#4D6BFE'
+          brand: this.tokens().brand
         },
         errorText: this.roomProgressError,
         unavailable: this.roomProgressUnavailable,
@@ -1856,7 +1851,7 @@ struct Index {
             cardBg: this.dark ? '#202839' : '#F4F7FF',
             cardLine: this.dark ? '#33415C' : '#D9E2FF',
             fieldBg: this.surface(), line: this.line(),
-            brand: '#4D6BFE', danger: '#C93C3C'
+            brand: this.tokens().brand, danger: this.tokens().danger
           },
           busy: this.questionBusyKey.length > 0,
           readOnly: this.team.readOnly !== undefined,
@@ -2007,9 +2002,22 @@ struct Index {
    * 两处算法分叉导致文字顶到卡片边缘（2026-10-16 反复出现）。
    */
   private bubbleMaxWidth(): number {
-    if (this.windowWidth >= 840) return 720;
-    const available = this.windowWidth - 16 * 2 - this.bubblePadding() * 2;
-    return available > 160 ? available : 160;
+    const available = this.chatPaneWidth() - 16 * 2 - this.bubblePadding() * 2;
+    if (available <= 160) return 160;
+    return this.windowWidth >= 840 && available > 720 ? 720 : available;
+  }
+
+  /**
+   * 聊天内容区实际可用宽度（vp）。
+   *
+   * **必须扣掉宽屏侧栏**：侧栏由原生 `SideBarContainer` 决定（用户可拖拽），
+   * 若仍按 `windowWidth` 推导，气泡会比聊天面板还宽。
+   * 2026-10-16 折叠屏实测：气泡 1089px、面板仅 916px，右侧越出 44px 且贴着屏幕边。
+   */
+  private chatPaneWidth(): number {
+    if (this.windowWidth < 600) return this.windowWidth;
+    const inspector = this.windowWidth >= 1200 ? 286 : 0;
+    return this.windowWidth - this.sideBarWidth - inspector;
   }
 
   /**
@@ -2060,27 +2068,6 @@ struct Index {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 1600 });
   }
 
-  @Builder
-  private toolCard(tool: ToolActivity) {
-    // 卡片本体与展开状态已移到 view/ToolCard.ets
-    ToolCard({
-      tool: tool,
-      tokens: {
-        ink: this.ink(), muted: this.muted(),
-        cardBg: this.pageBg(), line: this.line(),
-        link: this.dark ? '#8FA8FF' : '#3A5BD9'
-      },
-      onCopy: (text: string, toast: string): void => this.copyToClipboard(text, toast),
-      // 必须传确定宽度：否则卡片按气泡全宽排版并越出气泡内边界
-      maxWidth: this.bubbleContentWidth()
-    });
-  }
-
-
-
-
-
-
   /** @ 候选直接贴在输入框上方，使用原生列表语义并保留输入焦点/光标位置。 */
   @Builder
   private mentionMenu() {
@@ -2097,7 +2084,7 @@ struct Index {
             } else {
               Stack() {
                 Circle({ width: 30, height: 30 }).fill('#E8EDFF');
-                Text('@').fontSize(16).fontWeight(FontWeight.Bold).fontColor('#4D6BFE');
+                Text('@').fontSize(16).fontWeight(FontWeight.Bold).fontColor(this.tokens().brand);
               }.width(30).height(30);
             }
             Text(candidate.name).fontSize(15).fontColor(this.ink()).layoutWeight(1).maxLines(1);
@@ -2120,7 +2107,7 @@ struct Index {
       Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
         ForEach(this.composerReferences(), (reference: ChatReference) => {
           Row({ space: 6 }) {
-            Text('◫').fontSize(14).fontColor('#4D6BFE');
+            Text('◫').fontSize(14).fontColor(this.tokens().brand);
             Text(reference.label).fontSize(13).fontColor(this.ink()).maxLines(1)
               .constraintSize({ maxWidth: 180 });
             Button('×').width(30).height(30).borderRadius(15).fontSize(16)
@@ -2134,7 +2121,7 @@ struct Index {
         }, (reference: ChatReference) => `reference:${reference.sessionId}`);
         if (this.effortLoading) {
           Row({ space: 6 }) {
-            LoadingProgress().width(16).height(16).color('#4D6BFE');
+            LoadingProgress().width(16).height(16).color(this.tokens().brand);
             Text('读取思考档位…').fontSize(12).fontColor(this.muted());
           }.height(36).margin({ right: 8, bottom: 6 });
         } else if (this.effortOptions.length > 0) {
@@ -2162,7 +2149,7 @@ struct Index {
         .onChange((value: string) => this.referenceQuery = value);
       if (this.referenceLoading) {
         Row({ space: 10 }) {
-          LoadingProgress().width(22).height(22).color('#4D6BFE');
+          LoadingProgress().width(22).height(22).color(this.tokens().brand);
           Text('正在读取可引用会话…').fontSize(14).fontColor(this.muted());
         }.width('100%').padding(16);
       } else if (!this.referenceAvailable) {
@@ -2185,7 +2172,7 @@ struct Index {
                   Text(chat.label).fontSize(16).fontColor(this.ink()).maxLines(1).width('100%');
                   Text(chat.kind === 'bot' ? 'Bot 会话' : '最近会话').fontSize(11).fontColor(this.muted()).width('100%');
                 }.layoutWeight(1).alignItems(HorizontalAlign.Start);
-                Text('添加').fontSize(13).fontColor('#4D6BFE');
+                Text('添加').fontSize(13).fontColor(this.tokens().brand);
               }
               .width('100%').height(62).padding({ left: 8, right: 8 })
               .onClick(() => this.pickReference(chat));
@@ -2218,22 +2205,22 @@ struct Index {
         }
         Column({ space: 2 }) {
           Text(this.selectedConversation()?.name ?? '选择一个会话')
-            .fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.ink()).maxLines(1);
+            .fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.ink()).maxLines(1);
           Text(this.streamLabel()).fontSize(11)
             .fontColor(this.streamStatus === 'connected' ? '#24B47E' : this.muted());
         }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         if (this.busy) {
-          Button('停止').height(36).borderRadius(18).backgroundColor('#FDECEC').fontColor('#C93C3C')
+          Button('停止').height(34).borderRadius(10).backgroundColor(this.tokens().dangerBg).fontColor(this.tokens().danger)
             .onClick(() => void this.stop());
         } else if (this.selectedConversation() !== undefined) {
           Button(this.selectedConversation()?.pinned ? '取消置顶' : '置顶')
-            .height(34).borderRadius(17).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
+            .height(34).borderRadius(10).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
             .onClick(() => {
               const item = this.selectedConversation();
               if (item !== undefined) void this.setConversationFlag(item, !item.pinned, undefined);
             });
           Button(this.selectedConversation()?.hidden ? '恢复' : '隐藏')
-            .height(34).borderRadius(17).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
+            .height(34).borderRadius(10).fontSize(12).backgroundColor(this.pageBg()).fontColor(this.ink())
             .onClick(() => {
               const item = this.selectedConversation();
               if (item !== undefined) void this.setConversationFlag(item, undefined, !item.hidden);
@@ -2253,53 +2240,54 @@ struct Index {
             .fontSize(13).fontColor(this.muted()).textAlign(TextAlign.Center);
         }.layoutWeight(1).justifyContent(FlexAlign.Center).padding(30);
       } else {
-        Scroll(this.scroller) {
-          Column() {
-            this.earlierMessagesButton();
+        ChatMessageList({
+          scroller: this.scroller,
+          messages: this.messages,
+          busy: this.busy,
+          compact: false,
+          spinnerColor: this.tokens().brand,
+          muted: this.muted(),
+          desktopInset: true,
+          earlierButton: (): void => { this.earlierMessagesButton(); },
+          questions: (): void => {
             if (this.conversationQuestions().length > 0) {
               this.chatQuestions();
             }
-            if (this.messages.length === 0) {
-              Text('还没有消息，向这个 Bot 打个招呼吧。')
-                .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
-            }
-            ForEach(this.messages, (message: Message) => {
-              this.messageBubble(message);
-            }, (message: Message) => message.id);
-            if (this.busy) {
-              Row({ space: 10 }) {
-                LoadingProgress().width(22).height(22).color('#665CF6');
-                Text('Bot 正在主机上工作…').fontSize(13).fontColor(this.muted());
-              }.padding(18).width('100%');
-            }
-          }.width('100%').constraintSize({ maxWidth: 920 }).alignSelf(ItemAlign.Center);
-        }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+          },
+          emptyState: (): void => {
+            Text('还没有消息，向这个 Bot 打个招呼吧。')
+              .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
+          },
+          messageItem: (message: Message): void => { this.messageBubble(message); }
+        })
         this.groupProgress();
         Column({ space: 6 }) {
           this.mentionMenu();
           this.composerAccessories();
         }.width('100%').padding({ left: 14, right: 14 });
-        Row({ space: 10 }) {
-          Button('+').width(48).height(48).borderRadius(24).fontSize(24)
-            .backgroundColor(this.pageBg()).fontColor(this.ink())
-            .bindMenu(this.composerMenu());
-          TextArea({ placeholder: '发送消息…', text: this.composerText(), controller: this.composerController })
-            .layoutWeight(1).height(56).maxLength(this.composerMaxLength()).fontSize(15).fontColor(this.ink())
-            .backgroundColor(this.pageBg()).borderRadius(16)
-            .onChange((value: string) => {
-              this.setComposerText(value);
-            })
-            .onEditChange((editing: boolean) => this.composerFocused = editing)
-            .onTextSelectionChange((start: number, end: number) => {
-              this.composerSelectionStart = start;
-              this.composerSelectionEnd = end;
-            });
-          Button(this.busy ? '…' : '发送').height(48).width(72).borderRadius(24)
-            .backgroundColor('#665CF6')
-            .enabled(!this.busy && this.draft.trim().length > 0 && this.online)
-            .onClick(() => void this.send());
-        }
-        .width('100%').padding({ left: 14, right: 14, top: 10, bottom: 14 })
+        ChatComposer({
+          tokens: {
+            fieldBg: this.pageBg(), ink: this.ink(), barBg: this.surface(),
+            line: this.line(), sendBg: this.tokens().brand
+          },
+          placeholder: '发送消息…',
+          text: this.composerText(),
+          maxLength: this.composerMaxLength(),
+          controller: this.composerController,
+          canSend: !this.busy && this.draft.trim().length > 0 && this.online,
+          showAttach: true,
+          mobileSendStyle: false,
+          horizontalPadding: 14,
+          showTopBorder: true,
+          attachMenu: this.composerMenu(),
+          onTextChange: (value: string): void => this.setComposerText(value),
+          onEditChange: (editing: boolean): void => { this.composerFocused = editing; },
+          onSelectionChange: (start: number, end: number): void => {
+            this.composerSelectionStart = start;
+            this.composerSelectionEnd = end;
+          },
+          onSend: (): void => void this.send()
+        })
         .backgroundColor(this.surface()).border({ width: { top: 1 }, color: this.line() });
       }
     }.layoutWeight(1).height('100%').backgroundColor(this.pageBg());
@@ -2312,7 +2300,7 @@ struct Index {
         Button() {
           Image(this.dark ? $r('app.media.ic_back_light') : $r('app.media.ic_back')).width(22).height(22);
         }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
+        .width(44).height(44).borderRadius(12).backgroundColor(this.surface())
         .border({ width: 1, color: this.line() }).onClick(() => {
           this.stopRoomProgressPoll();
           this.selectedId = '';
@@ -2328,40 +2316,40 @@ struct Index {
               .fontColor(this.streamStatus === 'connected' ? '#24B47E' : this.muted()).maxLines(1);
           }.alignItems(HorizontalAlign.Start).layoutWeight(1);
         }
-        .height(48).padding({ left: 12, right: 16 }).borderRadius(24)
-        .backgroundColor(this.dark ? '#242424' : '#FFFFFF').border({ width: 1, color: this.line() })
+        .height(44).padding({ left: 10, right: 14 }).borderRadius(12)
+        .backgroundColor(this.surface()).border({ width: 1, color: this.line() })
         .layoutWeight(1);
         Button() {
           Image(this.dark ? $r('app.media.ic_more_light') : $r('app.media.ic_more')).width(22).height(22);
         }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
+        .width(44).height(44).borderRadius(12).backgroundColor(this.surface())
         .border({ width: 1, color: this.line() })
         .onClick(() => this.getUIContext().getPromptAction().showToast({ message: '长按会话可在设置中管理置顶与隐藏', duration: 1800 }));
-      }.width('100%').height(72).padding({ left: 20, right: 20, top: 12, bottom: 12 });
+      }.width('100%').height(68).padding({ left: 16, right: 16, top: 12, bottom: 10 })
+        .backgroundColor(this.surface()).border({ width: { bottom: 1 }, color: this.line() });
       if (this.conversationApprovals().length > 0) {
         this.chatApprovals();
       }
-      Scroll(this.scroller) {
-        Column() {
-          this.earlierMessagesButton();
+      ChatMessageList({
+        scroller: this.scroller,
+        messages: this.messages,
+        busy: this.busy,
+        compact: true,
+        spinnerColor: this.tokens().brand,
+        muted: this.muted(),
+        desktopInset: false,
+        earlierButton: (): void => { this.earlierMessagesButton(); },
+        questions: (): void => {
           if (this.conversationQuestions().length > 0) {
             this.chatQuestions();
           }
-          if (this.messages.length === 0) {
-            Text('还没有消息，向这个 Bot 打个招呼吧。')
-              .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
-          }
-          ForEach(this.messages, (message: Message) => {
-            this.messageBubble(message);
-          }, (message: Message) => message.id);
-          if (this.busy) {
-            Row({ space: 10 }) {
-              LoadingProgress().width(22).height(22).color('#4D6BFE');
-              Text('Bot 正在主机上工作…').fontSize(13).fontColor(this.muted());
-            }.padding(18).width('100%');
-          }
-        }.width('100%').padding({ top: 8, bottom: 8 });
-      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
+        },
+        emptyState: (): void => {
+          Text('还没有消息，向这个 Bot 打个招呼吧。')
+            .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
+        },
+        messageItem: (message: Message): void => { this.messageBubble(message); }
+      })
       this.groupProgress();
       if (this.queue.length > 0) {
         this.queuePanel();
@@ -2370,130 +2358,101 @@ struct Index {
         this.mentionMenu();
         this.composerAccessories();
       }.width('100%').padding({ left: 20, right: 20 });
-      Row({ space: 10 }) {
-        Button() {
-          Image(this.dark ? $r('app.media.ic_plus_light') : $r('app.media.ic_plus')).width(24).height(24);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor(this.dark ? '#242424' : '#FFFFFF')
-        .border({ width: 1, color: this.line() })
-        .bindMenu(this.composerMenu());
-        TextArea({
-          placeholder: `向 ${this.selectedConversation()?.name ?? 'Bot'} 提问`,
-          text: this.composerText(),
-          controller: this.composerController
-        })
-          .layoutWeight(1).height(48).maxLength(this.composerMaxLength()).fontSize(16).fontColor(this.ink())
-          .backgroundColor(this.dark ? '#202022' : '#FFFFFF').borderRadius(24)
-          .border({ width: 1, color: this.line() }).padding({ left: 14, right: 14, top: 10, bottom: 8 })
-          .onChange((value: string) => {
-            this.setComposerText(value);
-          })
-          .onEditChange((editing: boolean) => this.composerFocused = editing)
-          .onTextSelectionChange((start: number, end: number) => {
-            this.composerSelectionStart = start;
-            this.composerSelectionEnd = end;
-          });
-        Button() {
-          Image($r('app.media.ic_send')).width(22).height(22);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor('#4D6BFE')
-        .opacity(!this.busy && this.draft.trim().length > 0 && this.online ? 1 : 0.38)
-        .enabled(!this.busy && this.draft.trim().length > 0 && this.online)
-        .onClick(() => void this.send());
-      }
-      .width('100%').padding({ left: 20, right: 20, top: 10, bottom: 10 })
-      .backgroundColor(this.dark ? '#121212' : '#FFFFFF');
-    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FFFFFF');
+      ChatComposer({
+        tokens: {
+          fieldBg: this.surface(), ink: this.ink(),
+          barBg: this.surface(), line: this.line(), sendBg: this.tokens().brand
+        },
+        placeholder: `向 ${this.selectedConversation()?.name ?? 'Bot'} 提问`,
+        text: this.composerText(),
+        maxLength: this.composerMaxLength(),
+        controller: this.composerController,
+        canSend: !this.busy && this.draft.trim().length > 0 && this.online,
+        showAttach: true,
+        attachIcon: this.dark ? $r('app.media.ic_plus_light') : $r('app.media.ic_plus'),
+        attachBordered: true,
+        attachBg: this.surface(),
+        mobileSendStyle: true,
+        horizontalPadding: 20,
+        showTopBorder: false,
+        attachMenu: this.composerMenu(),
+        onTextChange: (value: string): void => this.setComposerText(value),
+        onEditChange: (editing: boolean): void => { this.composerFocused = editing; },
+        onSelectionChange: (start: number, end: number): void => {
+          this.composerSelectionStart = start;
+          this.composerSelectionEnd = end;
+        },
+        onSend: (): void => void this.send()
+      })
+      .width('100%').backgroundColor(this.surface());
+    }.width('100%').height('100%').backgroundColor(this.pageBg());
+  }
+
+  /** Bot 卡片视图模型（父组件解析，保证头像只有 BotAvatar 一处实现）。 */
+  private botCards(): BotCard[] {
+    const cards: BotCard[] = [];
+    for (const bot of this.team.bots) {
+      cards.push({
+        id: bot.id,
+        name: bot.name,
+        role: bot.role ?? 'Bot',
+        avatar: {
+          shape: bot.avatar?.shape ?? '',
+          color: bot.avatar?.color ?? bot.color ?? '',
+          image: '',
+          main: this.isMainBotId(bot.id),
+          live: bot.waiting === true
+        },
+        main: this.isMainBotId(bot.id),
+        waiting: bot.waiting === true
+      });
+    }
+    return cards;
   }
 
   @Builder
   private teamPage() {
-    Scroll() {
-      Column({ space: 18 }) {
-        Row() {
-          if (this.windowWidth < 600) {
-            Button() {
-              Image($r('app.media.ic_close')).width(22).height(22);
-            }
-            .width(48).height(48).margin({ right: 14 }).borderRadius(24).backgroundColor('#FFFFFF')
-            .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.section = 'chat');
-          }
-          Column({ space: 3 }) {
-            Text(this.windowWidth < 600 ? 'Bot 与群聊' : 'Bot 团队')
-              .fontSize(this.windowWidth < 600 ? 22 : 28).fontWeight(FontWeight.Bold).fontColor(this.ink());
-            Text(`${this.team.bots.length} 个 Bot · ${this.team.rooms.length} 个群聊`)
-              .fontSize(13).fontColor(this.muted());
-          }.alignItems(HorizontalAlign.Start).layoutWeight(1);
-          this.statusPill();
-        }.width('100%');
-        if (this.team.readOnly !== undefined) {
-          Text(this.team.readOnly).fontSize(13).fontColor('#C77A28').width('100%')
-            .padding(12).backgroundColor('#FFF4E5').borderRadius(12);
-        }
-        Grid() {
-          ForEach(this.team.bots, (bot: Bot) => {
-            GridItem() {
-              Column({ space: 10 }) {
-                // 团队页 Bot 卡片：同样改用矢量头像（曾经是 `Circle` + 首字母占位）
-                this.botAvatar(bot, bot.name, 54, this.isMainBotId(bot.id), bot.waiting === true);
-                Text(bot.name).fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.ink()).maxLines(1);
-                Text(bot.role ?? 'Bot').fontSize(12).fontColor(this.muted()).maxLines(2);
-                if (bot.waiting) Text('等待中').fontSize(11).fontColor('#C77A28');
-              }
-              .width('100%').height(150).justifyContent(FlexAlign.Center)
-              .padding(14).backgroundColor(this.surface()).borderRadius(18)
-              .onClick(() => {
-                const item = this.conversations.find((value: Conversation) =>
-                  value.id === bot.id || value.id === `bot:${bot.id}` || value.sessionId === bot.sessionId);
-                if (item !== undefined) {
-                  this.section = 'chat';
-                  void this.selectConversation(item);
-                }
-              });
-            }
-          }, (bot: Bot) => bot.id);
-        }
-        .columnsTemplate(this.windowWidth >= 1200 ? '1fr 1fr 1fr 1fr' : this.windowWidth >= 700 ? '1fr 1fr 1fr' : '1fr 1fr')
-        .columnsGap(12).rowsGap(12).width('100%');
-        Column({ space: 12 }) {
-          Text('创建 Bot').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
-          Row({ space: 10 }) {
-            TextInput({ placeholder: 'Bot 名称', text: this.newBotName })
-              .layoutWeight(1).height(46).backgroundColor(this.pageBg()).borderRadius(14)
-              .fontColor(this.ink()).onChange((value: string) => this.newBotName = value);
-            Button('创建').height(44).borderRadius(22).backgroundColor('#665CF6')
-              .enabled(!this.busy && this.online && this.newBotName.trim().length > 0)
-              .onClick(() => void this.createBot());
-          }.width('100%');
-        }.width('100%').padding(18).backgroundColor(this.surface()).borderRadius(18);
-        Column({ space: 12 }) {
-          Text('创建群聊').fontSize(19).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
-          Text('选择至少两个 Bot，第一个成员将成为管理员。').fontSize(12).fontColor(this.muted()).width('100%');
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.team.bots, (bot: Bot) => {
-              Button(bot.name).height(36).margin({ right: 8, bottom: 8 }).borderRadius(18)
-                .backgroundColor(this.selectedMembers.includes(bot.id) ? '#665CF6' : this.pageBg())
-                .fontColor(this.selectedMembers.includes(bot.id) ? '#FFFFFF' : this.ink())
-                .onClick(() => this.toggleMember(bot.id));
-            }, (bot: Bot) => bot.id);
-          }.width('100%');
-          Row({ space: 10 }) {
-            TextInput({ placeholder: '群聊名称', text: this.newGroupName })
-              .layoutWeight(1).height(46).backgroundColor(this.pageBg()).borderRadius(14)
-              .fontColor(this.ink()).onChange((value: string) => this.newGroupName = value);
-            Button('创建').height(44).borderRadius(22).backgroundColor('#665CF6')
-              .enabled(!this.busy && this.online && this.newGroupName.trim().length > 0 && this.selectedMembers.length >= 2)
-              .onClick(() => void this.createGroup());
-          }.width('100%');
-        }.width('100%').padding(18).backgroundColor(this.surface()).borderRadius(18);
-      }
-      .width('100%').constraintSize({ maxWidth: 1100 }).padding(22).alignSelf(ItemAlign.Center);
-    }.layoutWeight(1).height('100%').backgroundColor(this.pageBg());
+    // 页面本体已抽到 view/TeamPage.ets
+    TeamPage({
+      theme: {
+        pageBg: this.pageBg(), surface: this.surface(), ink: this.ink(), muted: this.muted(),
+        fieldBg: this.dark ? '#222C3A' : '#F3F5F9', brand: this.tokens().brand, onBrand: '#FFFFFF',
+        warning: this.tokens().warning, warningBg: this.tokens().warningBg, chipBorder: this.line()
+      },
+      compact: this.windowWidth < 600,
+      columnsTemplate: this.teamColumnsTemplate(),
+      bots: this.botCards(),
+      roomCount: this.team.rooms.length,
+      readOnlyNotice: this.team.readOnly ?? '',
+      newBotName: this.newBotName,
+      newGroupName: this.newGroupName,
+      selectedMemberIds: this.selectedMembers,
+      busy: this.busy,
+      online: this.online,
+      statusLabel: this.online ? '已连接' : '离线',
+      statusOnline: this.online,
+      onClose: (): void => { this.section = 'chat'; },
+      onOpenBot: (card: BotCard): void => this.openBotCard(card),
+      onBotNameChange: (value: string): void => { this.newBotName = value; },
+      onCreateBot: (): void => void this.createBot(),
+      onToggleMember: (botId: string): void => this.toggleMember(botId),
+      onGroupNameChange: (value: string): void => { this.newGroupName = value; },
+      onCreateGroup: (): void => void this.createGroup()
+    });
+  }
+
+  /** 团队卡片按实际内容区宽度分栏，不能用整窗宽度（折叠屏左栏会占掉近一半）。 */
+  private teamColumnsTemplate(): string {
+    if (this.windowWidth < 600) return '1fr 1fr';
+    const contentWidth = this.windowWidth - this.sideBarWidth;
+    if (contentWidth >= 900) return '1fr 1fr 1fr';
+    if (contentWidth >= 560) return '1fr 1fr';
+    return '1fr';
   }
 
   @Builder
   private settingsPage() {
-    Scroll() {
+    Scroll(this.settingsScroller) {
       Column({ space: 16 }) {
         Text('设置').fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.ink()).width('100%');
         Column({ space: 12 }) {
@@ -2504,14 +2463,14 @@ struct Index {
             }.alignItems(HorizontalAlign.Start).layoutWeight(1);
             this.statusPill();
           }.width('100%');
-          Button('立即刷新').width('100%').height(44).borderRadius(22).backgroundColor('#665CF6')
+          Button('立即刷新').width('100%').height(42).borderRadius(10).backgroundColor(this.tokens().brand)
             .onClick(() => void this.refreshAll());
         }.width('100%').padding(18).backgroundColor(this.surface()).borderRadius(18);
         Column({ space: 12 }) {
           Text('外观').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
           Row() {
             Text('深色模式').fontSize(15).fontColor(this.ink()).layoutWeight(1);
-            Toggle({ type: ToggleType.Switch, isOn: this.dark }).onChange((value: boolean) => this.dark = value);
+            Toggle({ type: ToggleType.Switch, isOn: this.dark }).onChange((value: boolean) => this.toggleDark(value));
           }.width('100%');
         }.width('100%').padding(18).backgroundColor(this.surface()).borderRadius(18);
         Column({ space: 12 }) {
@@ -2524,7 +2483,7 @@ struct Index {
               Text(approval.toolName).fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.ink()).width('100%');
               Text(approval.reason ?? '主机请求批准此工具操作').fontSize(12).fontColor(this.muted()).width('100%');
               Row({ space: 8 }) {
-                Button('允许一次').height(36).borderRadius(18).backgroundColor('#665CF6')
+                Button('允许一次').height(36).borderRadius(10).backgroundColor(this.tokens().brand)
                   .onClick(() => void this.resolveApproval(approval.id, 'allowed-once'));
                 Button('拒绝').height(36).borderRadius(18).backgroundColor('#FDECEC').fontColor('#C93C3C')
                   .onClick(() => void this.resolveApproval(approval.id, 'rejected'));
@@ -2541,7 +2500,7 @@ struct Index {
             Row({ space: 10 }) {
               Text(device.deviceName ?? device.name ?? device.id).fontSize(14).fontColor(this.ink()).layoutWeight(1);
               if (device.id === this.profile?.session.deviceId) {
-                Text('本机').fontSize(12).fontColor('#665CF6');
+                Text('本机').fontSize(12).fontColor(this.tokens().brand);
               } else {
                 // 确认交给原生 showDialog（见 confirmDestructive），按钮不再承担确认态
                 Button('移除')
@@ -2558,7 +2517,7 @@ struct Index {
         Text('DS Bot Harmony 0.1.0 · HarmonyOS 6.0+').fontSize(12).fontColor(this.muted());
       }
       .width('100%').constraintSize({ maxWidth: 760 }).padding(22).alignSelf(ItemAlign.Center);
-    }.layoutWeight(1).height('100%').backgroundColor(this.pageBg());
+    }.id('desktop-settings-page').layoutWeight(1).height('100%').backgroundColor(this.pageBg());
   }
 
   @Builder
@@ -2572,13 +2531,13 @@ struct Index {
         approvals: this.approvals
       } as SettingsView,
       tokens: {
-        pageBg: this.dark ? '#121212' : '#FFFFFF',
-        rowBg: this.dark ? '#202022' : '#F1F1F1',
+        pageBg: this.pageBg(),
+        rowBg: this.surface(),
         ink: this.ink(), muted: this.muted(), line: this.tokens().line,
-        dangerBg: '#FDECEC', danger: '#C93C3C', brand: '#4D6BFE'
+        dangerBg: this.tokens().dangerBg, danger: this.tokens().danger, brand: this.tokens().brand
       } as SettingsTheme,
       onClose: (): void => { this.section = 'chat'; },
-      onToggleDark: (value: boolean): void => { this.dark = value; },
+      onToggleDark: (value: boolean): void => { this.toggleDark(value); },
       onOpenTools: (): void => { this.mobileOverlay = 'tools'; },
       onOpenTeam: (): void => { this.section = 'team'; },
       onOpenProbe: (): void => { this.showProbe = true; },
@@ -2612,89 +2571,39 @@ struct Index {
     .width(size + 40).alignItems(HorizontalAlign.Center)
   }
 
-  @Builder
+    @Builder
   private mobileCreateBotPage() {
-    Column() {
-      Row() {
-        Button() {
-          Image($r('app.media.ic_close')).width(22).height(22);
-        }
-        .width(48).height(48).borderRadius(24).backgroundColor('#FFFFFF')
-        .border({ width: 1, color: '#E5E5E5' }).onClick(() => this.mobileOverlay = '');
-        Text('创建新 Bot').fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.ink()).layoutWeight(1)
-          .textAlign(TextAlign.Center);
-        Blank().width(48);
-      }.width('100%').height(76).padding({ left: 20, right: 20, top: 12, bottom: 16 });
-
-      Scroll() {
-        Column({ space: 28 }) {
-          this.botAvatarPreview(126);
-          TextInput({ placeholder: '为 Bot 取个名字', text: this.newBotName })
-            .width('100%').height(64).fontSize(20).fontWeight(FontWeight.Medium).textAlign(TextAlign.Center)
-            .fontColor(this.ink()).backgroundColor(this.dark ? '#202022' : '#EFEFEF').borderRadius(18)
-            .onChange((value: string) => this.newBotName = value);
-
-          Text('选择形状').fontSize(14).fontColor(this.muted()).width('100%');
-          // 形状网格：直接渲染矢量预览，颜色随当前选择实时变化（旧版是 13 张固定配色 PNG）。
-          Grid() {
-            ForEach(this.avatarShapes(), (shape: string) => {
-              GridItem() {
-                Stack() {
-                  BotAvatarView({
-                    shape: shape,
-                    color: this.newBotColor,
-                    avatarSize: 40,
-                    image: ''
-                  });
-                }
-                .width(56).height(52)
-                .borderRadius(12)
-                .border({ width: this.newBotShape === shape ? 2 : 0, color: '#4D6BFE' })
-                .onClick(() => this.newBotShape = shape);
-              }
-            }, (shape: string) => shape)
-          }
-          .columnsTemplate('1fr 1fr 1fr 1fr 1fr')
-          .columnsGap(6).rowsGap(6).width('100%').height(240);
-
-          Text('选择颜色').fontSize(14).fontColor(this.muted()).width('100%');
-          // 色板：颜色取自矢量头像的 inks 表（12 色，含上游的 aurora）。
-          Grid() {
-            ForEach(this.avatarColors(), (color: string) => {
-              GridItem() {
-                Column({ space: 2 }) {
-                  Stack() {
-                    BotAvatarView({ shape: this.newBotShape, color: color, avatarSize: 34, image: '' });
-                  }
-                  .width(48).height(40)
-                  .borderRadius(10)
-                  .border({ width: this.newBotColor === color ? 2 : 0, color: '#4D6BFE' });
-                  Text(color).fontSize(9).fontColor(this.muted()).maxLines(1);
-                }
-                .onClick(() => this.newBotColor = color);
-              }
-            }, (color: string) => color)
-          }
-          .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr')
-          .columnsGap(4).rowsGap(6).width('100%').height(150);
-
-          Button(this.busy ? '正在创建…' : '创建 Bot').width('100%').height(54).borderRadius(27)
-            .margin({ top: 12, bottom: 18 }).backgroundColor('#4D6BFE').fontSize(17)
-            .enabled(!this.busy && this.online && this.newBotName.trim().length > 0)
-            .onClick(() => void this.createBot());
-        }.width('100%').padding({ left: 24, right: 24, top: 32, bottom: 30 });
-      }.layoutWeight(1).width('100%').scrollBar(BarState.Off);
-    }.width('100%').height('100%').backgroundColor(this.dark ? '#121212' : '#FAFAFA');
+    // 页面本体已抽到 view/MobileCreateBotPage.ets
+    MobileCreateBotPage({
+      ink: this.ink(), muted: this.muted(),
+      pageBg: this.pageBg(),
+      fieldBg: this.dark ? '#222C3A' : '#F3F5F9',
+      cardBg: this.surface(), edgeColor: this.line(), brand: this.tokens().brand,
+      title: '创建新 Bot',
+      namePlaceholder: '为 Bot 取个名字',
+      name: this.newBotName,
+      shape: this.newBotShape,
+      color: this.newBotColor,
+      shapes: this.avatarShapes(),
+      colors: this.avatarColors(),
+      busy: this.busy,
+      online: this.online,
+      onClose: (): void => { this.mobileOverlay = ''; },
+      onNameChange: (value: string): void => { this.newBotName = value; },
+      onShapeChange: (value: string): void => { this.newBotShape = value; },
+      onColorChange: (value: string): void => { this.newBotColor = value; },
+      onSubmit: (): void => void this.createBot(),
+      preview: (): void => { this.botAvatarPreview(126); }
+    });
   }
-
   private secondaryTokens(): SecondaryPageTheme {
     return {
-      pageBg: this.dark ? '#121212' : '#FFFFFF',
-      rowBg: this.dark ? '#202022' : '#F1F1F1',
-      chipBg: this.dark ? '#202022' : '#FFFFFF',
-      chipLine: this.dark ? '#2B2B2D' : '#E5E5E5',
+      pageBg: this.pageBg(),
+      rowBg: this.surface(),
+      chipBg: this.surface(),
+      chipLine: this.line(),
       ink: this.ink(), muted: this.muted(), line: this.line(),
-      brand: '#4D6BFE', brandSoft: this.dark ? '#25304F' : '#E8EDFF'
+      brand: this.tokens().brand, brandSoft: this.dark ? '#25304F' : '#EEF2FF'
     };
   }
 
@@ -2710,7 +2619,6 @@ struct Index {
 
 
 
-  @Builder
   @Builder
   private mobileCapabilitiesPage() {
     CapabilitiesPage({
@@ -2762,10 +2670,18 @@ struct Index {
 
   build() {
     Stack() {
+      // 仅把当前页面的语义背景延伸进系统安全区，内容仍保持系统默认避让。
+      // 聊天页衔接顶栏/输入栏，其余页面衔接页面底色。
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.systemChromeBg())
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM]);
+
       if (!this.ready) {
         Column({ space: 14 }) {
           this.appMark(64);
-          LoadingProgress().width(28).height(28).color('#665CF6');
+          LoadingProgress().width(28).height(28).color(this.tokens().brand);
           Text('正在准备 DS Bot…').fontSize(14).fontColor(this.muted());
         }.width('100%').height('100%').justifyContent(FlexAlign.Center);
       } else if (!this.paired) {

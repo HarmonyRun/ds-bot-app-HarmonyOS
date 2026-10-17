@@ -5,7 +5,7 @@
 > - 规划：`docs/translation-plan.md`（P0–P3 全部工作包、验收标准、风险）
 > - P0 交接报告：`docs/handoff-p0.md`（改了什么、为什么、怎么验证、还差什么）
 
-最后更新：2026-10-16（原作者鲸鱼应用图标 + 折叠屏侧栏导航图标统一）
+最后更新：2026-10-17（第二套「专业协作工作台」跨设备 UI 优化）
 
 ---
 
@@ -17,6 +17,15 @@
 | **P1** | 视觉与交互对齐 | 🟡 **P1-1～P1-7 完成（P1-6/P1-7 已有运行时证据）；P1-8 仅缺 Foldable/Tablet/2in1 与深色模式截图** | [handoff-p1.md](../handoff-p1.md)、[P1-5](../handoff-p1-5.md)、[P1-6](../handoff-p1-6.md)、[P1-7](../handoff-p1-7.md)、[P1-8](../handoff-p1-8.md) |
 | P2 | 设置与管理 | ⬜ 未开始 | — |
 | P3 | 扩展层 | ⬜ 未开始 | — |
+
+## 专业协作工作台 UI（2026-10-17）
+
+- 用户选定第二套效果图，已将其落到手机、折叠屏、平板和 PC 响应式结构。
+- 统一瓷白 / 深海军蓝 / 钴蓝视觉令牌，重做手机首页、宽屏侧栏、消息气泡、输入栏、团队页、设置页、配对页和创建 Bot 页。
+- PC `>=1200vp` 新增任务与活动上下文栏；折叠屏和平板保持更克制的两/三栏结构。
+- 团队栅格改为按实际内容区宽度计算，修复折叠屏 Bot 信息被挤掉的问题。
+- 折叠屏会话、团队、设置布局扫描均为 0 越界；103 项测试和签名 HAP 构建通过。
+- 完整交接：[handoff-ui-professional.md](../handoff-ui-professional.md)。
 
 图例：⬜ 未开始 · 🟡 进行中 · ✅ 完成
 
@@ -67,6 +76,25 @@
 
 主机侧配置已加入鸿蒙 WebSocket 的 Origin（`~/.dsh/profiles/desktop/cordis.patch.yml` 的 `mobile.allowedOrigins`）。
 重启 DSH 后生效；诊断页与聊天标题会显示「实时已连接」。详情见 P1 报告 §3.1。
+
+---
+
+## 溢出问题的最终状态（2026-10-16）
+
+表格、代码块、嵌套列表、引用、工具卡的越出**已收口**。根因是两类固定缺陷：
+
+1. 给**有确定宽度的父容器**里的元素传了「手算的固定文字宽度」→ 撑破父容器；
+2. 嵌套容器**每层少扣一次缩进** → 逐层累积越出。
+
+**规则（新增 UI 时按此写）**：
+- 元素在**有确定宽度**的父容器里 → 用 `width('100%')`，不要手算数值；
+- 元素在**只有 maxWidth 的容器**里、且自己会按内容测量（`Scroll`/`Flex`）→ 必须传确定数值；
+- **行内文字**（列表/引用）需要数值来扣缩进与符号位，但要**留足余量**（推导不可靠，实测收敛）。
+
+**验收方法**（此前失效过，务必用这个）：
+- 逐节点比对「**最近更窄祖先**」，而不是只看紧邻容器（父子一起越界时会漏检）；
+- **扫完整个会话**再看结果，不要只看当前一屏；
+- 脚本：`docs/qa/p1/sweep_message_area.sh` 采集，`check_text_bounds.py` 校验。
 
 ---
 
@@ -171,9 +199,28 @@ P0 时的 Origin 白名单阻塞已在 P1 通过主机 `mobile.allowedOrigins` �
 | `view/ChatApprovals.ets` | 审批卡（回调交回，不接触 API） |
 | `view/ToolCard.ets` | 工具卡（展开态整体迁移） |
 | `view/QuestionCard.ets` | 提问卡（每卡自持草稿，消掉父组件 map） |
+| `view/TeamPage.ets` | Bot 团队页（父算子视图模型 + 回调） |
+| `view/MobileHome.ets` | 手机首页（入口 + 主 Bot 大头像 + 会话列表） |
+| `view/MobileCreateBotPage.ets` | 创建 Bot 整页（矢量形状/色板实时预览） |
+| `view/PairingPage.ets` | 配对页（自持表单状态，品牌标记由父注入） |
+| `view/ChatMessageList.ets` | 消息滚动区（`@BuilderParam` 注入插槽，两面板共用） |
+| `view/ChatComposer.ets` | 聊天输入栏（两面板共用） |
+| `view/SecondaryPages.ets` | 工具与技能 / 能力库两个二级页 |
+| `view/DesktopSidebar.ets` | 宽屏左栏（导航 + 会话列表） |
+| `view/ConversationAvatarView.ets` | 会话头像（复用 ConversationAvatar 纯逻辑） |
+| `view/ChatComposer.ets` | 聊天输入栏（两个面板共用一份） |
+| `view/AppMark.ets` | 应用标记（品牌图单点实现） |
 
 四个卡片组件都在设备上用 mock 场景验过渲染与回调（`queue-remove` / `approval-resolve` /
 工具卡展开 / `answer-question`）。剩余页面级结构约 600 行需先做状态容器，见 P1 报告 §9.5。
+
+### 2026-10-17 系统安全区视觉修复
+
+- 已用窗口原生 `setWindowSystemBarProperties` 统一顶部状态栏、底部导航栏与应用主题配色；
+- 已用 ArkUI `expandSafeArea` 只延伸背景层，内容仍由系统安全区避让；
+- 深色模式切换会同步系统栏背景与图标明暗；
+- 手机、折叠屏模拟器覆盖安装验证完成，ArkTS 构建成功，纯逻辑测试 103/103 通过；
+- 详细前后对比与布局数据见 `docs/handoff-ui-professional.md` 的“顶部与底部留白修复”。
 
 ---
 

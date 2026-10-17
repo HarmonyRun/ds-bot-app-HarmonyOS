@@ -85,13 +85,14 @@ export struct ToolCard {
     .border({ width: 1, color: this.tokens.line });
   }
 
-  /** 卡片宽度：优先用父组件给的确定值；未传时退回内容自适应。 */
-  private cardWidth(): number {
-    return this.maxWidth > 0 ? this.maxWidth : 0;
+  /** 卡片宽度：给了确定值就用它，否则填满父容器（气泡已有确定宽度）。 */
+  private cardWidth(): Length {
+    return this.maxWidth > 0 ? this.maxWidth : '100%';
   }
 
-  /** 卡片内文本可用宽度 = 卡片宽度 − 两侧内边距(12*2)。 */
-  private innerWidth(): number {
+  /** 卡片内文本可用宽度：未指定时同样填满父容器。 */
+  private innerWidth(): Length {
+    if (this.maxWidth <= 0) return '100%';
     const width = this.maxWidth - 24;
     return width > 60 ? width : 60;
   }
