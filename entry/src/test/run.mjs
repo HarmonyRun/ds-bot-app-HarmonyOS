@@ -54,6 +54,20 @@ const modules = [
   ['entry/src/main/ets/logic/Efforts.ets', 'logic/Efforts.ts'],
   ['entry/src/main/ets/logic/ConversationAvatar.ets', 'logic/ConversationAvatar.ts'],
   ['entry/src/main/ets/logic/ViewUtil.ets', 'logic/ViewUtil.ts'],
+  ['entry/src/main/ets/logic/CredentialCodec.ets', 'logic/CredentialCodec.ts'],
+  ['entry/src/main/ets/logic/Usage.ets', 'logic/Usage.ts'],
+  ['entry/src/main/ets/logic/Schedules.ets', 'logic/Schedules.ts'],
+  ['entry/src/main/ets/logic/Memory.ets', 'logic/Memory.ts'],
+  ['entry/src/main/ets/logic/Rooms.ets', 'logic/Rooms.ts'],
+  ['entry/src/main/ets/logic/Bots.ets', 'logic/Bots.ts'],
+  ['entry/src/main/ets/logic/Capabilities2.ets', 'logic/Capabilities2.ts'],
+  ['entry/src/main/ets/logic/Export.ets', 'logic/Export.ts'],
+  ['entry/src/main/ets/logic/Agents.ets', 'logic/Agents.ts'],
+  ['entry/src/main/ets/logic/Connectors.ets', 'logic/Connectors.ts'],
+  ['entry/src/main/ets/logic/Notifications.ets', 'logic/Notifications.ts'],
+  ['entry/src/main/ets/logic/Attachments.ets', 'logic/Attachments.ts'],
+  ['entry/src/main/ets/service/Projection.ets', 'service/Projection.ts'],
+  ['entry/src/main/ets/service/Wire.ets', 'service/Wire.ts'],
   ['entry/src/main/ets/view/AvatarData.ets', 'view/AvatarData.ts']
 ];
 // 注意：AvatarData.ets 由队友创建；若文件尚不存在，删掉上面这一行即可。
@@ -69,6 +83,7 @@ function prepare(from, toName, options = {}) {
     text = text.replace(/from\s+['"]\.\.\/main\/ets\/logic\/([\w$]+)['"]/g, "from '../logic/$1'");
     text = text.replace(/from\s+['"]\.\.\/main\/ets\/model\/([\w$]+)['"]/g, "from '../model/$1'");
     text = text.replace(/from\s+['"]\.\.\/main\/ets\/view\/([\w$]+)['"]/g, "from '../view/$1'");
+    text = text.replace(/from\s+['"]\.\.\/main\/ets\/service\/([\w$]+)['"]/g, "from '../service/$1'");
   }
   const destination = join(srcDir, toName);
   mkdirSync(dirname(destination), { recursive: true });

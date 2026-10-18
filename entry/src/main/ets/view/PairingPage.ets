@@ -1,7 +1,10 @@
 /**
  * 配对页（抽自 `Index.ets` 的 `pairingPage`）。
  *
- * 首次启动、尚未配对时显示：品牌标记 + 说明 + 配对 JSON 输入 + 设备名 + 连接按钮。
+ * 首次启动、尚未配对时显示：品牌标记 + **扫码连接** + 配对 JSON 输入 + 设备名 + 连接按钮。
+ *
+ * 扫码优先：电脑端显示的配对 JSON 可生成二维码，手机直接扫即可，
+ * 省掉在手机上粘贴长 JSON 的步骤（过去用 `uitest inputText` 连测试都会被引号搅乱）。
  *
  * 设计：**自持表单状态**。
  * `pairingJson` / `deviceName` 只服务于这一页，搬进组件后 `Index` 少两个 `@State`；
@@ -34,6 +37,11 @@ export struct PairingPage {
   @Prop submitLabel: string = '连接我的主机';
   @Prop busyLabel: string = '等待电脑批准…';
   @Prop footer: string = '连接信息和会话凭据仅保存在本机应用沙箱中。';
+  /** 扫码按钮文案 */
+  @Prop scanLabel: string = '扫码连接主机';
+  @Prop scanHint: string = '在电脑端打开 DS Bot 设置 → 移动设备，用手机扫描屏幕上的二维码';
+  /** 是否支持扫码（无相机/低版本设备可关闭） */
+  @Prop scanEnabled: boolean = true;
 
   /** 初始值（父组件可能预填） */
   @Prop initialJson: string = '';
@@ -44,6 +52,8 @@ export struct PairingPage {
 
   /** 提交：把这一页的两个输入交回父组件 */
   onSubmit: (json: string, deviceName: string) => void = (): void => {};
+  /** 点击扫码：由父组件调用原生 ScanKit（组件不直接依赖 HMS，便于测试与降级） */
+  onScan: () => void = (): void => {};
 
   @State private json: string = '';
   @State private deviceName: string = '';
@@ -81,6 +91,25 @@ export struct PairingPage {
       Text(this.cardTitle).fontSize(21).fontWeight(FontWeight.Medium)
         .fontColor(this.theme.ink).width('100%');
       Text(this.cardHint).fontSize(14).lineHeight(21).fontColor(this.theme.muted);
+      if (this.scanEnabled) {
+        Button() {
+          Row({ space: 8 }) {
+            Image($r('app.media.ic_scan')).width(20).height(20);
+            Text(this.scanLabel).fontSize(16).fontWeight(FontWeight.Medium)
+              .fontColor('#FFFFFF');
+          }
+        }
+        .width('100%').height(50).borderRadius(14).backgroundColor(this.theme.brand)
+        .enabled(!this.busy)
+        .onClick(() => this.onScan());
+        Text(this.scanHint).fontSize(12).lineHeight(18)
+          .fontColor(this.theme.muted).textAlign(TextAlign.Center).width('100%');
+        Row({ space: 10 }) {
+          Divider().color(this.theme.pageBg).layoutWeight(1);
+          Text('或手动粘贴').fontSize(12).fontColor(this.theme.muted);
+          Divider().color(this.theme.pageBg).layoutWeight(1);
+        }.width('100%').alignItems(VerticalAlign.Center);
+      }
       TextArea({ placeholder: this.jsonPlaceholder, text: this.json })
         .height(120).fontSize(14).fontColor(this.theme.ink).backgroundColor(this.theme.pageBg)
         .borderRadius(10).padding(12).border({ width: 1, color: this.theme.pageBg })

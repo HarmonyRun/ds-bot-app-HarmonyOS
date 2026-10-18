@@ -1003,6 +1003,1295 @@ web_search 父 Row bounds=(164, 2032, 1156, 2113)  → 右边界 1156，超出 1
 `groupProgress` 实测确认：54 行里只有一层 `if` + 一个组件调用，数据全在父组件算好——
 **再包装一次没有收益**，因此不动。
 
+第二十步：**扫码连接主机**（用户需求），使用鸿蒙原生 ScanKit。
+
+#### 原来是什么样
+
+配对只能在手机上**粘贴完整配对 JSON**。这个 JSON 很长且含引号，在手机上复制粘贴很别扭
+（连自动化测试都踩过坑：`uitest uiInput inputText` 会把 JSON 的引号搅乱成乱码）。
+
+#### 做了什么
+
+**App 侧**（`view/PairingPage.ets` + `pages/Index.ets`）：
+
+- 配对页主按钮区新增「**扫码连接主机**」（钴蓝整宽按钮 + 矢量扫码图标 `ic_scan.svg`）；
+- 下方补「或手动粘贴」分隔线，保留原 JSON 输入路径（扫码不是唯一方式）；
+- `Index.scanPairingCode()` 调用**鸿蒙原生 ScanKit**：
+
+```ts
+import { scanBarcode, scanCore } from '@kit.ScanKit';
+const result = await scanBarcode.startScanForResult(context, {
+  scanTypes: [scanCore.ScanType.QR_CODE],
+  enableAlbum: true
+});
+```
+
+设计取舍：
+- **不自己接相机解码**——`startScanForResult` 拉起系统扫码 UI，自带对焦/手电/图库，
+  本应用**无需申请相机权限**，也不必自己处理解码；
+- `enableAlbum: true` 允许从相册选图识别，用户可用截图完成配对；
+- 扫到的内容先经 `isPairingJson()` 粗校验，合格才自动走既有 `pair()` 流程；
+  不合格时**把原文留在输入框**并提示，方便用户核对而不是直接丢弃；
+- 用户取消扫码（错误码 `1000500002`）**静默处理**，不当成失败弹窗。
+
+**主机侧缺口与过渡方案**：
+
+主机桌面版目前只在「设置 → 移动设备」给出配对 JSON **文本**，不显示二维码，
+所以新增 `tools/pair_qr.py` 补上「显示」这一环：
+
+```bash
+pbpaste | python3 tools/pair_qr.py -o /tmp/pair.png && open /tmp/pair.png
+```
+
+脚本会先校验 `url`/`code`/`serverId` 三个字段，避免生成一个「扫了也没用」的二维码。
+
+#### 验证
+
+| 项 | 结果 |
+|---|---|
+| 构建 / 纯逻辑测试 | ✅ `BUILD SUCCESSFUL` / 103 passed |
+| 配对页扫码按钮渲染 | ✅ **真机** `HBP-AL00` (API 26) 显示「扫码连接主机」+ 图标 |
+| 点击拉起系统扫码 UI | ✅ 真机截图确认：`扫描二维码` 标题、系统级「安全访问相机」说明、`图库` 入口 |
+| 配对页布局越界 | ✅ 0（排除系统内部节点 `metaballNode` 后） |
+| 真机首页（新工作台） | ✅ 0 越界 |
+
+证据：`docs/qa/p1/device-real-pairing-scan.jpeg`、`device-real-home.jpeg`。
+
+> ~~未完成的一环~~ → **2026-10-17 用户真机实测：扫码配对成功**。
+> 主机端不需要内置二维码显示（用户确认此项不改），`tools/pair_qr.py` 作为正式过渡方案保留。
+
+#### 顺便确认的事
+
+真机 `2NX0224407013892`（`HBP-AL00`，API 26）可以用**现有签名包**安装运行——
+虽然签名 profile 的 UDID 白名单里没有这台设备，`hdc install` 仍然成功，
+说明该 profile 是调试类型、没有做严格设备绑定。
+
+第二十一步：**P0-10 凭据加密（HUKS）**。
+
+#### 原来是什么样（安全问题）
+
+配对成功后 `ClientProfile`（含 `accessToken` / `refreshToken`）以
+`JSON.stringify` **明文**写进 `preferences`。真机验证时直接 `cat` 就能看到：
+
+```
+<string key="profile">{"serverUrl":...,"session":{"accessToken":"Sf8toRExv...","refreshToken":"aG7ko5...}}
+```
+
+任何能读沙箱的场景（备份、调试桥）都能拿到主机访问凭证。
+
+#### 做了什么
+
+`service/CredentialCipher.ets` + 重写 `service/ProfileStore.ets` + 新增可测的
+`logic/CredentialCodec.ets`：
+
+- 在 **HUKS 密钥库**生成不可导出的 **AES-256-GCM** 密钥（`generateKeyItem`），
+  密钥材料永不出 TEE；
+- 凭据加密后只存密文，格式 `v1:<iv base64>:<密文+tag base64>`（版本前缀便于将来换算法）；
+- 每次加密用 **`cryptoFramework.createRandom()` 的密码学随机 IV**（不是 `Math.random()`）；
+- **旧数据自动迁移**：首次读取若发现旧版明文键，加密重存后删除明文键，用户无需重新配对；
+- `clear()` 额外删除 HUKS 密钥，确保旧密文即使残留也无法解；
+- 写入后**回读自校验**，确认明文键已删除（防「以为加密了、其实还是明文」）。
+
+新增纯逻辑用例 **10 条**（`credential-codec.test.ets`）：格式、版本前缀、
+旧明文识别、非法载荷、空值拒绝等。
+
+#### 真机踩坑：HUKS 参数有三处只能运行期发现
+
+编译期全部通过，真机一跑全暴露。三个错误依次修掉：
+
+| 错误码 | 现象 | 根因 | 修法 |
+|---|---|---|---|
+| `12000011` | 生成密钥就失败 | **`isKeyItemExist` 在密钥不存在时抛异常**而不是返回 false | 捕获后按「不存在」处理 |
+| `401` | 加密会话初始化失败 | 会话参数**缺 `HUKS_TAG_PURPOSE`**（生成时只声明「允许用途」） | 每次会话显式传 ENCRYPT / DECRYPT |
+| `401` | 加密成功但解密失败 | **数据放错参数**：`finishSession` 第三个参数是「精炼密钥鉴权 token」，不是数据 | 数据改走 `options.inData` |
+| `401` | 解密仍失败 | GCM 密文**末尾 16 字节是 AE tag**，必须单独经 `HUKS_TAG_AE_TAG` 传入 | 拆出 tag，`inData` 只放其余密文 |
+
+> 这些都是 HUKS 的隐式契约，文档分散。**因此加了常驻自检**：
+> `selfTestCredentialCipher()` 在启动时跑一次「加密→解密→比对」并写 hilog，
+> 让「加密是否真的工作」变成可观测事实，而不是等用户升级后发现凭据读不出来。
+
+#### 验证
+
+| 项 | 结果 |
+|---|---|
+| 构建 | ✅ `BUILD SUCCESSFUL` |
+| 纯逻辑测试 | ✅ **113 passed / 0 failed**（新增 10 条） |
+| 真机 HUKS 自检 | ✅ `自检通过：密文长度 92，往返一致`（`HBP-AL00` API 26） |
+| 旧明文迁移 | ⚠️ **未完成端到端验证**：重装后沙箱权限变化，无法再注入旧格式数据；需下次真实配对后确认 |
+
+> **待确认**：下次配对后应检查 preferences 里是 `profile_enc`（`v1:` 开头）且
+> 无 `accessToken` 明文。`ProfileStore.write()` 已加回读校验与日志，配对时会打印
+> `凭据已加密写入（N 字符），明文残留=false`。
+
+第二十二步：**修复「点会话即闪退」**（用户报告，真机必现）。
+
+#### 现象
+
+真机点首页任意会话 → 应用**直接退出**。hilog：
+
+```
+FIX THIS APPLICATION ERROR: @Component 'ChatMessageList'[150] has error in update func:
+    Cannot read property fontSize of undefined
+TypeError: Cannot read property fontSize of undefined
+    at emptyState entry (entry/src/main/ets/pages/Index.ets:2437:14)
+    at anonymous entry (view/ChatMessageList.ets:56:11)
+app.dsbot.harmony is about to exit due to RuntimeError
+```
+
+#### 根因（我在 v28 抽 `ChatMessageList` 时引入）
+
+`@BuilderParam` 传参时写了**内联 UI**：
+
+```ts
+emptyState: (): void => {
+  Text('还没有消息，向这个 Bot 打个招呼吧。')   // ← 内联 UI
+    .fontSize(14)...;
+},
+```
+
+ArkUI 只会把 **`@Builder` 装饰的方法调用**或**尾随闭包**编译成 UI 创建代码。
+箭头函数里的内联 `Text(...)` **不会被转换**，运行时 `Text()` 返回 `undefined`，
+接着 `.fontSize(...)` 就抛 `TypeError`，且该异常不可捕获 → 系统杀进程。
+
+#### 为什么之前「验证过」却没发现
+
+这个崩溃**只在消息列表为空时触发**。模拟器上消息返回很快，
+`messages.length === 0` 那一帧没被渲染到，空态分支从未执行——
+我当初只验证了「消息列表能显示消息」，**没有验证空态**。
+
+> 教训：注入式（`@BuilderParam`）组件的验证必须覆盖**每个插槽**，
+> 不能只验证「有数据」的主路径。空态/错误态/零数据才是最容易崩的分支。
+
+#### 修法
+
+把内联 UI 提成 `@Builder` 方法，插槽只传方法调用：
+
+```ts
+@Builder
+private emptyChatState() {
+  Text('还没有消息，向这个 Bot 打个招呼吧。')
+    .fontSize(14).fontColor(this.muted()).padding(30).width('100%').textAlign(TextAlign.Center);
+}
+
+// 两个面板都改为：
+emptyState: (): void => { this.emptyChatState(); },
+```
+
+并复查了全工程其余 `@BuilderParam`：`earlierButton` / `questions` / `messageItem` /
+`PairingPage.mark` / `MobileCreateBotPage.preview` **都只调用 builder，没有内联 UI**，无需改动。
+
+#### 验证（真机）
+
+| 项 | 结果 |
+|---|---|
+| 点会话 | ✅ 进入会话页，**应用存活** |
+| App 自身 `FIX THIS APPLICATION ERROR` | ✅ **0**（剩余 1 条来自系统桌面 `AIBarView`，与本应用无关） |
+| 消息渲染 | ✅ 气泡/思考过程/工具卡/输入栏均正常 |
+| 构建 / 测试 | ✅ `BUILD SUCCESSFUL` / 113 passed |
+
+证据：`docs/qa/p1/device-real-chat-after-fix.jpeg`。
+
+第二十三步：**接管鸿蒙原生返回（侧滑手势 + 返回键）**。
+
+#### 原来是什么样
+
+应用是「**单页 + 内部状态导航**」（`section` / `mobileOverlay` / `selectedId`），
+没有用 `Navigation` 路由栈，所以系统无从得知「上一级」是什么。
+结果：**在会话页按返回/侧滑会直接退出应用**（真机实测退回系统桌面）。
+
+#### 做了什么
+
+在 `Index`（`@Entry` 页面）实现 `onBackPress()`。鸿蒙的**边缘侧滑手势与返回键走同一事件**，
+因此一处接管即可同时覆盖两者。回退按「从内到外」分层：
+
+| 优先级 | 当前状态 | 行为 |
+|---|---|---|
+| 0 | 原生 `bindSheet` 打开（消息操作面板 / 引用选择器） | 只关弹层，**不再多退一层** |
+| 1 | 浮层（创建 Bot / 工具 / 能力库） | 关闭浮层 |
+| 2 | 手机端会话页 | 回会话列表（与顶栏返回按钮行为一致） |
+| 3 | 团队 / 设置分区 | 回「对话」 |
+| 4 | 已在最外层 | `return false` 交还系统（退出/后台） |
+
+> 第 0 层是必须的：`bindSheet` 是原生弹层，系统自己会关它；
+> 若页面同时再退一层，用户会「一按返回连退两级」。
+
+#### 验证（真机 `HBP-AL00`）
+
+| 场景 | 结果 |
+|---|---|
+| 会话页 → 返回 | ✅ 回会话列表，**应用不退出** |
+| 设置页 → 返回 | ✅ 回「对话」 |
+| 最外层首页 → 返回 | ✅ 退出到桌面（`return false` 生效） |
+| 点会话不再闪退 | ✅（见上一步修复） |
+
+> **未验证**：物理**边缘侧滑手势**本身。`uitest uiInput swipe` 从 x=0 起划
+> 无法触发系统手势——注入事件走的是应用窗口，而边缘侧滑由系统手势层先拦截。
+> 已验证的是**返回事件**被正确接管；鸿蒙侧滑派发的就是同一事件，因此预期可用，
+> 但**需要真人手指确认**。
+
+第二十四步：**P1-8 收尾**（多形态 + 深色模式截图），并顺带完成 P2-11 偏好持久化。
+
+#### 之前缺什么
+
+P1-8 的登记是「缺 Foldable / Tablet / 2in1 与深色模式截图」。
+
+#### 本轮补齐的证据
+
+| 形态 | 宽度 | 证据 | 结果 |
+|---|---|---|---|
+| 折叠屏 | 706vp | `device-foldable-final-table.jpeg` 等 | 三栏布局正常 |
+| **平板区间** | **1045vp** | `device-tablet-width.jpeg` | 宽屏三栏、**无上下文栏**（<1200vp 按设计隐藏）、越出 0 |
+| 2in1 / PC | 1560vp（最大化） | `device-pc-maximized.jpeg` | 四栏 + 上下文栏、越出 0 |
+| 深色模式 | 706vp | `device-dark-settings.jpeg`、`device-dark-chat.jpeg` | 设置页与聊天页配色一致、越出 0 |
+
+**平板区间是怎么测的**：`MatePad Pro 13` 模拟器镜像**从未部署**
+（`deployed/MatePad Pro 13/` 下只有 `config.ini`，没有 `system.img.qcow2` 等磁盘镜像，
+启动即报 `can not read uuid file`），无法启动。
+改用 **2in1 模拟器取消最大化**，窗口自然落到 2090px ≈ **1045vp**——
+正好落在平板断点区间（840–1200vp），且走的是同一套 `windowWidth` 判断，
+因此可以代表平板宽度行为。
+
+#### 深色模式顺带发现并修复的问题（P2-11）
+
+`dark` 之前只是 `Index` 的一个 `@State`：**每次重启都回到浅色**。
+新增 `service/AppPreferences.ets`（显式接口，不用泛型键值包装，避免 ArkTS 的 `any` 限制）：
+
+- 启动 `restorePreferences()` 读取并**同步系统栏**（只改 `dark` 会导致状态栏图标不跟着变）；
+- `toggleDark()` 落盘。
+
+**真机验证**：切深色 → 强制停止 → 重启 → 页面平均亮度 **44**（深色），
+而修复前是 **248**（浅色）。偏好已跨重启保持。
+
+第二十五步：**P2 阶段启动 —— P2-11 偏好持久化 + P2-10 设备管理**。
+
+#### P2-11 偏好持久化（S，已完成）
+
+见第二十四步：深色模式跨重启保持（真机亮度 44 vs 修复前 248）。
+
+#### P2-10 设备管理（M，本轮切片完成）
+
+**原来是什么样**：宽屏设置页早已有「已配对设备」列表与移除按钮，
+但**手机端设置页完全没有这一块**——同一功能两种形态表现不一致，
+手机用户看不到自己配了几台设备、也无法撤销旧设备。
+
+**做了什么**：
+
+- `SettingsView` 扩展 `devices` / `currentDeviceId`；
+- `SettingsPage.ets` 新增 `devicesGroup()`：设备名 + 「本机」标记 + 其他设备的「移除」；
+- 本机**不提供移除入口**（避免把自己踢下线）；
+- 移除走父组件 `revokeDevice()`：**原生 `showDialog` 确认** → `DELETE /devices/:id` → 重新拉设备列表。
+
+**验证（手机模拟器 440vp + mock）**：
+
+| 步骤 | 结果 |
+|---|---|
+| 设置页出现「已配对设备」分组 | ✅ 显示 `本机（模拟器）` + `本机` 标记 |
+| 第二台设备出现「移除」按钮 | ✅ `旧的平板` 右侧有移除 |
+| 点击移除 | ✅ 原生对话框：「移除设备 / 将撤销「旧的平板」的访问权限…」+ 取消/移除 |
+| 确认移除 | ✅ mock 日志 `✅ 撤销设备 mock-device-2`，页面无错误 |
+| 布局越界 | ✅ 0 |
+
+证据：`docs/qa/p1/device-revoke-confirm.jpeg`。
+
+> **mock 局限**：`/devices` 始终返回两台设备（未做状态变更），
+> 所以撤销后列表仍显示它。App 侧会重新拉取，真实主机会消失。
+
+> 补 mock 时发现一个规律：**App 发出请求但 mock 没路由时会返回 404**，
+> 页面把错误原样显示（`请求失败（HTTP 404）`）——这反而证明了
+> 「确认 → 发请求 → 错误展示」这条链路是通的，只是主机侧没实现该路由。
+
+第二十六步：**P2-2 用量面板**（首个 P2 功能页）。
+
+#### 协议（从宿主插件源码确认，不是猜的）
+
+`usage` 请求体 `{timeZone}`（设备 IANA 时区），响应是**压扁的行**：
+
+```
+owners: [{owner,name,kind}]        行里的 ownerIndex 指向它
+models: [{key,provider,model,name}] 行里的 modelIndex 指向它
+kinds:  [string]
+rows:   [hour, owner, model, kind, input, cacheRead, cacheWrite, output, calls][]
+now:    主机当前小时（用于算时间窗口）
+```
+
+> 这一步特意去 `~/.dsh/profiles/desktop/node_modules/ds-bot/src/host/usage.js` 读了实现，
+> 而不是按 UI 猜字段——列顺序一旦理解错，面板上所有数字都会错，且看起来"很像对的"。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `UsagePage` / `UsageOwner` / `UsageModel` |
+| 协议 | `service/MobileClient.ets` | `usage(timeZone)` + `UsageQuery` 载荷 |
+| 逻辑 | `logic/Usage.ets` | 行还原、时间窗口裁剪、按归属者/模型聚合、token 格式化 |
+| 视图 | `view/UsagePanel.ets` | 窗口切换、总量、两组排行（横条比例） |
+
+**测试**：新增 12 条纯逻辑用例（总计 125 passed），锁死列含义、窗口裁剪、
+字典缺失占位、残缺行跳过、非数字按 0 等——这些是"错了也看不出"的地方。
+
+#### 三个 ArkUI 坑（都只能在真机发现）
+
+1. **`@Builder` 的参数是值传递，不触发 UI 更新**。
+   最初把 `summary`/窗口值当参数传进 builder，结果切换窗口后**数字完全不变**
+   （调试文案显示 `窗口=all` 但总量仍是 24h 的值）。
+   改为**无参 builder，在内部读取状态**。
+
+2. **`ForEach` 的 key 不变会复用旧节点**。
+   排行以 `row.name` 作 key，切换窗口后名称没变 → 数字停在旧值。
+   改为 `${name}#${total}`。
+
+3. `@Builder` 内不能写 `const` 语句（`Only UI component syntax can be written here`），
+   也不宜写裸 `return;`——这两条本轮各踩一次。
+
+#### 验证（手机模拟器 440vp + mock）
+
+mock 造了 5 行数据（含 30h 前、200h 前各一行，用于验证窗口裁剪）：
+
+| 窗口 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| 24 小时 | **35.0k** | 13.1k | 只含近 3 行 |
+| 7 天 | **40.0k** | 14.6k | 多算 30h 前那行（+5k） |
+| 30 天 | **70.0k** | 18.3k | 5 行全含 |
+| 全部 | **70.0k** | 18.3k | 同上 |
+
+排行也逐项核对过：`研发小组 21.0k`、`Chief 23.0k`、`Searcher 10.6k`；
+`GPT-5 37.5k`、`GPT-5 mini 17.1k`——与 mock 行数据精确吻合。
+
+证据：`docs/qa/p1/device-usage-panel.jpeg`。
+
+#### 已知未做（P2-2 定义的其余部分）
+
+上游面板还有**堆叠图、环比、活动明细、Bot/群/模型筛选**。
+本轮实现的是「窗口 + 总量 + 两组排行」这一核心，
+堆叠图与环比未做（当前信息密度用横条已够用）。
+
+第二十七步：**P2-3 定时任务**。
+
+#### 协议（同样读宿主源码确认）
+
+`ds-bot/src/host/schedules.js` + `mobile/adapter.js` 白名单：
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `schedules` | 无 | `{ available, tasks }` |
+| `schedule-create` | `{ target, title, prompt, when }` | 同上（含新任务） |
+| `schedule-delete` | `{ sessionId, id }` | 同上 |
+
+`when` 由 `selectorOf` 解释，支持四种形态：
+`at`（一次性，ISO 时间）/ `daily`（`time` + `timeZone`）/
+`weekly`（`time` + `weekdays` + `timeZone`）/ `every`（`minutes`，1 分钟~7 天）。
+
+任务记录的 `kind` 决定用哪个字段回显：`scheduledAt` / `everySeconds` / `time`+`weekdays`。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `ScheduleTask extends ScheduleTiming`、`SchedulesPage`、`ScheduleWhen` |
+| 协议 | `service/MobileClient.ets` | `schedules()` / `createSchedule()` / `deleteSchedule()` |
+| 逻辑 | `logic/Schedules.ets` | 时间翻译、表单校验、`when` 生成、过期判定 |
+| 视图 | `view/SchedulesPanel.ets` | 任务列表（删除）+ 新建表单（目标/名称/内容/四种时间形态） |
+
+**测试**：新增 15 条纯逻辑用例（总计 **140 passed**），锁住时间翻译与校验规则，
+规则来源逐条对齐宿主 `selectorOf`（长度上限 120、weekly 去重排序、
+every 1~10080 分钟、at 必须晚于现在）。
+
+#### 验证（手机模拟器 + mock）
+
+| 步骤 | 结果 |
+|---|---|
+| 面板渲染 | ✅ 表单 + 已有任务（2 条种子）正确回显：`Chief · 每天 09:30`、`群聊 · 每周 周五 18:00` |
+| 创建任务 | ✅ mock 收到 `schedule-create {target:'bot-chief', title:'hw_test_task', when:{kind:'daily',time:'09:00',timeZone:'America/Chicago'}}`，列表变 **3** 条，新任务显示 `Chief · 每天 09:00` |
+| 删除任务 | ✅ 原生确认弹窗「将删除「hw_test_task」」→ mock 收到 `schedule-delete {sessionId, id:'task-3'}`，列表回到 **2** 条 |
+| 表单校验 | ✅ 名称为空时「创建任务」禁用，并提示规则 |
+
+证据：`docs/qa/p1/device-schedules-panel.jpeg`。
+
+#### 两个新踩的 ArkTS 约束
+
+1. **`arkts-no-structural-typing`**：把 `ScheduleTask` 传给参数类型 `ScheduleTiming`
+   会编译失败——ArkTS 要求**显式继承**。改成 `ScheduleTask extends ScheduleTiming`。
+2. **无参数 action 不能用 `{}` 字面量**（`arkts-no-untyped-obj-literals`），
+   复用工程里已有的 `EmptyPayload` 类。
+
+> 另外发现：模拟器时区是 `America/Chicago`（不是本地时区），
+> 所以 `timeZone` 传的是模拟器时区。真机上是用户时区——这正说明
+> **时区应该由设备提供而不是写死**，否则跨时区用户的「每天 9 点」会错。
+
+第二十八步：**P2-4 记忆面板** + **把模拟主机放进仓库**。
+
+#### 先说一件基础设施的事
+
+`/tmp/dsprobe/mock-host.mjs` 被系统清理**两次**，每次都导致要重写整套受控主机。
+这次直接把它放进仓库：**`docs/qa/p1/mock-host.mjs`**（约 380 行，覆盖当前所有验证过的协议面）。
+
+顺带修掉它一个一直存在的隐性错误：
+
+```
+tlsPin 之前 = sha256(整张证书 DER) → base64      ❌
+正确        = sha256(公钥 SPKI DER) → hex         ✅
+```
+
+App 侧要求 `^sha256:[a-f0-9]{64}$`，所以旧写法会让手机报
+「配对码中的电脑身份指纹无效」。修正后 pin 为 `sha256:c55a1da9…`，与真实主机一致。
+
+#### 协议（读宿主 `src/host/memory.js`）
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `memory-view` | `{ botId, summarize, regenerate }` | 见下 |
+| `memory-forget` | `{ botId, scope, topic?, text }` | 同 view |
+| `memory-ask` | `{ botId, text }` | `{ reply, changes[], view }` |
+
+`memory-view` 返回把**私有与团队记忆合并**成一个列表（用 `scope` 区分）：
+
+```
+{ botId, entries:[{scope,topic,text,added,by,source}],
+  sizes:{own,team}, limits:{entry:300,main:4000,topic:16000,topics:40},
+  summary:{text,at}|null, fresh, summarizing, error }
+```
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `MemoryEntry / MemoryView / MemoryChange / MemoryAskResult` |
+| 协议 | `service/MobileClient.ets` | `memoryView / memoryForget / memoryAsk` |
+| 逻辑 | `logic/Memory.ets` | 分组、容量统计、问答校验、变更描述 |
+| 视图 | `view/MemoryPanel.ets` | Bot 选择 → 摘要 → 私有/团队两组（可删除）→ 自然语言改记忆 |
+
+**设计取舍**：不做本地编辑表单，改记忆走宿主 `memory-ask`（模型解析）。
+原因是记忆条目是「话题文件里的多行文本」，本地按行改很容易与主机失同步。
+
+**测试**：新增 13 条纯逻辑用例（总计 **153 passed**）。
+
+#### 真机验证（手机模拟器 + 仓库内 mock）
+
+| 步骤 | 结果 |
+|---|---|
+| 面板渲染 | ✅ 摘要 + `Bot 私有记忆 14 / 4000 字`（2 条）+ `团队共享记忆 9 / 16000 字`（1 条） |
+| 删除团队条目 | ✅ 原生确认「将删除这条记忆：鸿蒙版移植正在推进」→ 团队变 `0 / 16000 字`、条目消失 |
+| 自然语言改记忆 | ✅ 输入「记住我喜欢简洁回答」→ 私有 `6 → 13 字`、新增条目「用户偏好 / 我喜欢简洁回答 / memory panel」，并显示回复 `已按你说的更新记忆。` + `新增私有记忆：我喜欢简洁回答` |
+
+证据：`docs/qa/p1/device-memory-panel.jpeg`。
+
+#### 同一个坑又踩了一次（已在我的规则里，说明我没执行）
+
+`scopeCard(title, scope)` / `entryList(rows, scope)` 带参数 → 删除后列表**不刷新**。
+这正是 status 里写的「@Builder 参数不刷新」。改成 `ownCard()` / `teamCard()` 两个无参 builder 后正常。
+
+> 结论：这条规则不能靠记忆，写进 status 还不够——**写新组件时应先按清单自查**。
+
+顺带把容量文案从 `14 / 0%`（读起来像除法）改成 `14 / 4000 字`。
+
+第二十九步：**P2-7 能力库（把占位卡换成真实数据）**。
+
+#### 原来是什么样
+
+`view/SecondaryPages.ets` 里的 `CapabilitiesPage` 是**纯占位**：
+三张硬编码卡片「网页浏览 / 文件与工作区 / 定时执行」，
+底部「＋ 添加能力」点了没有任何反应，`bots` chips 也不可点。
+
+#### 协议（读宿主源码确认）
+
+`state` 里本来就带着能力数据，只是 App 没解析：
+
+```
+capabilities: [{ name, kind:'mcp'|'skill'|'pack', description,
+                 transport?, approved?,          // mcp
+                 items?: string[] }]            // pack
+bots[].capabilities: string[]                   // 该 Bot 已挂载的能力名
+capabilityStatuses: { botId: { name: { state:'ready'|'connecting'|'needs-approval'|'error', error? } } }
+```
+
+操作：`bot-capability { botId, name, attached }`，**直接返回最新 state**（省一次刷新）。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `Capability / CapabilityStatus`，`TeamState.capabilities`、`Bot.capabilities` |
+| 投影 | `service/Projection.ets` | `toCapabilities` / `toCapabilityStatuses`（过滤未知 kind/state、丢掉无名条目） |
+| 协议 | `service/MobileClient.ets` | `botCapability(botId, name, attached)` |
+| 视图 | `view/SecondaryPages.ets` | 能力库按 kind 分组，选 Bot → 点条目挂载/卸载，显示运行状态 |
+
+**测试**：新增 5 条投影用例（总计 **158 passed**）。顺带给测试运行器补了
+`service/` 目录的路径改写规则（之前只支持 `logic/ view/ model/`）。
+
+#### 真机验证（手机模拟器 + 仓库内 mock）
+
+| 步骤 | 结果 |
+|---|---|
+| 能力库渲染 | ✅ 技能 `code-review`(运行中/已挂载) `release-notes`(挂载)、MCP `web-search`(运行中/已挂载) `file-tools`(挂载)、能力包 `starter-pack`(挂载)，描述文案正确 |
+| 挂载操作 | ✅ 点 `file-tools` → mock 收到 `bot-capability {botId:'bot-chief', name:'file-tools', attached:true}` → 该行变「已挂载」 |
+
+证据：`docs/qa/p1/device-capabilities.jpeg`。
+
+#### 第四次遇到同一个坑（这次提前避开了）
+
+写 `kindSectionBody(kind)` 时我意识到这是**带参 @Builder**，立刻改成
+`skillSection()` / `mcpSection()` / `packSection()` 三个无参 builder。
+前三次是在真机上发现"不刷新"，这次是写的时候就避开——
+说明「@Builder 不带参」已经成为可执行的肌肉记忆，而不是文档里的一句话。
+
+第三十步：**P2-6 群聊管理**。
+
+#### 原来是什么样
+
+`TeamPage` 只能**创建** Bot 与群聊（名字输入框 + 成员勾选 + 创建按钮），
+创建完之后**没有任何地方能看群、改名、改公告、换管理员、删群**。
+`update-room` / `delete-room` 协议早就存在，但 App 从未调用。
+
+#### 协议（读宿主 `src/host/channel.js` + `roster.js`）
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `update-room` | `{ id, name?, notice?, mode?, admin?, members?, add?, remove?, workDir? }` | `{ room, changes[] }` |
+| `delete-room` | `{ id }` | 最新 state |
+
+`mode` 只有两个值：`admin`（普通消息先交给管理员）/ `everyone`（成员轮流回答）。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `RoomPatch`、`Room.mode` |
+| 投影 | `service/Projection.ets` | 解析 `rooms[].mode` |
+| 协议 | `service/MobileClient.ets` | `updateRoom(patch)` / `deleteRoom(id)` |
+| 逻辑 | `logic/Rooms.ets` | 表单校验、成员 diff、**只提交变化字段**、变更说明翻译 |
+| 视图 | `view/RoomManagePanel.ets` | 群列表 → 编辑（群名/公告/模式/管理员/成员）→ 保存/删除 |
+
+**两个刻意的设计**：
+
+1. **只提交真正变化的字段**。宿主用「字段是否出现」判断要不要改，
+   全量提交会把没动过的字段也写一遍并产生多余变更记录。
+   `buildRoomPatch` 无变化时返回 `undefined`，调用方直接跳过请求。
+2. **管理员必须在成员里**。宿主允许把非成员设为管理员，
+   但那样「管理员先回答」会指向一个不在群里的人。移除管理员本人时自动清空管理员。
+
+**测试**：新增 12 条纯逻辑用例（总计 **170 passed**）。
+
+#### 真机验证（手机模拟器 + 仓库内 mock）
+
+| 步骤 | 结果 |
+|---|---|
+| 群列表 | ✅ `共 1 个群聊` / `研发小组` / `2 名成员 · 管理员先回答` |
+| 编辑页 | ✅ 群名、公告、回答方式两档、管理员选择、成员勾选齐全 |
+| 保存改名 | ✅ mock 收到 `update-room {"id":"room-mock","name":"研发小组2"}` —— **只有变化的字段**；列表更新并显示「刚刚的修改 · 群名已更新」 |
+| 删除群 | ✅ 原生确认「将删除「研发小组2」，聊天记录会一起移除」→ mock 收到 `delete-room` → `共 0 个群聊` + 「已删除「研发小组2」」 |
+
+证据：`docs/qa/p1/device-room-manage.jpeg`。
+
+#### 一处需要记住的架构细节
+
+`update-room` **不返回整份 state**（只回 `{room, changes}`），
+所以保存后要主动 `refreshAll()` 一次才能同步成员/管理员——
+这跟 `bot-capability` / `delete-room` 直接回 state 不一样，不能套用同一个模式。
+
+第三十一步：**P2-5 Bot 管理**（P2 里最大的一块）。
+
+#### 原来是什么样
+
+Bot 只能**创建**（`TeamPage` 里的名字输入框），创建之后无法：
+改名、改角色、改指令、换模型、换思考档位、复制、删除、设为主 Bot。
+`update-bot` / `duplicate-bot` / `delete-bot` / `set-main` 协议都在，App 一次都没调用。
+
+#### 协议（读宿主 `src/host/roster.js updateBot` + `channel.js`）
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `update-bot` | `{ id, name?, role?, instructions?, color?, avatar?, model?, effort?, permission?, workDir? }` | **更新后的 bot**（不是整份 state） |
+| `duplicate-bot` | `{ id }` | 新 bot |
+| `delete-bot` | `{ id }` | 最新 state |
+| `set-main` | `{ id, main, primary?, replace? }` | 最新 state |
+
+宿主侧的硬约束（都体现在校验逻辑里）：
+- 名字 `trim` 后 ≤ **40** 字，且不能与其它 Bot 重名（重名直接抛错）；
+- 角色 `slice` 到 **24** 字；
+- **思考档位必须有模型**（`Pick a model before choosing a thinking level`）；
+- 档位是按模型返回的（`efforts {ref}`），换模型要重新取。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `BotPatch` / `MainBotPatch` / `BotRef` |
+| 协议 | `service/MobileClient.ets` | `updateBot` / `duplicateBot` / `deleteBot` / `setMain` |
+| 逻辑 | `logic/Bots.ets` | 表单校验、重名检查、档位依赖模型、只提交变化字段、列表摘要 |
+| 视图 | `view/BotManagePanel.ets` | Bot 列表 → 编辑（名字/角色/指令/模型/档位）→ 保存·设主·复制·删除 |
+
+**本轮刻意不做**：头像与工作目录。
+两者都需要系统选择器（相册 / 文件管理器），在手机上做完整链路的成本远高于收益，
+协议字段保留在服务层（`BotPatch` 未暴露这两个字段），后续接即可。
+
+**顺带修的显示问题**：列表里档位一开始直接显示 `high`/`low`，
+因为档位名表只在打开编辑页时才加载。加了 `loadEffortNames()`：
+把所有 Bot 用到的不重复模型各取一次 `efforts`，汇总成 `id → 名字` 表，
+列表于是显示「GPT-5 · 高」。模型数量很少（1~3 个），这点请求可以接受。
+
+**测试**：新增 11 条纯逻辑用例（总计 **181 passed**）。
+
+#### 真机验证（手机模拟器 + 仓库内 mock）
+
+| 步骤 | 结果 |
+|---|---|
+| Bot 列表 | ✅ `共 2 个 Bot` / `Chief` + `主 Bot` 标记 / `GPT-5 · 高`；`Searcher` / `GPT-5 mini · 低` |
+| 编辑页 | ✅ 名字、角色、指令、模型三选（默认/GPT-5/GPT-5 mini）、档位（不设置/低/中/高）齐全 |
+| 改名字+档位保存 | ✅ mock 收到 `update-bot {"id":"bot-chief","name":"ChiefX","effort":"medium"}` —— **只有变化的两个字段**；列表变 `ChiefX` / `GPT-5 · 中`，提示「已保存」 |
+| 复制 | ✅ mock 收到 `duplicate-bot` → `共 3 个 Bot` + 「ChiefX 副本」+ 提示「已复制」 |
+| 设为主 Bot | ✅ mock 收到 `set-main {"id":"bot-chief-copy-2","main":true}` → `mainBotIds` 变两项，按钮变「取消主 Bot」 |
+| 删除 | ✅ 原生确认「将删除「ChiefX 副本」。它与你的聊天记录会一起移除」→ mock 收到 `delete-bot` → `共 2 个 Bot` + 「已删除」 |
+
+证据：`docs/qa/p1/device-bot-manage.jpeg`。
+
+#### 又一处「返回结构不一致」的坑
+
+四个动作的返回**各不相同**：
+`update-bot`/`duplicate-bot` 回 bot 对象、`delete-bot`/`set-main` 回整份 state。
+所以保存与复制之后要自己 `refreshAll()`，删除与设主则直接用返回的 state。
+这和之前 `update-room`（回 `{room, changes}`）是同一类问题——
+**每个动作都要单独读源码确认返回体，不能按"大概都回 state"来写**。
+
+第三十二步：**P2-8 工具与技能**（技能列表/详情 + 插件开关 + 插件包开关）。
+
+#### 原来是什么样
+
+设置里的「工具与技能」是 `SecondaryPages.ets` 的 `ToolsPage`：
+四行菜单（技能 / 插件 / 连接器 / 能力库），**前三行点了没有任何反应**。
+
+#### 协议（读宿主 `src/mobile/management.js`）
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `skills-list` | `{ conversationId? }` | `{ available, skills:[{name,description,whenToUse,source,provider,invocation}] }` |
+| `skills-get` | `{ name, conversationId? }` | `{ name, description, content, truncated, source, provider }` |
+| `plugins-list` | 无 | `{ writable, plugins:[{entryId,moduleName,enabled,readOnlyReason}], bundles:[{name,version,enabled,installed,removable,readOnlyReason}] }` |
+| `plugins-set-enabled` | `{ id, enabled }` | 变更结果 |
+| `bundle-set-enabled` | `{ id, enabled }` | 变更结果 |
+
+两条关键约束：
+1. **`skills-get` 只允许 `userInvocable` 的技能**，否则 404；
+2. 插件/包带 `readOnlyReason`（例如 `mobile-required`）时**不能改**——
+   动了会让手机连接断掉。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `SkillItem/SkillDetail/SkillsPage`、`PluginEntry/PluginBundle/PluginsPage`、`EnabledPatch` |
+| 协议 | `service/MobileClient.ets` | `skills` / `skillDetail` / `plugins` / `setPluginEnabled` / `setBundleEnabled` |
+| 逻辑 | `logic/Capabilities2.ets` | 按来源分组、可调用性判定、开关可操作性、状态文案 |
+| 视图 | `view/ToolsSkillsPanel.ets` | 技能分组列表 + 全文视图；插件/插件包开关 |
+
+**刻意不做插件安装/卸载**：`plugins-install` 是异步长任务
+（inspect → 批准构建 → 轮询 operation → cancel），手机上做完整链路收益低，
+命令行更合适。开关与查看是移动端真正的使用场景。
+
+**测试**：新增 12 条纯逻辑用例（总计 **193 passed**）。
+
+#### 真机验证（首次在真机上验证本轮功能）
+
+| 步骤 | 结果 |
+|---|---|
+| 技能列表 | ✅ `技能（4）` 按来源分组：工作区（code-review / release-notes）、运行时（auto-format）、内置（deep-research） |
+| 可调用性 | ✅ `code-review` 显示「模型与用户都可调用」；`release-notes`「仅用户点名」；`auto-format` 显示 **不可查看** 徽标（不可点） |
+| 技能全文 | ✅ 点 `code-review` → 显示标题与 Markdown 内容 |
+| 插件开关 | ✅ `code-tools` 从「已停用」点开关 → mock 收到 `plugins-set-enabled {id:'code-tools', enabled:true}` → 变「已启用」 |
+| 锁定插件 | ✅ `ds-bot` 显示「手机连接必需，不可修改」，开关置灰 |
+| 插件包 | ✅ `automation`「已启用 · v1.2.0」 |
+
+证据：`docs/qa/p1/device-tools-skills.jpeg`（真机 1260×2844）。
+
+#### 真机部署要注意的一个坑
+
+`assembleHap` 会同时产出 `entry-default-unsigned.hap` 与 `entry-default-signed.hap`。
+**真机必须装 signed 那个**，装 unsigned 会报：
+
+```
+failed to install bundle. code:9568320 error: no signature file.
+```
+
+这一点之前只在文档里提过签名配置，没写清"产物有两个、要装签名那个"，
+这次补上。
+
+第三十三步：**P2-9 会话导出**（含 3 个真机崩溃的排查与修复）。
+
+#### 原来是什么样
+
+聊天页右上角的 `⋯` 按钮只弹一句 toast：「长按会话可在设置中管理置顶与隐藏」——
+**等于没有功能**。导出完全不存在。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 逻辑 | `logic/Export.ets` | Markdown / JSON 导出、代码围栏自适应、文件名清洗 |
+| 视图 | `pages/Index.ets` | `⋯` → 会话菜单：导出 Markdown / 导出 JSON / 置顶 / 隐藏 |
+
+导出走**剪贴板**而不是写文件：手机上「复制走」比「存到某个目录再找不到」实用，
+也不需要文件权限。toast 会带上建议文件名。
+
+两个细节：
+- **代码围栏自适应**：内容里出现 ``` 时，输出围栏自动加长到「最长连续反引号 + 1」，
+  否则内容会把围栏提前闭合、后半段变成正文。
+- **文件名清洗**：`/\:*?"<>|` 与控制字符换成 `_`，并带时间戳。
+
+**测试**：新增 13 条纯逻辑用例（总计 **206 passed**）。
+
+#### 真机验证踩到的 3 个崩溃（都是这一轮修的）
+
+这一轮在真机上连续遇到 3 个「点了就退出」的问题，全部定位并修复：
+
+1. **`@Builder` 装饰器被脚本插入打断** → `class constructor cannot called without 'new'`
+   我插入新 builder 时，把原有 `messageSheetBuilder` 的 `@Builder` 与函数体拆开了。
+   没有 `@Builder` 时 `MessageActionSheet({...})` 被当成「不带 new 调类」→ 启动即崩。
+   **这是我第 5 次踩同一个坑**（脚本化插入最容易打断装饰器），已修复。
+
+2. **同一节点多个 `bindSheet` 只有最后一个生效**
+   根节点原本挂了 `bindPopup` + 消息面板 + 引用选择器两个 `bindSheet`，
+   我又加了第三个会话菜单 → 结果**消息面板也不弹了**。
+   最终把消息/会话面板移到**聊天面板节点**上（parts 面板早就这么做了，注释里写着
+   「根节点三连只生效最后一个」，我没先读注释）。
+
+3. **`message.text` 可能是 `undefined`** → 导出时 `TypeError`
+   主机对「只有工具调用、没有正文」的消息**不下发 `text` 字段**，
+   而模型里 `text: string` 是必填的——直接 `message.text.length` 就会崩。
+   加了 `bodyOf()` 兜底，并补了一条回归用例。
+
+#### 真机验证结果
+
+| 步骤 | 结果 |
+|---|---|
+| `⋯` 打开菜单 | ✅ 四项：导出为 Markdown / 导出为 JSON / 取消置顶 / 隐藏会话 |
+| 导出 Markdown | ✅ toast「已复制 4 条消息（研发小组-20261018-1154.md）」，App 不崩 |
+
+#### 还没做（P2-9 的另一半）
+
+**Agent 管理**（`add-agent` / `agent-rename` / `agent-archive` / `remove-agent`）未做：
+App 的 `TeamState` 里还没有 `agents` 模型（宿主 state 有 `agents` 字段，但投影从未解析）。
+这项需要先补模型与投影，再做一个 Agent 列表页，属于下一轮。
+
+第三十四步：**P2-9 Agent 管理** + **折叠屏宽屏入口补齐**。
+
+#### 协议（读宿主 `src/host/agents.js`）
+
+| 动作 | 载荷 | 说明 |
+|---|---|---|
+| `add-agent` | 无 | 返回 Agent；**每个团队最多一个**，已有则抛错 |
+| `agent-rename` | `{ agentId, sessionId, title }` | 空标题被拒 |
+| `agent-archive` | `{ agentId, sessionId }` | 会话从 Agent 移出并归档 |
+| `remove-agent` | `{ agentId }` | 移除整个 Agent |
+
+关键发现：**Agent 会话已经出现在 `/conversations` 里**（`kind: 'agent'` + `agentId`），
+所以不需要单独投影宿主 state 的 `agents` 字段——直接过滤本地会话即可。
+只需给 `Conversation` 补一个 `agentId`。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `Conversation.agentId`、`AgentRecord` |
+| 投影 | `service/Projection.ets` | 解析 `agentId` |
+| 协议 | `service/MobileClient.ets` | `addAgent` / `agentRename` / `agentArchive` / `removeAgent` |
+| 逻辑 | `logic/Agents.ets` | 过滤 Agent 会话、去重 agentId、标题校验、能否创建 |
+| 视图 | `view/AgentPanel.ets` | 创建/移除 Agent、会话改名、会话归档 |
+
+**测试**：新增 7 条用例（总计 **213 passed**）。
+
+#### 折叠屏暴露的真问题（已修）
+
+用户接上折叠屏（HOP-AL00，展开态 2584×1828）后实测发现：
+
+> **宽屏走的是另一套设置面板**（`Index.settingsPage()`），
+> 手机版 `SettingsPage.ets` 里我加的入口（用量/定时/记忆/群聊/Bot/Agent/工具）
+> 在宽屏**全部够不到**。
+
+这是 P2-1「设置骨架」欠下的债：两套设置页各自维护。
+本轮在宽屏设置里补了「功能」卡片，7 个入口与手机版一一对应。
+
+#### 真机验证（折叠屏 HOP-AL00，展开态）
+
+| 步骤 | 结果 |
+|---|---|
+| 宽屏布局 | ✅ 左侧 5 个会话（含 `整理本周计划 / DSH Agent`、`DSH Agent · 2 / DSH Agent`），右侧聊天双栏 |
+| 宽屏设置「功能」卡 | ✅ 7 行全部出现：用量 / 定时任务 / 记忆 / 群聊管理 / Bot 管理 / DSH Agent / 工具与技能 |
+| Agent 页 | ✅ 「团队已有一个 DSH Agent」+「移除 DSH Agent」+「已归档以外的会话（2）」+ 每条会话的「改名 / 归档」 |
+
+#### 未完成（如实记录）
+
+- **会话改名/归档在折叠屏上没有跑完一次完整点击验证**：
+  点「改名」后输入框出现，但 `uitest` 在展开态弹出软键盘后坐标漂移，
+  连续两次点不到「保存」。这两个动作的**逻辑与协议**已有单元测试覆盖，
+  但**端到端点击未验证**，下一轮需要用更稳的方式（先收起键盘再取坐标）补验。
+
+第三十五步：**合并两套设置页（P2-1 收尾）+ 补验折叠屏交互**。
+
+#### 问题：同一样东西写了两份
+
+| | 手机 | 宽屏（平板/折叠屏展开） |
+|---|---|---|
+| 实现 | `view/SettingsPage.ets` | `Index.settingsPage()` 内联 81 行 |
+| 内容 | 连接、用量、工具、Bot 组、偏好、设备、关于 | **只有** 连接、外观、审批、设备、断开、版本 |
+
+后果：每加一个功能入口都要改两处。P2-2～P2-9 的所有页面入口只加在手机版，
+折叠屏展开后**全部够不到**（2026-10-18 用户接上折叠屏才发现）。
+
+#### 做法
+
+把设置页抽成**唯一实现** `Index.settingsBody()`：
+
+- 手机：`mobileSettingsPage()` → 直接调用，铺满；
+- 宽屏：`settingsPage()` → 外面包一层 `constraintSize({ maxWidth: 760 })` 居中，
+  避免 1700vp 窗口把设置项拉满。
+
+同时删掉了上一轮临时加的「功能」卡片和 `settingsFeatureRow` builder——
+现在两套页面共用同一份列表，**入口只需要加一次**。
+
+#### 顺手做了一个自检脚本
+
+`@Builder` 丢失是本项目最高频的崩溃原因（编译不报错，运行时
+`class constructor cannot called without 'new'` 直接崩），本轮合并时**又犯了一次**。
+
+新增 **`tools/check_builders.py`**：扫描 UI 文件里名字像 builder
+（`*Page` / `*Sheet` / `*Card` / `*View` / `*Section`…）却没有 `@Builder` 的方法。
+规则做了两轮收紧（只查含 `@Component` 的文件、跳过以赋值/await/return 开头的方法），
+当前**零误报**；并且我故意删掉一个 `@Builder` 验证过它确实能抓到。
+
+```bash
+python3 tools/check_builders.py     # OK: 未发现缺少 @Builder 的疑似 builder 方法
+```
+
+#### 折叠屏交互补验（上一轮未完成的）
+
+上一轮「点不到保存」的原因是：展开态弹出软键盘后 `uitest` 坐标漂移。
+这次改用**点页面空白处收键盘**（不用 Back——Back 会退出页面），再取坐标：
+
+| 动作 | 结果 |
+|---|---|
+| 会话改名 | ✅ mock 收到 `agent-rename {agentId:'agent-1', sessionId:'session-agent-1', title:'整理本周计划'}`，页面提示「会话已改名」 |
+| 会话归档 | ✅ 原生确认「将归档「整理本周计划」。归档后它会从 Agent 的会话列表里移除」→ mock 收到 `agent-archive` → 列表 2 → **1**，提示「已归档「整理本周计划」」 |
+
+#### 折叠屏验证合并后的设置页
+
+宽屏设置现在与手机完全一致：连接卡 → 用量 → 工具与技能 → Bot 组
+（Bot 与群聊 / 定时任务 / DSH Agent / Bot 管理 / 群聊管理 / 记忆…），
+限宽 760vp 居中，可读性正常。
+
+第三十六步：**P3-1 附件（上传与发送）**。
+
+#### 原来是什么样
+
+- `+` 菜单里「图片与文件（后续支持）」是**禁用**的占位项；
+- `MobileClient.upload()` 存在但**把字节丢了**（只发 query，body 传 `undefined`），
+  等于永远上传失败；
+- 发送逻辑要求文本非空，不带附件。
+
+#### 协议（读宿主 `src/mobile/server.js` + `adapter.js`）
+
+| 动作 | 形式 |
+|---|---|
+| 上传 | `POST /uploads?conversationId=&sessionId=&name=&mediaType=`，**body 是裸字节**（不是 multipart）→ `{receiptId, size, expiresAt}` |
+| 发送 | `POST /submissions`，`attachments: [receiptId…]`，`text` 可为空 |
+
+宿主限制：图片 ≤ 10 MiB、其它 ≤ 20 MiB、单条 ≤ 8 个、图片类型白名单
+（png/jpeg/webp/gif，且**字节必须与声明类型一致**）、receipt 约 15 分钟过期。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 请求 | `service/MobileClient.ets` | `buildOptions`/`send` 支持二进制体；`upload` 真正发字节；`SubmissionRequest.attachments` |
+| 选择 | `service/AttachmentPicker.ets` | 相册（`PhotoViewPicker`）与文件（`DocumentViewPicker`），读字节 + 本地校验 |
+| 逻辑 | `logic/Attachments.ets` | 大小/类型/数量校验、类型推断、体积格式化 |
+| 视图 | `pages/Index.ets` | `+` 菜单两项、输入框上方附件条（名称/体积/上传中/失败/移除）、仅附件可发送 |
+
+**设计取舍**：**选完立刻上传**。receipt 有 15 分钟有效期，攒着不发会在发送时
+报「上传已过期」，用户还得重选。
+
+**测试**：新增 11 条纯逻辑用例（总计 **224 passed**）。
+
+#### 真机验证（折叠屏 HOP-AL00，USB）
+
+| 步骤 | 结果 |
+|---|---|
+| 原生选择器 | ✅ 点「选择文件」弹出系统「安全访问文件」对话框（照片/浏览/已选 0/8） |
+| 读取与校验 | ✅ 选中 `IMG_20261017_111232.jpg`，本地识别 `image/jpeg`、3.1 MB（未超 10 MB） |
+| 上传 | ✅ mock 收到 `POST /uploads?…&name=IMG_20261017_111232.jpg&mediaType=image%2Fjpeg`，**3138330 字节**，返回 `receipt-1` |
+| 仅附件发送 | ✅ mock 收到 `提交消息 text= 附件=1 ["receipt-1"]`，界面附件条清空 |
+
+#### 顺带补齐 mock 的三个缺口
+
+调试中发现 mock 一直缺这些路由，导致「发送」从来没真正联通过：
+
+- `GET /conversations/:id/target`（发送前先取目标 sessionId）——**缺它则发送第一步就失败**；
+- `POST /submissions` + `GET /submissions/:id`（提交与回执）；
+- `POST /uploads`（裸字节上传）。
+
+另外两个**测试方法**上的坑（都记进 status）：
+
+1. **软键盘会吃掉点击**：展开态输入框获得焦点后，屏幕坐标整体偏移，
+   点「发送」实际点在键盘上。**必须先点消息区收键盘，再取坐标**。
+2. **mock 凭据的 `expiresAt` 必须是远期**：之前用了当天时间戳，
+   过几小时 App 就认为会话过期、退回配对页，白排查半天。
+
+#### 还没做（P3-1 余下）
+
+- **消息内图片显示**：需要在收到消息后按 `seq` 拉 `/attachments/{id}` 并用
+  `image.createImageSource` 转 PixelMap（带鉴权头），本轮未做；
+- 附件下载/保存到本地；
+- 失败重试与并发上传队列（当前是串行上传，失败即标红）。
+
+第三十七步：**消息内图片显示**（P3-1 收尾）。
+
+#### 难点：带鉴权的图片加载
+
+ArkUI 的 `Image(url)` **无法带请求头**，而附件下载接口要求
+`Authorization` + `conversationId/sessionId/seq` 三个查询参数。
+所以不能用 `Image('https://…')`，必须：
+
+1. 用已配对的 `MobileClient.attachment()` 取 **ArrayBuffer**；
+2. 交给 `image.createImageSource(buffer).createPixelMap()` 解码；
+3. 用 `Image(pixelMap)` 渲染。
+
+另外做了 **`ImageLoader` 内存缓存**（按 attachmentId 存 PixelMap，上限 40 张）：
+消息列表滚动重绘很频繁，每帧重新下载解码会明显卡顿（一张 3MB 图解码几十毫秒）。
+
+#### 布局：先占位再出图
+
+图片在解码完成前如果高度为 0，出图时会把整个消息列表顶得跳一下。
+所以 `fitImageSize()` 先按**宿主下发的原始宽高**等比算出展示尺寸，用这个尺寸渲染占位框；
+没有宽高信息时按 4:3 兜底。缩放只缩不放（小图保持原尺寸）。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | 复用已有 `Attachment`，补 `width/height` |
+| 逻辑 | `logic/Attachments.ets` | `imagesOf` / `filesOf` / `fitImageSize` |
+| 加载 | `service/ImageLoader.ets` | 带鉴权下载 + PixelMap 解码 + LRU 缓存 |
+| 视图 | `view/AttachmentViews.ets` | 消息内图片（占位/加载中/失败重试）与文件条 |
+| 接入 | `view/MessageBubble.ets`、`pages/Index.ets` | 气泡内渲染；点按全屏预览 |
+
+**测试**：新增 4 条用例（总计 **228 passed**）。
+
+#### 真机验证（折叠屏 HOP-AL00）
+
+| 步骤 | 结果 |
+|---|---|
+| 图片渲染 | ✅ mock 收到 `GET /attachments/att-1`（1936 字节 PNG），气泡内按 240×140 等比缩放显示，圆角、无溢出 |
+| 点按全屏 | ✅ 黑色半透明遮罩 + 图片居中放大 |
+| 遮罩色 | ✅ 修正为 `#AARRGGBB`（原来写 `#RRGGBBAA`，全透明不生效） |
+
+证据：`docs/qa/p1/device-image-in-message.jpeg`。
+
+#### 又两个 ArkTS 约束（已记入 status）
+
+1. **组件方法不能叫 `size()`**：与 `CustomComponent` 内建属性同名直接编译失败（此前 `border` 已踩过一次）。
+2. **颜色格式是 `#AARRGGBB`**，不是 CSS 的 `#RRGGBBAA`；写错不报错、只是透明。
+
+#### 还没做
+
+- 图片**保存到相册**、手势缩放；
+- 文件下载/打开（当前点文件条只触发 `onOpen`，还没有真正落盘）。
+
+第三十八步：**Bot 单独设置页 + 主机头像读取**（用户反馈）。
+
+#### 反馈原文
+
+> bot团队管理页面，我点开某个bot，应该进入其单独的设置选项，比如人设的提示词输入、
+> 分配哪个模型的选择、删除bot选项，修改名称和头像等等，
+> 另外bot的默认头像应该读取的是主机端头像
+
+#### 两个问题的根因
+
+1. **点 Bot 直接进了聊天**：`openBotCard()` 里是 `this.section = 'chat'; selectConversation(...)`，
+   完全没有设置入口。想改人设/模型只能去「设置 → Bot 管理」再找一遍。
+2. **主机头像被丢掉了**：`Index.ets` 里**三处**构造 `AvatarSpec` 都硬编码 `image: ''`，
+   而宿主把头像存成 `data:image/png;base64,…` 的 data URL（见 `roster.js cleanAvatar`）。
+   等于所有 Bot 永远显示默认矢量头像。
+
+#### 做了什么
+
+| 项 | 内容 |
+|---|---|
+| 点 Bot 进设置 | `openBotCard()` 改为打开 Bot 设置页（`openBots()` + `openBotEditor(id)`） |
+| 主机头像 | 新增 `avatarImageOf(bot)`，三处 `image: ''` 全部改为读 `bot.avatar.image` |
+| 头像更换 | Bot 设置页新增头像区：预览 / 更换头像（相册→base64→data URL）/ 清除 |
+| 人设提示词 | 复用已有 `instructions` 字段（服务层早已支持，只是入口不通） |
+| 模型/档位/删除/改名/复制/设主 | 复用 P2-5 已有的 `BotManagePanel` 能力 |
+
+`MobileClient.updateBot` 增加 `BotPatch` → 宿主请求体的转换：
+`avatarImage` 包成 `avatar: { image }`，空串转 `avatar: null`（宿主会删除头像）。
+
+**测试**：新增 3 条用例（总计 **231 passed**）。
+
+#### 真机验证（折叠屏 HOP-AL00）
+
+| 步骤 | 结果 |
+|---|---|
+| 团队页点 Chief | ✅ 进入「编辑 Bot」页：头像区 + 名字 + 角色 + 指令 + 模型 + 思考档位 |
+| 改人设提示词并保存 | ✅ mock 收到 `update-bot {"id":"bot-chief","instructions":"…回答要简洁"}` —— **只有变化字段** |
+
+#### 未验证（如实记录）
+
+**更换头像的端到端未验证通过**：点「更换头像」能正常唤起选择器，
+但选中图片后表单里的头像没有更新。目前做了两处猜测性修复但**都还没验证**：
+
+- 把 `PhotoViewPicker`（返回 `file://media/Photo/...`，`fileIo.openSync` 打不开）
+  换成 `DocumentViewPicker`（附件流程里验证可用）；
+- 选择失败时不再静默，改为 toast 提示。
+
+下次真机验证需要盯住：选择器返回的 uri 能否 `openSync`、`util.Base64Helper` 是否正确编码、
+以及 ArkUI `Image` 是否接受 data URL 字符串。
+
+#### 自检脚本的一个真发现
+
+为了验证 `tools/check_builders.py` 确实能抓到「装饰器丢失」，我故意删掉一个
+`@Builder` 再看它报不报——结果**没报**。追下去发现源码里真的有问题：
+
+```ts
+  @Builder              // ← 孤儿装饰器（早先编辑留下的）
+  /**
+   * 设置页的唯一实现…
+   */
+  @Builder              // ← 真正的装饰器
+  private settingsBody() {
+```
+
+两个装饰器叠着，删掉一个另一个还在，所以脚本"正确地"认为没缺——但也说明
+**源码里确实残留了重复装饰器**，已清理。
+
+顺带说明脚本的判定规则：往上找最近的装饰器时**会跳过注释行**，
+所以把 `@Builder` 插到「文档注释和方法之间」这种错误也能被发现（注释不会中断查找）。
+
+#### 本轮未开始的两项（用户同时提出）
+
+- **设置 → 工具与技能 功能补全**（连接器 `connector-*`、能力库入口）；
+- **P3-4 通知**（本地提醒 + 通知中心）。
+
+第三十九步：**重做「编辑 Bot」界面**（用户：*编辑 bot 的界面就这么简朴吗？*）。
+
+#### 原来是什么样
+
+一张大白卡里从上到下堆：头像行、名字、角色、指令、模型 chips、档位 chips、
+保存按钮、设主/复制、删除——**全部塞在同一个卡片里**，标签字号小、没有层级、
+没有说明文字，保存按钮还夹在表单中间（表单长时要翻到中间才能保存）。
+
+#### 重做后的结构
+
+| 区块 | 内容 |
+|---|---|
+| **顶部主视觉** | 72×72 头像（带「换」角标，点一下就能换）/ 名字 20pt 加粗 / **主 Bot 徽标** / 角色 / 更换头像·清除 |
+| **基本资料** | 名字、角色，各带 label + 一行说明（「最多 40 字，不能重名」「一句话说明它负责什么」） |
+| **人设提示词** | 160 高的输入区 + 说明 + 实时字数 |
+| **模型与思考档位** | 「跟随默认 / 具体模型」chips；档位 chips（未选模型时给出解释而不是空白） |
+| **其它操作** | 设主 / 复制，并排次要按钮 |
+| **危险操作** | 独立卡片 + 红色说明 + 红底删除按钮（与普通操作分开） |
+| **底部固定保存条** | 始终可见；校验不通过时在按钮上方显示原因 |
+
+另外把 `SecondaryPageTheme` 补了 `danger / dangerBg` 两个语义令牌——
+之前各面板里危险色都是裸十六进制，这次统一收到令牌里（8 个面板默认值同步补齐）。
+
+#### 真机验证（折叠屏 HOP-AL00）
+
+| 项 | 结果 |
+|---|---|
+| 顶部主视觉 | ✅ 头像 + 名字 + 主 Bot 徽标 + 角色 + 更换头像 |
+| 分组卡片 | ✅ 基本资料 / 人设提示词（带「16 字」计数）/ 模型与思考档位 / 其它操作 / 危险操作 |
+| 底部保存条 | ✅ 固定可见；滚动时内容不再被遮挡（补了 110 的底部内边距） |
+| 保存 | ✅ 切换档位「高 → 中」后点保存，mock 收到 `update-bot {"id":"bot-chief","effort":"medium"}`，列表变 `GPT-5 · 中` |
+
+证据：`docs/qa/p1/device-bot-editor-top.jpeg`、`device-bot-editor-bottom.jpeg`。
+
+第四十步：**模型选择改为原生下拉**（用户：*模型最好用下拉菜单，因为要读取主机真实模型列表，可能比较多*）。
+
+#### 原来的问题
+
+模型是一排 chips（`Flex wrap`）。主机模型列表动辄十几个到几十个时：
+
+- chips 会把页面撑成好几屏，**把下面的档位和保存按钮挤走**；
+- 十几个 chip 里看不出「当前选的是哪个」；
+- 长模型名（如「本地大模型（长上下文）」）会把一行挤乱。
+
+#### 做法
+
+换成 ArkUI **原生 `Select`**（与「思考档位」已有的下拉用法一致）：
+
+- 第 0 项固定是「跟随默认」（`form.model === ''`）；
+- 其后是主机 `state.models` 的真实顺序，`selected` 由 `modelSelectedIndex()` 反查；
+- 下方显示「N 个可选模型」，让用户知道列表规模；
+- 选中后**清空思考档位**——档位是按模型返回的，旧档位对新模型无意义。
+
+档位保持 chips：它只有「不设置/低/中/高」几个，摊开比下拉更快。
+
+#### 真机验证（折叠屏 HOP-AL00，mock 故意给 12 个模型）
+
+| 步骤 | 结果 |
+|---|---|
+| 下拉展示 | ✅ 折叠成一行 `GPT-5 ▼`，下方「12 个可选模型」；展开后 跟随默认 / GPT-5 / GPT-5 mini / GPT-5 nano / GPT-4.1 / GPT-4.1 mini / Claude Opus 4 / Claude Sonnet 4 / Gemini 2.5 Pro / Gemini 2.5 Flash…（超出部分原生滚动） |
+| 当前项高亮 | ✅ GPT-5 以品牌色底高亮 |
+| 选择并保存 | ✅ 选「Claude Opus 4」→ 保存 → mock 收到 `update-bot {"id":"bot-chief","model":"mock/claude-opus","effort":""}`（档位按设计清空），列表变 `Claude Opus 4` |
+
+证据：`docs/qa/p1/device-bot-model-select.jpeg`、`device-bot-editor-model.jpeg`。
+
+第四十一步：**修好头像更换 + 双向同步**。
+
+#### 原来看起来"没反应"的三个原因（都真实存在）
+
+1. **相册 URI 读不出来**：`PhotoViewPicker` 返回 `file://media/Photo/...`，
+   `fileIo.openSync` 直接打开失败。改成 `DocumentViewPicker`（附件流程里已验证可用）。
+2. **错误被吞掉**：选中失败时既没提示也没日志，看起来就是"点了没反应"。
+   现在失败会 toast，并在 hilog（域 `0xD5B0` 标签 `BotAvatar`）打印
+   `mediaType / b64Len / dataUrl len`。
+3. **对比逻辑"太正确"**：第一次测试时我推的图与主机现有头像**字节完全相同**，
+   `buildBotPatch` 判定无变化 → 不发请求、只提示"没有需要保存的修改"。
+   这不是 bug，但很容易被误读成"保存没生效"。
+
+#### 双向同步是怎么成立的
+
+头像本身存在**主机**的 Bot 记录里（`avatar.image` 是 data URL），所以同步天然由 state 驱动：
+
+| 方向 | 链路 |
+|---|---|
+| **App → 主机** | 选图 → base64 → `data:image/png;base64,…` → `update-bot { avatar: { image } }` → 主机存 |
+| **主机 → App** | 主机改了 → `GET /state` 的 `bots[].avatar.image` → `avatarImageOf(bot)` → `BotAvatar`/hero 渲染 |
+
+App 侧**不缓存头像**，每次渲染都读 state，所以「哪一端改了，另一端刷新即同步」。
+清除头像走 `avatar: null`，宿主 `cleanAvatar(null)` 会 `delete bot.avatar`。
+
+#### 真机/模拟器验证（这次在模拟器完成，折叠屏中途断连）
+
+| 步骤 | 结果 |
+|---|---|
+| 主机带头像、App 读取 | ✅ 主机给出橙底 `HOST` 头像，编辑页正确渲染（`Image(dataUrl)` 可用） |
+| 选图 → 表单更新 | ✅ hilog：`picked mediaType=image/png b64Len=996/1196 error=` → `dataUrl len=998/1218`；toast「头像已选择，点保存生效」 |
+| 保存写回主机 | ✅ mock 收到 `update-bot {"avatar":{"image":"data:image/png;base64,iVBOR…"}}`，日志 `✅ 更新 Bot Chief 字段=avatar` |
+| **主机端改 → App 同步** | ✅ 把 mock 的头像换成蓝色 `HOST-2` 并重启 → App 点刷新后编辑页显示蓝色头像 |
+
+证据：`docs/qa/p1/device-bot-avatar-host.jpeg`、`device-bot-avatar-sync.jpeg`。
+
+#### 顺带留下的诊断
+
+`hilog` 里保留 `BotAvatar` 三步日志（选图/转 data URL/写入）。
+以后再出问题，`hdc shell hilog | grep BotAvatar` 就能直接看出卡在哪一步。
+
+第四十二步：**工具与技能补全**（连接器 + 能力库入口）。
+
+#### 原来缺什么
+
+`ToolsSkillsPanel` 只有「技能 / 插件 / 插件包」三块：
+
+- **连接器**完全没有（旧 `ToolsPage` 里有一行「连接器」但点了没反应，改版时整行丢了）；
+- **能力库入口**在改版时也丢了——能力库页面还在，却从工具页进不去；
+- 用户反馈：「设置里面工具与技能里面的功能需要补全」。
+
+#### 协议（读宿主 `src/host/connectors.js`）
+
+| 动作 | 载荷 | 说明 |
+|---|---|---|
+| 状态 | `state.connectors` | `{ id, name, state: off/connecting/ready/error, account, error? }` |
+| `connector-connect` | `{ id, token }` | token 存进主机密钥库；返回最新列表 |
+| `connector-retry` | `{ id }` | 仅 error 状态有意义 |
+| `connector-disconnect` | `{ id }` | 删除令牌 + 断开 |
+
+宿主目前只有 GitHub 一个连接器。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `Connector`；`TeamState.connectors` |
+| 投影 | `service/Projection.ets` | `toConnectors`（丢弃无 id 的条目） |
+| 协议 | `service/MobileClient.ets` | `connectorConnect/Retry/Disconnect` |
+| 逻辑 | `logic/Connectors.ets` | 状态文案/状态色/按钮文案/是否需要 token/token 校验 |
+| 视图 | `view/ToolsSkillsPanel.ets` | **能力库入口** + **连接器分区**（行内 token 输入） |
+
+两个设计点：
+
+1. **token 输入用行内展开**，不用 `bindSheet`——同一节点多个 sheet 会互相覆盖（踩过两次）。
+2. **连接/断开后局部更新**：三个接口都直接回连接器列表，用返回值覆盖 `team.connectors`，
+   不触发整页刷新。
+
+**测试**：新增 7 条用例（总计 **238 passed**）。
+
+#### 验证（模拟器，真机中途断连）
+
+| 步骤 | 结果 |
+|---|---|
+| 页面结构 | ✅ 顶部「能力库」入口卡 → 连接器（1）→ 技能（4）→ 插件（3）… |
+| 连接器未连接态 | ✅ `GitHub / 未连接 / 连接` 按钮 |
+| 点「连接」 | ✅ 行内展开 token 输入（密码框 + 「请粘贴访问令牌」提示 + 取消/连接） |
+| 提交 token | ✅ mock 收到 `connector-connect {id:'github', token:'ghp_…'}` → 行变为 `已连接 · mock-user` + 断开 |
+| 断开 | ✅ 原生确认「将断开「GitHub」，主机上保存的访问令牌会被删除」→ mock 收到 `connector-disconnect` → 回到「未连接」 |
+| 能力库入口 | ✅ 打开能力库页（Bot 选择 + 技能/MCP/能力包列表，显示运行中/已挂载状态） |
+
+#### 顺带修的一个路由 bug
+
+能力库入口一开始点了没反应：`onOpenCapabilities` 设的是 `mobileOverlay = 'capabilities'`，
+而 `mainContent()` 里 `toolsVisible` 的分支在前，**工具页一直盖住它**。
+改成独立的 `capabilitiesVisible` 状态并插到 `toolsVisible` 之前，
+返回键与「返回」按钮都能正确回到工具与技能。
+
+证据：`docs/qa/p1/device-tools-connectors.jpeg`、`device-capabilities-from-tools.jpeg`。
+
+第四十三步：**P3-4 通知（通知中心 + 本地系统通知）**。
+
+#### 先弄清"能不能真推送"
+
+鸿蒙的系统推送需要 **HMS Push + AGC 配置**（应用签名指纹、推送证书），本工程没有。
+所以这一轮做的是**两条能落地的路径**：
+
+1. **通知中心（inbox）**：host 把「需要你知道的事」聚合在 `notifications-list` 里，
+   App 拉取、展示、标记已读、按类别订阅；
+2. **本地系统通知**：App 在前台轮询时发现**新未读通知**，用
+   `notificationManager.publish` 在设备上弹一条系统通知。
+
+这样"没有推送也能被提醒"，且不依赖任何云服务。
+
+#### 协议（读宿主 `src/mobile/notifications.js`）
+
+| 动作 | 载荷 | 返回 |
+|---|---|---|
+| `notifications-list` | 无 | `{ items[], preferences{enabled,categories,readThrough}, cursor, pushRegistered, pushAvailable }` |
+| `notifications-read` | `{ ids[] }` 或 `{ through }` | `{ ok }` |
+| `notifications-preferences` | `{ enabled, categories[] }` | `{ ok }` |
+
+`item = { id, conversationId, kind: reply|question|approval, title, body?, createdAt, read }`。
+
+**一个容易写错的点**：「全部已读」必须用主机返回的 **`cursor`** 作为 `through`，
+因为宿主是拿 `item.id <= readThrough` 判断的——传条数或最大 id 会把后续新通知一起标成已读。
+
+#### 做了什么
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 模型 | `model/Models.ets` | `NotificationItem / NotificationPreferences / NotificationsPage` |
+| 协议 | `service/MobileClient.ets` | `notifications / markNotificationsRead / setNotificationPreferences` |
+| 逻辑 | `logic/Notifications.ets` | 未读数、类别过滤、已读游标、时间格式、是否该弹 |
+| 服务 | `service/LocalNotify.ets` | `requestEnableNotification` + `publish` + `cancel` |
+| 视图 | `view/NotificationsPanel.ets` | 偏好（总开关 + 三类别 + 发送测试）+ 列表（未读点/已读灰） |
+| 接入 | `pages/Index.ets` | 刷新时轮询通知并弹横幅；点通知标记已读并跳到会话；设置项带未读数角标 |
+
+**测试**：新增 8 条用例（总计 **246 passed**）。
+
+#### 验证（模拟器）
+
+| 步骤 | 结果 |
+|---|---|
+| 通知中心页面 | ✅ 标题「2 条未读」+ 偏好卡（已开启 · 回复、提问、审批）+ 列表 3 条（审批已读灰色、提问/回复未读蓝点，带「类别 · 时间」） |
+| 全部已读 | ✅ mock 收到 `notifications-read {through:3}` → 标题变「全部已读」 |
+| 发测试通知 | ✅ 下拉通知栏可见 **DS Bot 系统通知** |
+| 新通知自动提醒 | ✅ 通知栏同时出现「Chief 在「研发小组」里回复了你」「Searcher 有一个问题等你确认」（App 启动轮询时自动弹） |
+
+证据：`docs/qa/p1/device-notifications-inbox.jpeg`、`device-notifications-system.jpeg`。
+
+#### 明确没做的部分
+
+- **后台/锁屏推送**：需要 HMS Push 与 AGC 配置，本工程不具备；宿主侧
+  `notifications-register` / `notifications-background-register` 因此没有接。
+- **点通知跳转**：通知栏点击进入 App 后不会自动定位到对应会话（需要在
+  `EntryAbility` 里处理 want 参数）；目前只能在通知中心里点条目跳转。
+
 **仍然没拆的大头**： + `chatPanel`(99) + `mobileChatPanel`(99) +
 `mainContent`(88) + `mobileHome`(81) + `teamPage`(83) ≈ 600 行，深度依赖 `Index` 的 40+ 个状态字段与动作。
 要拆得先理出页面级状态容器（或引入 `@ObservedV2`/`@Trace` 细粒度观测），属于独立一步，不宜与小步混做。
@@ -1114,6 +2403,30 @@ bash docs/qa/p1/ui_regression.sh --save-baseline
 
 | 日期 | 版本 | 内容 |
 |---|---|---|
+| 2026-10-18 | v59 | **P3-4 通知**：通知中心（列表/未读数/全部已读/偏好/测试）+ 本地系统通知（前台轮询触发）；8 用例（总计 246）；模拟器验证通知栏真实弹出。 |
+| 2026-10-18 | v58 | **工具与技能补全**：新增连接器分区（连接/重试/断开 + 行内 token）、恢复能力库入口并修好路由；7 用例（总计 238）。 |
+| 2026-10-18 | v57 | **修复头像更换**（PhotoViewPicker→DocumentViewPicker、错误可见、hilog 诊断）+ **双向同步验证**（App→主机 update-bot avatar；主机→App state 回读）；折叠屏中途断连，改用模拟器完成验证。 |
+| 2026-10-18 | v56 | **Bot 模型选择改原生下拉**（12 个模型实测）；选中清空档位；折叠屏验证选择与保存链路。 |
+| 2026-10-18 | v55 | **重做编辑 Bot 界面**：主视觉头像 + 6 个分组卡片 + 底部固定保存条；`SecondaryPageTheme` 补 `danger/dangerBg` 语义令牌；折叠屏验证保存链路。 |
+| 2026-10-18 | v54 | **Bot 单独设置页**（点团队页 Bot 进设置）+ **主机头像读取**（三处 `image: ''` 修复）+ 头像更换 UI；3 用例（总计 231）。头像更换端到端**未验证**。 |
+| 2026-10-18 | v53 | **消息内图片显示**：带鉴权下载 + PixelMap 解码 + LRU 缓存 + 等比占位 + 全屏预览；4 用例（总计 228）；折叠屏验证。 |
+| 2026-10-18 | v52 | **P3-1 附件上传与发送**：原生选择器、裸字节上传、附件条、仅附件发送；11 用例（总计 224）；折叠屏真机验证 3.1MB 图片上传与发送；补齐 mock 的 target/submissions/uploads 路由。 |
+| 2026-10-18 | v51 | **合并两套设置页**（唯一实现 `settingsBody`，宽屏限宽居中）+ **折叠屏补验**（改名/归档端到端）；新增 `tools/check_builders.py` 防 `@Builder` 丢失；又犯一次并用脚本兜住。 |
+| 2026-10-18 | v50 | **P2-9 Agent 管理**（创建/移除/改名/归档）+ **折叠屏宽屏入口补齐**（宽屏设置原无这些入口）；7 用例（总计 213）；折叠屏真机验证页面与入口。 |
+| 2026-10-18 | v49 | **P2-9 会话导出**（Markdown/JSON + 会话菜单）；13 用例（总计 206）；真机修 3 个崩溃：@Builder 装饰器被打断、多 bindSheet 覆盖、`message.text` 为 undefined。 |
+| 2026-10-18 | v48 | **P2-8 工具与技能**：技能分组列表+全文、插件/包开关；12 用例（总计 193）；**首次真机验证**（含 signed HAP 部署注意）。 |
+| 2026-10-18 | v47 | **P2-5 Bot 管理**：列表/编辑（名字·角色·指令·模型·档位）/保存/复制/设主/删除；11 条用例（总计 181）；档位名表预处理；真机端到端验证。 |
+| 2026-10-17 | v46 | **P2-6 群聊管理**：群列表 + 编辑（群名/公告/模式/管理员/成员）+ 删除；只提交变化字段；12 条用例（总计 170）；真机端到端验证。 |
+| 2026-10-17 | v45 | **P2-7 能力库**：把 3 张硬编码占位卡换成真实数据（能力库 + 每 Bot 挂载状态 + `bot-capability` 挂载/卸载），5 条投影用例（总计 158）；测试运行器补 `service/` 路径改写。 |
+| 2026-10-17 | v44 | **P2-4 记忆面板**（列表/删除/自然语言改记忆，13 用例，总计 153）；**模拟主机进仓库** `docs/qa/p1/mock-host.mjs` 并修正 tlsPin 算法（SPKI hex 而非整证 base64）；再次踩到并修复「@Builder 参数不刷新」。 |
+| 2026-10-17 | v43 | **P2-3 定时任务**：读宿主源码确认 schedules/create/delete 协议与四种时间形态；新增 `logic/Schedules.ets`（15 用例，总计 140）+ `view/SchedulesPanel.ets`；真机验证创建/删除端到端；记录两条 ArkTS 约束（结构性类型、空载荷字面量）。 |
+| 2026-10-17 | v42 | **P2-2 用量面板**：从宿主源码确认 `usage` 扁平行协议，新增 `logic/Usage.ets`（12 条用例）+ `view/UsagePanel.ets`；设置页「用量」入口打通；真机验证 4 个时间窗口数字精确；踩到并记录 3 个 ArkUI 坑（@Builder 参数不刷新、ForEach key 复用、@Builder 不能写 const/return）。 |
+| 2026-10-17 | v41 | P2 启动：P2-11 深色偏好持久化（跨重启验证）；P2-10 手机端设置页补「已配对设备」分组 + 移除（原生确认 → DELETE → 刷新），手机模拟器全链路验证；补 mock 设备撤销路由 |
+| 2026-10-17 | v40 | P1-8 收尾：补齐平板区间（1045vp）与深色模式截图，四形态证据齐全；平板断点用 2in1 缩窗覆盖（MatePad 镜像未部署）；新增 `service/AppPreferences.ets` 实现深色偏好持久化（P2-11），真机验证跨重启保持 |
+| 2026-10-17 | v38 | 接管鸿蒙原生返回（侧滑手势+返回键）：`Index.onBackPress()` 按「弹层→浮层→会话页→分区→最外层」五级回退；真机验证三层回退正确；侧滑手势本身需真人确认（注入式滑动无法触发系统手势层） |
+| 2026-10-17 | v37 | **修复真机点会话闪退**：`@BuilderParam` 内联 UI 不被编译成 UI 代码，`Text()` 返回 undefined → `.fontSize` 抛错杀进程；改为 `@Builder` 方法 `emptyChatState()`；复查全工程 BuilderParam 无其它内联 UI；真机验证 App 自身错误 0 |
+| 2026-10-17 | v36 | **P0-10：HUKS 凭据加密**（AES-256-GCM、随机 IV、旧明文自动迁移、写入后回读自校验、启动自检）；新增 10 条纯逻辑用例（总计 113）；真机自检通过；迁移端到端待下次配对确认 |
+| 2026-10-17 | v35 | 新增「扫码连接主机」（鸿蒙原生 ScanKit `startScanForResult`，含图库识别、取消静默、JSON 粗校验后自动配对）；新增 `tools/pair_qr.py` 弥补主机端不显示二维码；真机 `HBP-AL00` 验证按钮渲染与系统扫码 UI 拉起；真机首页 0 越界 |
 | 2026-10-17 | v34 | 确认「加载更早消息」分页按钮（`@State` 修复后设备端端到端验收，mock 日志有 cursor 请求铁证）；补 mock 分页与 query 日志（此前无法观察分页）；判定视图拆分收口，剩余 Builder 不再拆并说明理由 |
 | 2026-10-17 | v33 | 抽出 `view/PairingPage.ets`（自持表单状态 + `@BuilderParam` 注入品牌标记）；双路径实测（已配对/未配对）；**撤回**不该合并的 `ChatHeader`（两个顶栏结构确实不同，实测手机端无停止/置顶/隐藏按钮） |
 | 2026-10-17 | v32 | 抽出 `view/MobileHome.ets` 与 `view/MobileCreateBotPage.ets`；`@Builder` 残留问题修进替换脚本；`@Prop border` 与内置属性冲突改名 `edgeColor`；双端越界 0 |
@@ -1129,6 +2442,30 @@ bash docs/qa/p1/ui_regression.sh --save-baseline
 | 2026-10-15 | v4 | P1-7 补群聊作者标识，并修正 `Message.author` 的真实类型（`string` → `{ id, name }`，此前群聊无法显示发言人）；记录 `room-progress` / `stop-member-work` 无实现线索、无可验证场景，暂不写 UI |
 | 2026-10-15 | v5 | aurora 渐变补齐并量化验收（Lead 独立复核 hue 跨度 32.1°、严格单调）；新增 §4.2 记录 ArkUI `linearGradient` 的三个非直觉行为 |
 | 2026-10-15 | v6 | 单测发现并修复 `cloneMessage` 对 `author` 的浅拷贝（Merge 用例 18→19，总计 57）；把队友留在 `/tmp` 的可复跑脚本与对照图归档进 `docs/qa/p1/` 并去掉硬编码路径 |
+| 2026-10-18 | v59 | **P3-4 通知**：通知中心（列表/未读数/全部已读/偏好/测试）+ 本地系统通知（前台轮询触发）；8 用例（总计 246）；模拟器验证通知栏真实弹出。 |
+| 2026-10-18 | v58 | **工具与技能补全**：新增连接器分区（连接/重试/断开 + 行内 token）、恢复能力库入口并修好路由；7 用例（总计 238）。 |
+| 2026-10-18 | v57 | **修复头像更换**（PhotoViewPicker→DocumentViewPicker、错误可见、hilog 诊断）+ **双向同步验证**（App→主机 update-bot avatar；主机→App state 回读）；折叠屏中途断连，改用模拟器完成验证。 |
+| 2026-10-18 | v56 | **Bot 模型选择改原生下拉**（12 个模型实测）；选中清空档位；折叠屏验证选择与保存链路。 |
+| 2026-10-18 | v55 | **重做编辑 Bot 界面**：主视觉头像 + 6 个分组卡片 + 底部固定保存条；`SecondaryPageTheme` 补 `danger/dangerBg` 语义令牌；折叠屏验证保存链路。 |
+| 2026-10-18 | v54 | **Bot 单独设置页**（点团队页 Bot 进设置）+ **主机头像读取**（三处 `image: ''` 修复）+ 头像更换 UI；3 用例（总计 231）。头像更换端到端**未验证**。 |
+| 2026-10-18 | v53 | **消息内图片显示**：带鉴权下载 + PixelMap 解码 + LRU 缓存 + 等比占位 + 全屏预览；4 用例（总计 228）；折叠屏验证。 |
+| 2026-10-18 | v52 | **P3-1 附件上传与发送**：原生选择器、裸字节上传、附件条、仅附件发送；11 用例（总计 224）；折叠屏真机验证 3.1MB 图片上传与发送；补齐 mock 的 target/submissions/uploads 路由。 |
+| 2026-10-18 | v51 | **合并两套设置页**（唯一实现 `settingsBody`，宽屏限宽居中）+ **折叠屏补验**（改名/归档端到端）；新增 `tools/check_builders.py` 防 `@Builder` 丢失；又犯一次并用脚本兜住。 |
+| 2026-10-18 | v50 | **P2-9 Agent 管理**（创建/移除/改名/归档）+ **折叠屏宽屏入口补齐**（宽屏设置原无这些入口）；7 用例（总计 213）；折叠屏真机验证页面与入口。 |
+| 2026-10-18 | v49 | **P2-9 会话导出**（Markdown/JSON + 会话菜单）；13 用例（总计 206）；真机修 3 个崩溃：@Builder 装饰器被打断、多 bindSheet 覆盖、`message.text` 为 undefined。 |
+| 2026-10-18 | v48 | **P2-8 工具与技能**：技能分组列表+全文、插件/包开关；12 用例（总计 193）；**首次真机验证**（含 signed HAP 部署注意）。 |
+| 2026-10-18 | v47 | **P2-5 Bot 管理**：列表/编辑（名字·角色·指令·模型·档位）/保存/复制/设主/删除；11 条用例（总计 181）；档位名表预处理；真机端到端验证。 |
+| 2026-10-17 | v46 | **P2-6 群聊管理**：群列表 + 编辑（群名/公告/模式/管理员/成员）+ 删除；只提交变化字段；12 条用例（总计 170）；真机端到端验证。 |
+| 2026-10-17 | v45 | **P2-7 能力库**：把 3 张硬编码占位卡换成真实数据（能力库 + 每 Bot 挂载状态 + `bot-capability` 挂载/卸载），5 条投影用例（总计 158）；测试运行器补 `service/` 路径改写。 |
+| 2026-10-17 | v44 | **P2-4 记忆面板**（列表/删除/自然语言改记忆，13 用例，总计 153）；**模拟主机进仓库** `docs/qa/p1/mock-host.mjs` 并修正 tlsPin 算法（SPKI hex 而非整证 base64）；再次踩到并修复「@Builder 参数不刷新」。 |
+| 2026-10-17 | v43 | **P2-3 定时任务**：读宿主源码确认 schedules/create/delete 协议与四种时间形态；新增 `logic/Schedules.ets`（15 用例，总计 140）+ `view/SchedulesPanel.ets`；真机验证创建/删除端到端；记录两条 ArkTS 约束（结构性类型、空载荷字面量）。 |
+| 2026-10-17 | v42 | **P2-2 用量面板**：从宿主源码确认 `usage` 扁平行协议，新增 `logic/Usage.ets`（12 条用例）+ `view/UsagePanel.ets`；设置页「用量」入口打通；真机验证 4 个时间窗口数字精确；踩到并记录 3 个 ArkUI 坑（@Builder 参数不刷新、ForEach key 复用、@Builder 不能写 const/return）。 |
+| 2026-10-17 | v41 | P2 启动：P2-11 深色偏好持久化（跨重启验证）；P2-10 手机端设置页补「已配对设备」分组 + 移除（原生确认 → DELETE → 刷新），手机模拟器全链路验证；补 mock 设备撤销路由 |
+| 2026-10-17 | v40 | P1-8 收尾：补齐平板区间（1045vp）与深色模式截图，四形态证据齐全；平板断点用 2in1 缩窗覆盖（MatePad 镜像未部署）；新增 `service/AppPreferences.ets` 实现深色偏好持久化（P2-11），真机验证跨重启保持 |
+| 2026-10-17 | v38 | 接管鸿蒙原生返回（侧滑手势+返回键）：`Index.onBackPress()` 按「弹层→浮层→会话页→分区→最外层」五级回退；真机验证三层回退正确；侧滑手势本身需真人确认（注入式滑动无法触发系统手势层） |
+| 2026-10-17 | v37 | **修复真机点会话闪退**：`@BuilderParam` 内联 UI 不被编译成 UI 代码，`Text()` 返回 undefined → `.fontSize` 抛错杀进程；改为 `@Builder` 方法 `emptyChatState()`；复查全工程 BuilderParam 无其它内联 UI；真机验证 App 自身错误 0 |
+| 2026-10-17 | v36 | **P0-10：HUKS 凭据加密**（AES-256-GCM、随机 IV、旧明文自动迁移、写入后回读自校验、启动自检）；新增 10 条纯逻辑用例（总计 113）；真机自检通过；迁移端到端待下次配对确认 |
+| 2026-10-17 | v35 | 新增「扫码连接主机」（鸿蒙原生 ScanKit `startScanForResult`，含图库识别、取消静默、JSON 粗校验后自动配对）；新增 `tools/pair_qr.py` 弥补主机端不显示二维码；真机 `HBP-AL00` 验证按钮渲染与系统扫码 UI 拉起；真机首页 0 越界 |
 | 2026-10-17 | v34 | 确认「加载更早消息」分页按钮（`@State` 修复后设备端端到端验收，mock 日志有 cursor 请求铁证）；补 mock 分页与 query 日志（此前无法观察分页）；判定视图拆分收口，剩余 Builder 不再拆并说明理由 |
 | 2026-10-17 | v33 | 抽出 `view/PairingPage.ets`（自持表单状态 + `@BuilderParam` 注入品牌标记）；双路径实测（已配对/未配对）；**撤回**不该合并的 `ChatHeader`（两个顶栏结构确实不同，实测手机端无停止/置顶/隐藏按钮） |
 | 2026-10-17 | v32 | 抽出 `view/MobileHome.ets` 与 `view/MobileCreateBotPage.ets`；`@Builder` 残留问题修进替换脚本；`@Prop border` 与内置属性冲突改名 `edgeColor`；双端越界 0 |

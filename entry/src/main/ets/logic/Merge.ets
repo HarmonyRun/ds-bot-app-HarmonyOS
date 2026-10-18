@@ -70,6 +70,12 @@ function cloneAttachment(attachment: Attachment): Attachment {
   if (attachment.mediaType !== undefined) {
     out.mediaType = attachment.mediaType;
   }
+  if (attachment.width !== undefined) {
+    out.width = attachment.width;
+  }
+  if (attachment.height !== undefined) {
+    out.height = attachment.height;
+  }
   if (attachment.size !== undefined) {
     out.size = attachment.size;
   }

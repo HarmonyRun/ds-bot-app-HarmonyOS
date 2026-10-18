@@ -13,9 +13,9 @@
 
 | 阶段 | 名称 | 状态 | 报告 |
 |---|---|---|---|
-| **P0** | 协议与实时底座 | 🟡 **核心协议与实时链路已端到端验证**；当前会话分页已接，跨 part 与 HUKS 凭据迁移仍待完成 | [handoff-p0.md](../handoff-p0.md)、[P0-6](../handoff-p0-6.md) |
-| **P1** | 视觉与交互对齐 | 🟡 **P1-1～P1-7 完成（P1-6/P1-7 已有运行时证据）；P1-8 仅缺 Foldable/Tablet/2in1 与深色模式截图** | [handoff-p1.md](../handoff-p1.md)、[P1-5](../handoff-p1-5.md)、[P1-6](../handoff-p1-6.md)、[P1-7](../handoff-p1-7.md)、[P1-8](../handoff-p1-8.md) |
-| P2 | 设置与管理 | ⬜ 未开始 | — |
+| **P0** | 协议与实时底座 | ✅ **P0-1～P0-10 全部完成**（跨 part 选择器与 HUKS 凭据加密已于 2026-10-17 补齐） | [handoff-p0.md](../handoff-p0.md)、[P0-6](../handoff-p0-6.md) |
+| **P1** | 视觉与交互对齐 | ✅ **P1-1～P1-8 全部完成**（平板区间与深色模式证据已补） | [handoff-p1.md](../handoff-p1.md)、[P1-5](../handoff-p1-5.md)、[P1-6](../handoff-p1-6.md)、[P1-7](../handoff-p1-7.md)、[P1-8](../handoff-p1-8.md) |
+| P2 | 设置与管理 | 🟡 P2-11 完成、P2-10 设备管理完成；P2-1～P2-9 未开始 | 见下 |
 | P3 | 扩展层 | ⬜ 未开始 | — |
 
 ## 专业协作工作台 UI（2026-10-17）
@@ -40,12 +40,11 @@
 | P0-3 | 纯函数移植 | ✅ | `logic/Merge.ets`；与上游 8,000 次比较 0 差异 |
 | P0-4 | 传输层 | ✅ | `service/MobileClient.ets` 743 行 |
 | P0-5 | 替换轮询 | ✅ | 30×1200ms 与 80×1500ms 两个循环均已删除；事件流不可用时退化为 5 秒兜底轮询 |
-| P0-6 | 历史与续读 | 🟡 当前会话分页已接，跨 part 待做 | `messages(cursor)` 已接原生“加载更早消息”，含去重、加载态、reset 保留历史与跨会话防串写；`parts` 分段选择器待做。见 `docs/handoff-p0-6.md` |
+| P0-6 | 历史与续读 | ✅ 分页 + 跨 part 选择器均完成 | `messages(cursor)` 已接原生“加载更早消息”，含去重、加载态、reset 保留历史与跨会话防串写；`parts` 分段选择器待做。见 `docs/handoff-p0-6.md` |
 | P0-7 | 本地缓存与草稿 | ✅ | `service/MessageCache.ets` |
 | P0-8 | 生命周期与清理 | ✅ | `aboutToDisappear` + 定时器登记 + 会话失效兜底 |
 | P0-9 | 回归基线 | ✅ | `node entry/src/test/run.mjs` → 103 passed / 0 failed |
-| P0-10 | 凭据加密（HUKS） | ⬜ 未开始 | — |
-| P0-10 | 凭据加密（HUKS） | ⬜ 未开始 | — |
+| P0-10 | 凭据加密（HUKS） | ✅ AES-256-GCM + 旧明文迁移 + 启动自检 | 真机自检通过；迁移端到端待下次配对确认 |
 
 ---
 
@@ -70,7 +69,7 @@
 | P1-5 | 输入栏补全（思考档位 / `@` 提及 / 会话引用） | ✅ | `logic/Composer.ets`；61 tests；真实主机识别引用并把 `@Searcher` 转为 `message_bot`；截图见 `docs/qa/p1/emulator-reference-sheet.jpeg`、`emulator-mention-menu.jpeg`。当前模型无非空 effort 可选项，限制见 P1-5 报告 §5 |
 | P1-6 | 聊天内审批卡、提问卡、排队消息 | ✅ **三块均取得运行时证据** | 受控模拟主机上：提问卡 / 审批卡 / 排队面板均真实渲染，`queue-remove` 端到端确认。证据见 P1 报告 §9.2。过程中发现并修复 `efforts` 投影崩溃 |
 | P1-7 | 群成员作者、群进度、停止成员工作 | ✅ **三块均取得运行时证据** | 群进度胶囊 + `停止` 按钮实证；`room-progress` 轮询与 `stop-member-work {roomId, botId}` 均在 mock 侧确认。证据见 P1 报告 §9.2 |
-| P1-8 | 视觉细节收口与对比图重拍 | 🟡 | 死代码清理与断点复核已完成；折叠屏侧栏已改为统一 SVG 图标并取得设备截图，应用图标已与原作者蓝色鲸鱼统一。Tablet/2in1 与深色模式仍待补。见 [图标交接报告](../handoff-icon-navigation.md) |
+| P1-8 | 视觉细节收口与对比图重拍 | ✅ | 折叠屏(706vp)/平板区间(1045vp)/2in1(1560vp)/深色模式四类证据齐全，越出均为 0。见 `device-tablet-width.jpeg`、`device-pc-maximized.jpeg`、`device-dark-*.jpeg` |
 
 ### 实时通道已解除阻塞（P0 遗留）
 

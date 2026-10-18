@@ -1,4 +1,4 @@
-import { Approval, Avatar, Bot, Conversation, ModelOption, Room, TeamState } from '../model/Models';
+import { Capability, CapabilityStatus, Connector, Approval, Avatar, Bot, Conversation, ModelOption, Room, TeamState } from '../model/Models';
 import { RawApprovalList, RawConversationList, RawDeviceList, RawServerInfo, RawState } from './MobileClient';
 import { DeviceListItem } from '../model/Models';
 import { toQuestions } from '../logic/Questions';
@@ -78,6 +78,7 @@ export function toBot(value: object): Bot | undefined {
   bot.workDir = text(source, 'workDir');
   bot.pinned = flag(source, 'pinned');
   bot.hidden = flag(source, 'hidden');
+  bot.capabilities = strings(source, 'capabilities');
   return bot;
 }
 
@@ -88,6 +89,7 @@ export function toRoom(value: object): Room | undefined {
   const room: Room = { id: id, name: text(source, 'name') ?? id, members: strings(source, 'members') ?? [] };
   room.admin = text(source, 'admin');
   room.notice = text(source, 'notice');
+  room.mode = text(source, 'mode');
   room.pinned = flag(source, 'pinned');
   room.hidden = flag(source, 'hidden');
   return room;
@@ -119,6 +121,7 @@ export function toConversation(value: object): Conversation | undefined {
   conversation.pinned = flag(source, 'pinned');
   conversation.hidden = flag(source, 'hidden');
   conversation.updatedAt = stamp(source, 'updatedAt');
+  conversation.agentId = text(source, 'agentId');
   conversation.mode = text(source, 'mode');
   conversation.notice = text(source, 'notice');
   conversation.admin = text(source, 'admin');
@@ -143,6 +146,9 @@ export function toTeamState(raw: RawState): TeamState {
     if (model !== undefined) models.push(model);
   }
   const state: TeamState = { bots: bots, rooms: rooms, models: models };
+  state.capabilities = toCapabilities(raw.capabilities);
+  state.connectors = toConnectors(raw.connectors);
+  state.capabilityStatuses = toCapabilityStatuses(raw.capabilityStatuses);
   state.mainBotId = raw.mainBotId;
   state.mainBotIds = raw.mainBotIds;
   state.questions = toQuestions(raw.questions);
@@ -157,6 +163,93 @@ export function toConversations(raw: RawConversationList): Conversation[] {
   for (const value of raw.conversations) {
     const conversation = toConversation(value);
     if (conversation !== undefined) result.push(conversation);
+  }
+  return result;
+}
+
+/**
+ * 解析能力库（P2-7）。
+ *
+ * 只保留宿主认可的三种 `kind`，并丢掉没有名字的条目——
+ * 名字是后续「挂载 / 卸载」的唯一键，缺了就没法操作。
+ */
+/**
+ * 解析连接器列表。
+ *
+ * 宿主结构是 `{ id, name, state, account, error? }`；
+ * 没有 `id` 的条目直接丢弃（后续 connect/disconnect 都要用它当键）。
+ */
+export function toConnectors(raw: object[] | undefined): Connector[] {
+  const result: Connector[] = [];
+  if (raw === undefined) return result;
+  for (let i = 0; i < raw.length; i++) {
+    const source = asRecord(raw[i]);
+    const id = text(source, 'id');
+    if (id === undefined) continue;
+    const connector: Connector = {
+      id: id,
+      name: text(source, 'name') ?? id,
+      state: text(source, 'state') ?? 'off'
+    };
+    const account = source['account'];
+    connector.account = typeof account === 'string' ? account : null;
+    connector.error = text(source, 'error');
+    result.push(connector);
+  }
+  return result;
+}
+
+export function toCapabilities(raw: object[] | undefined): Capability[] {
+  const result: Capability[] = [];
+  if (raw === undefined) return result;
+  for (let i = 0; i < raw.length; i++) {
+    const source = asRecord(raw[i]);
+    const name = text(source, 'name');
+    const kind = text(source, 'kind');
+    if (name === undefined || kind === undefined) continue;
+    if (kind !== 'mcp' && kind !== 'skill' && kind !== 'pack') continue;
+    const capability: Capability = { name: name, kind: kind };
+    capability.description = text(source, 'description');
+    capability.transport = text(source, 'transport');
+    capability.approved = flag(source, 'approved');
+    capability.items = strings(source, 'items');
+    result.push(capability);
+  }
+  return result;
+}
+
+/**
+ * 解析「每个 Bot 上每个能力的运行状态」。
+ *
+ * 宿主结构是 `botId → 能力名 → { state, error }`；
+ * ArkTS 不允许索引签名，因此这里显式遍历两层 `Record` 并重建，
+ * 同时过滤掉不认识的 state（避免 UI 显示未知状态）。
+ */
+export function toCapabilityStatuses(
+  raw: Record<string, Object> | undefined): Record<string, Record<string, CapabilityStatus>> {
+  const result: Record<string, Record<string, CapabilityStatus>> = {};
+  if (raw === undefined) return result;
+  const botIds = Object.keys(raw);
+  for (let i = 0; i < botIds.length; i++) {
+    const botId = botIds[i];
+    const inner = raw[botId];
+    if (inner === null || typeof inner !== 'object') continue;
+    const statuses = asRecord(inner as object);
+    const names = Object.keys(statuses);
+    const entry: Record<string, CapabilityStatus> = {};
+    for (let j = 0; j < names.length; j++) {
+      const name = names[j];
+      const value = statuses[name];
+      if (value === null || typeof value !== 'object') continue;
+      const source = asRecord(value as object);
+      const state = text(source, 'state');
+      if (state === undefined) continue;
+      if (state !== 'ready' && state !== 'connecting' && state !== 'needs-approval' && state !== 'error') continue;
+      const status: CapabilityStatus = { state: state };
+      status.error = text(source, 'error');
+      entry[name] = status;
+    }
+    result[botId] = entry;
   }
   return result;
 }

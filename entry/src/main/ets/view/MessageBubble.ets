@@ -1,4 +1,6 @@
-import { Message } from '../model/Models';
+import { Attachment, Message } from '../model/Models';
+import { image } from '@kit.ImageKit';
+import { MessageAttachments } from './AttachmentViews';
 import { MarkdownView, MarkdownTheme } from './MarkdownView';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolCard, ToolCardTheme } from './ToolCard';
@@ -44,6 +46,12 @@ export struct MessageBubble {
 
   onLongPress: (message: Message) => void = (): void => {};
   onCopy: (text: string, toast: string) => void = (): void => {};
+  /** 加载消息内图片（父组件持有会话上下文与客户端）；P3-1 */
+  loadImage: (attachment: Attachment) => Promise<image.PixelMap | undefined> =
+    (attachment: Attachment): Promise<image.PixelMap | undefined> =>
+      Promise.resolve(undefined);
+  /** 点开图片（全屏查看） */
+  onOpenAttachment: (attachment: Attachment) => void = (): void => {};
 
   private narrow(): boolean {
     return this.metrics.windowWidth < 600;
@@ -88,6 +96,15 @@ export struct MessageBubble {
           pending: this.message.pending === true,
           compact: this.narrow(),
           tokens: { muted: themeOf(this.dark).muted, pending: '#B86A16', accent: themeOf(this.dark).brand }
+        });
+      }
+      if (this.message.attachments !== undefined && this.message.attachments.length > 0) {
+        MessageAttachments({
+          attachments: this.message.attachments,
+          maxWidth: this.metrics.contentWidth,
+          dark: this.dark,
+          loadImage: this.loadImage,
+          onOpen: this.onOpenAttachment
         });
       }
       if (this.message.tool !== undefined) {

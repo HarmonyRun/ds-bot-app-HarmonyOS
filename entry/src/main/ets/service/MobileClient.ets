@@ -1,7 +1,11 @@
 import { http } from '@kit.NetworkKit';
 import { webSocket } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
-import { ConversationStatus, HistoryPage, MobileEvent, PartsPage, Session } from '../model/Models';
+import {
+  AgentRecord, BotPatch, BotRef, ConversationStatus, EnabledPatch, HistoryPage, MainBotPatch,
+  MemoryAskResult, MemoryView, MobileEvent, NotificationsPage, PartsPage, PluginsPage,
+  RoomPatch, ScheduleWhen, SchedulesPage, Session, SkillDetail, SkillsPage, UsagePage
+} from '../model/Models';
 import {
   EMPTY_STATUS,
   EffortOption,
@@ -86,11 +90,23 @@ export interface RawState {
   bots?: object[];
   rooms?: object[];
   models?: object[];
+  /** 能力库（P2-7）：团队级可复用能力清单 */
+  capabilities?: object[];
+  /** 连接器（GitHub 等） */
+  connectors?: object[];
+  /** botId → 能力名 → 运行状态 */
+  capabilityStatuses?: Record<string, Object>;
   mainBotId?: string;
   mainBotIds?: string[];
   questions?: object;
   work?: object;
   readOnly?: string;
+}
+
+/** `update-room` 的返回（P2-6）。 */
+export interface RoomUpdateResult {
+  room?: object;
+  changes?: string[];
 }
 
 export interface RawConversationList {
@@ -140,6 +156,195 @@ class ConversationRef {
   }
 }
 
+/** 群聊删除载荷（`delete-room`）。 */
+class RoomRef {
+  id: string;
+
+  constructor(id: string) {
+    this.id = id;
+  }
+}
+
+/** 能力挂载载荷（`bot-capability`，P2-7）。 */
+class BotCapabilityBody {
+  botId: string;
+  name: string;
+  attached: boolean;
+
+  constructor(botId: string, name: string, attached: boolean) {
+    this.botId = botId;
+    this.name = name;
+    this.attached = attached;
+  }
+}
+
+/** 创建 Agent 载荷（`add-agent`，无参数）。 */
+class AddAgentBody {
+}
+
+/** Agent 会话操作载荷（`agent-rename` / `agent-archive`）。 */
+class AgentSessionBody {
+  agentId: string;
+  sessionId: string;
+  title?: string;
+
+  constructor(agentId: string, sessionId: string, title: string) {
+    this.agentId = agentId;
+    this.sessionId = sessionId;
+    if (title.length > 0) this.title = title;
+  }
+}
+
+/** 移除 Agent 载荷（`remove-agent`）。 */
+class AgentRef {
+  agentId: string;
+
+  constructor(agentId: string) {
+    this.agentId = agentId;
+  }
+}
+
+/** 通知已读载荷（`notifications-read`）：要么给 ids，要么给 through 游标。 */
+class NotificationReadBody {
+  ids?: number[];
+  through?: number;
+
+  constructor(ids: number[], through: number) {
+    if (ids.length > 0) this.ids = ids;
+    else this.through = through;
+  }
+}
+
+/** 通知偏好载荷（`notifications-preferences`）。 */
+class NotificationPreferencesBody {
+  enabled: boolean;
+  categories: string[];
+
+  constructor(enabled: boolean, categories: string[]) {
+    this.enabled = enabled;
+    this.categories = categories;
+  }
+}
+
+/** 连接器动作的返回（宿主直接回连接器列表）。 */
+export interface ConnectorList {
+  connectors?: object[];
+}
+
+/** 连接器 token 载荷（`connector-connect`）。 */
+class ConnectorConnectBody {
+  id: string;
+  token: string;
+
+  constructor(id: string, token: string) {
+    this.id = id;
+    this.token = token;
+  }
+}
+
+/** 连接器引用载荷（`connector-retry` / `connector-disconnect`）。 */
+class ConnectorRef {
+  id: string;
+
+  constructor(id: string) {
+    this.id = id;
+  }
+}
+
+/** 技能列表载荷（`skills-list`，P2-8）：可选按会话过滤。 */
+class SkillsQuery {
+  conversationId?: string;
+
+  constructor(conversationId: string) {
+    if (conversationId.length > 0) this.conversationId = conversationId;
+  }
+}
+
+/** 技能详情载荷（`skills-get`）。 */
+class SkillDetailQuery {
+  name: string;
+  conversationId?: string;
+
+  constructor(name: string, conversationId: string) {
+    this.name = name;
+    if (conversationId.length > 0) this.conversationId = conversationId;
+  }
+}
+
+/** 记忆查看载荷（`memory-view`，P2-4）。字段与宿主白名单一致。 */
+class MemoryViewBody {
+  botId: string;
+  /** 请求主机重新生成摘要 */
+  summarize: boolean;
+  /** 强制重新生成（忽略缓存） */
+  regenerate: boolean;
+
+  constructor(botId: string, summarize: boolean, regenerate: boolean) {
+    this.botId = botId;
+    this.summarize = summarize;
+    this.regenerate = regenerate;
+  }
+}
+
+/** 记忆删除载荷（`memory-forget`）。 */
+class MemoryForgetBody {
+  botId: string;
+  scope: string;
+  text: string;
+
+  constructor(botId: string, scope: string, text: string) {
+    this.botId = botId;
+    this.scope = scope;
+    this.text = text;
+  }
+}
+
+/** 记忆问答载荷（`memory-ask`）。 */
+class MemoryAskBody {
+  botId: string;
+  text: string;
+
+  constructor(botId: string, text: string) {
+    this.botId = botId;
+    this.text = text;
+  }
+}
+
+/** 定时任务创建载荷（`schedule-create`，P2-3）。字段与宿主白名单一致。 */
+class ScheduleCreateBody {
+  target: string;
+  title: string;
+  prompt: string;
+  when: ScheduleWhen;
+
+  constructor(target: string, title: string, prompt: string, when: ScheduleWhen) {
+    this.target = target;
+    this.title = title;
+    this.prompt = prompt;
+    this.when = when;
+  }
+}
+
+/** 定时任务删除载荷（`schedule-delete`）。 */
+class ScheduleDeleteBody {
+  sessionId: string;
+  id: string;
+
+  constructor(sessionId: string, id: string) {
+    this.sessionId = sessionId;
+    this.id = id;
+  }
+}
+
+/** 用量查询载荷（`usage`，P2-2）。 */
+class UsageQuery {
+  timeZone: string;
+
+  constructor(timeZone: string) {
+    this.timeZone = timeZone;
+  }
+}
+
 /** 只带分段 id 与游标的 action 载荷（`earlier` 等）。 */
 class CursorRef {
   sessionId: string;
@@ -166,6 +371,8 @@ export interface SubmissionRequest {
   sessionId: string;
   requestId: string;
   text: string;
+  /** 已上传附件的 receiptId（P3-1）。为空/缺省表示纯文本消息。 */
+  attachments?: string[];
 }
 
 /** 事件流回调集合。 */
@@ -304,10 +511,11 @@ export class MobileClient {
   }
 
   private buildOptions(method: http.RequestMethod, body: Object | undefined, authenticated: boolean,
-    expectBinary: boolean): http.HttpRequestOptions {
+    expectBinary: boolean, binary: ArrayBuffer | undefined = undefined): http.HttpRequestOptions {
     const headers: Record<string, string> = {
       'Accept': 'application/json',
-      'Content-Type': 'application/json'
+      // 二进制上传（附件）必须是裸字节流，不能用 JSON 的 Content-Type
+      'Content-Type': binary === undefined ? 'application/json' : 'application/octet-stream'
     };
     if (authenticated) {
       if (this.session === undefined) throw new MobileApiError('设备尚未配对。', 401, 'unauthorized');
@@ -316,7 +524,7 @@ export class MobileClient {
     const options: http.HttpRequestOptions = {
       method: method,
       header: headers,
-      extraData: body === undefined ? undefined : JSON.stringify(body),
+      extraData: binary !== undefined ? binary : (body === undefined ? undefined : JSON.stringify(body)),
       expectDataType: expectBinary ? http.HttpDataType.ARRAY_BUFFER : http.HttpDataType.STRING,
       usingCache: false,
       connectTimeout: 15000,
@@ -334,15 +542,16 @@ export class MobileClient {
   }
 
   private async send<T>(path: string, method: http.RequestMethod, body: Object | undefined,
-    authenticated: boolean, retry: boolean, expectBinary: boolean = false): Promise<T> {
+    authenticated: boolean, retry: boolean, expectBinary: boolean = false,
+    binary: ArrayBuffer | undefined = undefined): Promise<T> {
     const active = this.generation;
     try {
       const response = await this.client().request(`${this.origin}/mobile/v1${path}`,
-        this.buildOptions(method, body, authenticated, expectBinary));
+        this.buildOptions(method, body, authenticated, expectBinary, binary));
       if (this.generation !== active) throw new MobileApiError('会话已切换。', 0, 'session_changed');
       if ((response.responseCode === 401 || response.responseCode === 403) && authenticated && retry) {
         await this.refresh();
-        return this.send<T>(path, method, body, authenticated, false, expectBinary);
+        return this.send<T>(path, method, body, authenticated, false, expectBinary, binary);
       }
       const text = responseText(response.result);
       if (response.responseCode < 200 || response.responseCode >= 300) {
@@ -456,6 +665,186 @@ export class MobileClient {
     return this.send<HistoryPage>(path, http.RequestMethod.GET, undefined, true, true);
   }
 
+  /**
+   * 创建团队的 DSH Agent（`add-agent`，P2-9）。
+   *
+   * 宿主**每个团队最多一个**，已存在时会抛错——调用前应先用 state 判断。
+   */
+  addAgent(): Promise<AgentRecord> {
+    return this.action<AgentRecord>('add-agent', new AddAgentBody());
+  }
+
+  /** 重命名 Agent 的某个会话（`agent-rename`）。 */
+  agentRename(agentId: string, sessionId: string, title: string): Promise<boolean> {
+    return this.action<boolean>('agent-rename', new AgentSessionBody(agentId, sessionId, title));
+  }
+
+  /** 归档 Agent 的某个会话（`agent-archive`）：会话从 Agent 移出并归档。 */
+  agentArchive(agentId: string, sessionId: string): Promise<boolean> {
+    return this.action<boolean>('agent-archive', new AgentSessionBody(agentId, sessionId, ''));
+  }
+
+  /** 移除整个 Agent（`remove-agent`）。 */
+  removeAgent(agentId: string): Promise<RawState> {
+    return this.action<RawState>('remove-agent', new AgentRef(agentId));
+  }
+
+  /**
+   * 列出可用技能（`skills-list`，P2-8）。
+   *
+   * 不传 `conversationId` 时按工作区目录取；传入则按该会话的 cwd 取
+   * （不同会话可能在不同目录，技能可见范围不同）。
+   */
+  skills(conversationId: string): Promise<SkillsPage> {
+    return this.action<SkillsPage>('skills-list', new SkillsQuery(conversationId));
+  }
+
+  /** 读取技能全文（`skills-get`）：宿主只允许 `userInvocable` 的技能。 */
+  skillDetail(name: string, conversationId: string): Promise<SkillDetail> {
+    return this.action<SkillDetail>('skills-get', new SkillDetailQuery(name, conversationId));
+  }
+
+  /** 列出插件与插件包（`plugins-list`）。 */
+  plugins(): Promise<PluginsPage> {
+    return this.action<PluginsPage>('plugins-list', new EmptyPayload());
+  }
+
+  /** 启用/停用单个插件。 */
+  setPluginEnabled(id: string, enabled: boolean): Promise<object> {
+    return this.action<object>('plugins-set-enabled', new EnabledPatch(id, enabled));
+  }
+
+  /** 启用/停用插件包。 */
+  setBundleEnabled(id: string, enabled: boolean): Promise<object> {
+    return this.action<object>('bundle-set-enabled', new EnabledPatch(id, enabled));
+  }
+
+  /**
+   * 更新 Bot（`update-bot`，P2-5）。
+   *
+   * 宿主返回更新后的 **bot 对象**（不是整份 state），
+   * 所以调用方要自己合并或刷新。
+   */
+  updateBot(patch: BotPatch): Promise<object> {
+    return this.action<object>('update-bot', toBotRequest(patch));
+  }
+
+  /** 复制 Bot（`duplicate-bot`）：返回新 bot。 */
+  duplicateBot(id: string): Promise<object> {
+    return this.action<object>('duplicate-bot', new BotRef(id));
+  }
+
+  /** 删除 Bot（`delete-bot`）：返回最新 state。 */
+  deleteBot(id: string): Promise<RawState> {
+    return this.action<RawState>('delete-bot', new BotRef(id));
+  }
+
+  /** 设置/取消主 Bot（`set-main`）：返回最新 state。 */
+  setMain(id: string, main: boolean, primary: boolean, replace: string): Promise<RawState> {
+    const patch = new MainBotPatch(id, main);
+    if (primary) patch.primary = true;
+    if (replace.length > 0) patch.replace = replace;
+    return this.action<RawState>('set-main', patch);
+  }
+
+  /**
+   * 更新群聊（`update-room`，P2-6）。
+   *
+   * 宿主返回 `{ room, changes }`：`changes` 是给人看的变更说明，
+   * 直接展示比"操作成功"更有用。注意**不返回整份 state**，
+   * 所以调用方需要用返回的 room 局部更新，或重新拉 state。
+   */
+  updateRoom(patch: RoomPatch): Promise<RoomUpdateResult> {
+    return this.action<RoomUpdateResult>('update-room', patch);
+  }
+
+  /** 删除群聊（`delete-room`）：返回最新 state。 */
+  deleteRoom(id: string): Promise<RawState> {
+    return this.action<RawState>('delete-room', new RoomRef(id));
+  }
+
+  /** 给 Bot 挂载 / 卸载一个能力；P2-7。返回最新 state（宿主按动作回快照）。 */
+  botCapability(botId: string, name: string, attached: boolean): Promise<RawState> {
+    return this.action<RawState>('bot-capability', new BotCapabilityBody(botId, name, attached));
+  }
+
+  /** 读取某 Bot 的记忆（含团队共享部分）；P2-4。 */
+  memoryView(botId: string, summarize: boolean, regenerate: boolean): Promise<MemoryView> {
+    return this.action<MemoryView>('memory-view', new MemoryViewBody(botId, summarize, regenerate));
+  }
+
+  /** 删除一条记忆；返回删除后的完整视图。 */
+  memoryForget(botId: string, scope: string, text: string): Promise<MemoryView> {
+    return this.action<MemoryView>('memory-forget', new MemoryForgetBody(botId, scope, text));
+  }
+
+  /** 用自然语言让主机增删改记忆（模型解析）；P2-4。 */
+  memoryAsk(botId: string, text: string): Promise<MemoryAskResult> {
+    return this.action<MemoryAskResult>('memory-ask', new MemoryAskBody(botId, text));
+  }
+
+  /** 读取通知中心（P3-4）。 */
+  notifications(): Promise<NotificationsPage> {
+    return this.action<NotificationsPage>('notifications-list', new EmptyPayload());
+  }
+
+  /**
+   * 标记已读（P3-4）。
+   *
+   * 传 `ids` 标记具体几条；只传 `through` 表示"这个游标之前全部已读"。
+   * 两种都走同一个接口，宿主按「有没有 ids」分支处理。
+   */
+  markNotificationsRead(ids: number[], through: number): Promise<EmptyPayload> {
+    return this.action<EmptyPayload>('notifications-read', new NotificationReadBody(ids, through));
+  }
+
+  /** 保存通知偏好（P3-4）。 */
+  setNotificationPreferences(enabled: boolean, categories: string[]): Promise<EmptyPayload> {
+    return this.action<EmptyPayload>('notifications-preferences',
+      new NotificationPreferencesBody(enabled, categories));
+  }
+
+  /** 用一个 token 连接外部账号（`connector-connect`），返回最新连接器列表。 */
+  connectorConnect(id: string, token: string): Promise<ConnectorList> {
+    return this.action<ConnectorList>('connector-connect', new ConnectorConnectBody(id, token));
+  }
+
+  /** 重试连接（`connector-retry`）。 */
+  connectorRetry(id: string): Promise<ConnectorList> {
+    return this.action<ConnectorList>('connector-retry', new ConnectorRef(id));
+  }
+
+  /** 断开连接（`connector-disconnect`）。 */
+  connectorDisconnect(id: string): Promise<ConnectorList> {
+    return this.action<ConnectorList>('connector-disconnect', new ConnectorRef(id));
+  }
+
+  /** 读取定时任务列表（P2-3）。 */
+  schedules(): Promise<SchedulesPage> {
+    // ArkTS 不允许无类型对象字面量，空载荷用显式空类
+    return this.action<SchedulesPage>('schedules', new EmptyPayload());
+  }
+
+  /** 创建定时任务；返回创建后的完整列表（宿主直接回列表，省一次请求）。 */
+  createSchedule(target: string, title: string, prompt: string, when: ScheduleWhen): Promise<SchedulesPage> {
+    return this.action<SchedulesPage>('schedule-create', new ScheduleCreateBody(target, title, prompt, when));
+  }
+
+  /** 删除定时任务。 */
+  deleteSchedule(sessionId: string, id: string): Promise<SchedulesPage> {
+    return this.action<SchedulesPage>('schedule-delete', new ScheduleDeleteBody(sessionId, id));
+  }
+
+  /**
+   * 读取用量（P2-2）。
+   *
+   * `timeZone` 传设备时区，主机按该时区切"小时"桶——
+   * 不传会按主机时区，跨时区时"今天的用量"会错位。
+   */
+  usage(timeZone: string): Promise<UsagePage> {
+    return this.action<UsagePage>('usage', new UsageQuery(timeZone));
+  }
+
   parts(conversationId: string): Promise<PartsPage> {
     return this.action<PartsPage>('parts', new ConversationRef(conversationId));
   }
@@ -510,12 +899,21 @@ export class MobileClient {
       { conversationId: conversationId, seq: seq } as ReadMarkerRequest, true, true);
   }
 
-  /** multipart 上传（图片 / 文件）。`body` 为文件字节。 */
-  async upload(conversationId: string, sessionId: string, name: string, mediaType: string,
+  /**
+   * 上传附件（P3-1）。
+   *
+   * 协议是 **裸字节 + 查询参数**，不是 multipart：
+   * `POST /uploads?conversationId=&sessionId=&name=&mediaType=`，body 为文件本身。
+   * 之前这个方法把 `body` 丢了（只发了 query），等于永远上传失败。
+   *
+   * 返回的 `receiptId` 要放进下单条消息的 `attachments` 里才会真正发送。
+   */
+  upload(conversationId: string, sessionId: string, name: string, mediaType: string,
     body: ArrayBuffer): Promise<AttachmentReceipt> {
     const query = `conversationId=${encodeURIComponent(conversationId)}&sessionId=${encodeURIComponent(sessionId)}` +
       `&name=${encodeURIComponent(name)}&mediaType=${encodeURIComponent(mediaType)}`;
-    return this.send<AttachmentReceipt>(`/uploads?${query}`, http.RequestMethod.POST, undefined, true, true);
+    return this.send<AttachmentReceipt>(`/uploads?${query}`, http.RequestMethod.POST, undefined,
+      true, true, false, body);
   }
 
   /** 下载附件（图片 / 文件）。 */
@@ -748,5 +1146,49 @@ export class MobileClient {
         // 已销毁则忽略。
       }
     }
+  }
+}
+
+/**
+ * `BotPatch` → `update-bot` 的请求体（P3-1 反馈）。
+ *
+ * 宿主 `cleanAvatar` 只接受 `{ shape?, image? }` 形状，
+ * 所以 `avatarImage` 必须包成 `avatar: { image }`；
+ * 清除头像时传 `avatar: null`，宿主会 `delete bot.avatar`。
+ */
+function toBotRequest(patch: BotPatch): BotUpdateRequest {
+  const body = new BotUpdateRequest(patch.id);
+  body.name = patch.name;
+  body.role = patch.role;
+  body.instructions = patch.instructions;
+  body.model = patch.model;
+  body.effort = patch.effort;
+  if (patch.avatarImage !== undefined) {
+    body.avatar = patch.avatarImage.length > 0 ? new AvatarPayload(patch.avatarImage) : null;
+  }
+  return body;
+}
+
+/** 头像请求体。 */
+class AvatarPayload {
+  image: string;
+
+  constructor(image: string) {
+    this.image = image;
+  }
+}
+
+/** `update-bot` 请求体（字段为 undefined 时不会被 JSON.stringify 输出）。 */
+class BotUpdateRequest {
+  id: string;
+  name?: string;
+  role?: string;
+  instructions?: string;
+  model?: string;
+  effort?: string;
+  avatar?: AvatarPayload | null;
+
+  constructor(id: string) {
+    this.id = id;
   }
 }
